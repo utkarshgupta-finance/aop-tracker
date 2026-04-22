@@ -442,16 +442,25 @@ async function loadData(){
   const dot=document.getElementById('dot'), sub=document.getElementById('sub');
   dot.className='dot spin';
 
-  // Step 1: AOP data — read latest push from Supabase (pushed by Google Sheets Apps Script)
+  // Step 1: AOP data — read from normalized aop_targets (joined with bu_master)
   try{
     const r=await fetch(
-      `${SUPABASE_URL}/rest/v1/aop_snapshots?order=pushed_at.desc&limit=1&select=mrr_data,nrr_data`,
+      `${SUPABASE_URL}/rest/v1/aop_targets?select=month_date,mrr_aop,nrr_aop,bu_master(name)&order=month_date.asc`,
       { headers:{ 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer '+SUPABASE_ANON_KEY } }
     );
     if(!r.ok) throw new Error('HTTP '+r.status);
     const rows=await r.json();
-    if(rows&&rows.length>0){
-      MRR=rows[0].mrr_data; NRR=rows[0].nrr_data;
+    if(rows && rows.length>0){
+      const mD={}, nD={};
+      for(const bu of BUS){ mD[bu]=new Array(13).fill(0); nD[bu]=new Array(13).fill(0); }
+      for(const row of rows){
+        const buName=row.bu_master?.name;
+        if(!buName||!mD[buName]) continue;
+        const d=new Date(row.month_date);
+        const mi=MONTH_MAP.findIndex(m=>m.y===d.getUTCFullYear()&&m.m===d.getUTCMonth()+1);
+        if(mi>=0){ mD[buName][mi]=row.mrr_aop; nD[buName][mi]=row.nrr_aop; }
+      }
+      MRR=mD; NRR=nD;
       document.getElementById('banner').classList.add('hidden');
       sub.textContent='Live AOP (Google Sheet push) · fetching Zoho actuals…';
     } else {
