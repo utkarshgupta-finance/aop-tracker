@@ -5,6 +5,11 @@ const ZOHO_CLIENT_ID     = Deno.env.get('ZOHO_CLIENT_ID')     ?? '';
 const ZOHO_CLIENT_SECRET = Deno.env.get('ZOHO_CLIENT_SECRET') ?? '';
 const ZOHO_REFRESH_TOKEN = Deno.env.get('ZOHO_REFRESH_TOKEN') ?? '';
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const EXCLUDED_STAGES = new Set([
   'Closed Lost', 'No Connect', 'Lead not contacted',
   'Lead qualification in progress', 'Lead disqualified',
@@ -32,7 +37,9 @@ async function getAccessToken(): Promise<string | null> {
   return json.access_token ?? null;
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -42,7 +49,7 @@ Deno.serve(async () => {
   const accessToken = await getAccessToken();
   if (!accessToken) {
     return new Response(JSON.stringify({ error: 'Failed to get Zoho access token' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -56,7 +63,7 @@ Deno.serve(async () => {
 
   if (!buRows || !fyRow) {
     return new Response(JSON.stringify({ error: 'Failed to load master data' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
@@ -134,12 +141,12 @@ Deno.serve(async () => {
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
   return new Response(
     JSON.stringify({ success: true, rows_written: rows.length, snapshotted_at: snappedAt }),
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: { ...CORS, 'Content-Type': 'application/json' } },
   );
 });
