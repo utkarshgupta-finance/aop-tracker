@@ -40,6 +40,20 @@ async function getAccessToken(): Promise<{ token: string } | { error: string }> 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
+  // ?raw=1 — return first COQL response verbatim for debugging
+  const url = new URL(req.url);
+  if (url.searchParams.get('raw') === '1') {
+    const tok = await getAccessToken();
+    if ('error' in tok) return new Response(JSON.stringify(tok), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+    const r = await fetch('https://www.zohoapis.in/crm/v3/coql', {
+      method: 'POST',
+      headers: { 'Authorization': 'Zoho-oauthtoken ' + tok.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ select_query: "SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '2026-04-01' and '2026-04-30' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 3 OFFSET 0" }),
+    });
+    const raw = await r.text();
+    return new Response(raw, { headers: { ...CORS, 'Content-Type': 'application/json' } });
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
