@@ -145,14 +145,15 @@ Deno.serve(async (req) => {
       if (!debugSample && j.data?.[0]) debugSample = j.data[0];
 
       for (const rec of (j.data ?? [])) {
-        const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
-        const prob  = rec['Deal.Probability'] ?? rec.Deal?.Probability ?? 0;
-        const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
+        const stage       = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
+        const prob        = rec['Deal.Probability'] ?? rec.Deal?.Probability ?? 0;
+        const adjustedMRR = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
         if (!INCLUDED_STAGES.has(stage)) continue;
         if (prob < 70) continue;
         const buName = zohoIdToBuName[rec.Business_Unit?.id];
         if (buName && buNames.has(buName)) {
-          buTotals[buName] += mrr;
+          const expectedMRR = prob > 0 ? adjustedMRR / (prob / 100) : adjustedMRR;
+          buTotals[buName] += expectedMRR;
         }
       }
 
