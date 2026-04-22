@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const r = await fetch('https://www.zohoapis.in/crm/v3/coql', {
       method: 'POST',
       headers: { 'Authorization': 'Zoho-oauthtoken ' + tok.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ select_query: "SELECT Business_Unit.name, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '2026-04-01' and '2026-04-30' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 3 OFFSET 0" }),
+      body: JSON.stringify({ select_query: "SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '2026-04-01' and '2026-04-30' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 3 OFFSET 0" }),
     });
     const raw = await r.text();
     return new Response(raw, { headers: { ...CORS, 'Content-Type': 'application/json' } });
@@ -87,6 +87,26 @@ Deno.serve(async (req) => {
   const buNames = new Set(Object.keys(buMap));
   const fyId = fyRow.id;
 
+  // Build Zoho BU record ID → BU name map (COQL returns only IDs for lookup fields)
+  // Regular REST API returns Business_Unit with both name and id
+  const zohoIdToBuName: Record<string, string> = {};
+  {
+    let pg = 1, morePages = true;
+    while (morePages && Object.keys(zohoIdToBuName).length < buNames.size) {
+      const r = await fetch(
+        `https://www.zohoapis.in/crm/v3/BU_Deal_Map?fields=Business_Unit&per_page=200&page=${pg}`,
+        { headers: { 'Authorization': 'Zoho-oauthtoken ' + tokenResult.token } },
+      );
+      const j = await r.json();
+      for (const rec of (j.data ?? [])) {
+        const bu = rec.Business_Unit;
+        if (bu?.id && bu?.name) zohoIdToBuName[bu.id] = bu.name;
+      }
+      morePages = !!(j.info?.more_records);
+      pg++;
+    }
+  }
+
   const now = new Date();
   const curY = now.getFullYear(), curM = now.getMonth() + 1;
   const snappedAt = now.toISOString();
@@ -115,7 +135,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: H,
         body: JSON.stringify({
-          select_query: `SELECT Business_Unit.name, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
+          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
         }),
       });
       const j = await r.json();
@@ -127,7 +147,7 @@ Deno.serve(async (req) => {
         const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
         const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
         if (EXCLUDED_STAGES.has(stage)) continue;
-        const buName = rec['Business_Unit.name'];
+        const buName = zohoIdToBuName[rec.Business_Unit?.id];
         if (buName && buNames.has(buName)) {
           buTotals[buName] += mrr;
         }
