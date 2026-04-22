@@ -329,8 +329,7 @@ function actMRRCell(bu, mi, cls) {
   if (v === null) return te(cls);
   const { y, m } = MONTH_MAP[mi];
   const monthStr = `${y}-${String(m).padStart(2,'0')}`;
-  const bu_ = JSON.stringify(bu), mo_ = JSON.stringify(monthStr), lbl_ = JSON.stringify(ML[mi]);
-  return `<td class="${cls}${v<0?' neg':''} clickable" onclick='openDrillDown(${bu_},${mo_},${lbl_})' title="Click to view deals">${f(v)}</td>`;
+  return `<td class="${cls}${v<0?' neg':''} clickable" data-bu="${bu}" data-month="${monthStr}" data-label="${ML[mi]}" title="Click to view deals">${f(v)}</td>`;
 }
 function actGrowthCell(bu, mi, cls) {
   const v = getGrowth(bu, mi);
@@ -625,6 +624,11 @@ function closeDrill() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrill(); });
+document.addEventListener('click', e => {
+  const td = e.target.closest('td.clickable');
+  if (!td) return;
+  openDrillDown(td.dataset.bu, td.dataset.month, td.dataset.label);
+});
 
 function sortDrill(col) {
   drillSort.dir = (drillSort.col === col) ? -drillSort.dir : (col === 'deal_name' || col === 'region' ? 1 : -1);
