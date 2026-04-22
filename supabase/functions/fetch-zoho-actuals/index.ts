@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
     bu_id: number; fy_id: number; month_date: string;
     farming_mrr: number; snapshotted_at: string;
   }> = [];
+  let debugSample: unknown = null;
 
   for (const { y, m } of FY_MONTHS) {
     if (y > curY || (y === curY && m > curM)) break;
@@ -105,11 +106,16 @@ Deno.serve(async (req) => {
       });
       const j = await r.json();
 
+      if (!debugSample && j.data?.[0]) debugSample = j.data[0];
+
       for (const rec of (j.data ?? [])) {
-        if (EXCLUDED_STAGES.has(rec['Deal.Stage'])) continue;
+        // support both flat dot-notation keys and nested Deal object
+        const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
+        const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
+        if (EXCLUDED_STAGES.has(stage)) continue;
         const buName = rec.Business_Unit?.name;
         if (buName && buNames.has(buName)) {
-          buTotals[buName] += rec['Deal.Probability_Adjusted_MRR'] ?? 0;
+          buTotals[buName] += mrr;
         }
       }
 
@@ -135,7 +141,7 @@ Deno.serve(async (req) => {
   }
 
   return new Response(
-    JSON.stringify({ success: true, rows_written: rows.length, snapshotted_at: snappedAt }),
+    JSON.stringify({ success: true, rows_written: rows.length, snapshotted_at: snappedAt, debug_sample: debugSample }),
     { headers: { ...CORS, 'Content-Type': 'application/json' } },
   );
 });
