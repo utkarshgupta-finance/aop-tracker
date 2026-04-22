@@ -125,12 +125,13 @@ tbody tr:hover td.cpast{background:#cce6d8!important}
 </header>
 <div id="banner">
   <div class="btext">
-    <strong>Connect your Google Sheet for live AOP data.</strong>
-    Currently showing cached AOP values. To enable live sync:
+    <strong>No AOP data received yet.</strong>
+    Currently showing cached AOP values. To push live data from your Google Sheet:
     <ol>
-      <li>Open your sheet → <strong>File → Share → Publish to web</strong></li>
-      <li>Choose <strong>Sheet9</strong> → format: <strong>CSV</strong> → click <strong>Publish</strong> → copy the URL</li>
-      <li>Paste it as the value of <code>SHEET_CSV_URL</code> at the top of this file's script section</li>
+      <li>Copy the script from <code>supabase/google-apps-script.js</code> in this repo</li>
+      <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong> → paste the script</li>
+      <li>Set <code>PUSH_SECRET</code> to match the <code>AOP_PUSH_SECRET</code> env var on the Edge Function</li>
+      <li>Run <strong>pushAOPData()</strong> once, then add a trigger for automatic updates</li>
     </ol>
     <strong>Actual MRR</strong> is fetched live from Zoho CRM on every page load.
   </div>
@@ -158,13 +159,13 @@ tbody tr:hover td.cpast{background:#cce6d8!important}
 </main>
 <script>
 /* ═══════════════════════════════════════════════════════════
-   CONFIG — fill in all 4 values before pushing to GitHub Pages
+   CONFIG
    ═══════════════════════════════════════════════════════════
 
-   1. SHEET_CSV_URL — Google Sheets AOP data (Sheet9)
-      File → Share → Publish to web → Sheet9 → CSV → copy URL
+   AOP DATA — pushed here from Google Sheets via Apps Script
+   (see supabase/google-apps-script.js in the repo)
 
-   2. ZOHO OAUTH — Direct Zoho CRM API
+   ZOHO OAUTH — Direct Zoho CRM API
       Step 1: Go to https://api-console.zoho.in
       Step 2: Add Client → Self Client → note Client ID + Secret
       Step 3: Click Generate Code
@@ -177,7 +178,8 @@ tbody tr:hover td.cpast{background:#cce6d8!important}
 
    The refresh_token never expires. Access token auto-refreshes on every page load.
    ─────────────────────────────────────────────────────── */
-const SHEET_CSV_URL      = '';  // ← Google Sheet CSV URL
+const SUPABASE_URL       = 'https://vntqszeaokcbrzuppmew.supabase.co';
+const SUPABASE_ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHFzemVhb2tjYnJ6dXBwbWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzE1NzcsImV4cCI6MjA5MjQwNzU3N30.NIllrkxrhwrNDxWTCgRxxyvk2VbRTBaC7F8_VFWfZDY';
 const ZOHO_CLIENT_ID     = '1000.EJXIHAVDTNAX3T4DZCFZ2FY9YQ4YVA';  // ← from api-console.zoho.in
 const ZOHO_CLIENT_SECRET = 'Y5bddbcb2f13d17dd383f4d7028501438a3da4a715e';  // ← from api-console.zoho.in
 const ZOHO_REFRESH_TOKEN = '1000.598fec5a3184a857e70e0307b5bfb4fc.670908e1e88dd09ff9eb9af60e982aae';  // ← refresh_token from Step 5
@@ -440,23 +442,25 @@ async function loadData(){
   const dot=document.getElementById('dot'), sub=document.getElementById('sub');
   dot.className='dot spin';
 
-  // Step 1: AOP data — Google Sheet or fallback
-  if(!SHEET_CSV_URL){
-    MRR=FB_MRR; NRR=FB_NRR;
-    sub.textContent='Cached AOP · fetching Zoho actuals…';
-  } else {
-    try{
-      const r=await fetch(SHEET_CSV_URL);
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const p=parseSheet(await r.text());
-      if(!p) throw new Error('Parse error');
-      MRR=p.mD; NRR=p.nD;
+  // Step 1: AOP data — read latest push from Supabase (pushed by Google Sheets Apps Script)
+  try{
+    const r=await fetch(
+      `${SUPABASE_URL}/rest/v1/aop_data?order=pushed_at.desc&limit=1&select=mrr_data,nrr_data`,
+      { headers:{ 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer '+SUPABASE_ANON_KEY } }
+    );
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    if(rows&&rows.length>0){
+      MRR=rows[0].mrr_data; NRR=rows[0].nrr_data;
       document.getElementById('banner').classList.add('hidden');
-      sub.textContent='Live AOP · fetching Zoho actuals…';
-    }catch(e){
+      sub.textContent='Live AOP (Google Sheet push) · fetching Zoho actuals…';
+    } else {
       MRR=FB_MRR; NRR=FB_NRR;
-      sub.textContent='Sheet unavailable ('+e.message+') · fetching Zoho actuals…';
+      sub.textContent='Cached AOP · fetching Zoho actuals…';
     }
+  }catch(e){
+    MRR=FB_MRR; NRR=FB_NRR;
+    sub.textContent='AOP unavailable ('+e.message+') · fetching Zoho actuals…';
   }
 
   // Render immediately with fallback actuals
@@ -469,17 +473,15 @@ async function loadData(){
     if(ok){
       await fetchAllCRMActuals();
       buildAll();
-      const src = SHEET_CSV_URL ? 'Live AOP (Google Sheet)' : 'Cached AOP';
       dot.className='dot ok';
-      sub.textContent=src+' · Live actuals from Zoho CRM · '+new Date().toLocaleTimeString();
+      sub.textContent=sub.textContent.replace(' · fetching Zoho actuals…','')+' · Live actuals from Zoho CRM · '+new Date().toLocaleTimeString();
     } else {
       dot.className='dot err';
       sub.textContent='Zoho auth failed · check CLIENT_ID / SECRET / REFRESH_TOKEN · showing fallback actuals';
     }
   } else {
     dot.className='dot err';
-    const src = SHEET_CSV_URL ? 'Live AOP (Google Sheet)' : 'Cached AOP';
-    sub.textContent=src+' · Fallback actuals (Apr-2026) · Add Zoho credentials for live sync';
+    sub.textContent=sub.textContent.replace(' · fetching Zoho actuals…','')+' · Fallback actuals (Apr-2026) · Add Zoho credentials for live sync';
   }
 }
 
