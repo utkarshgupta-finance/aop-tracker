@@ -7,9 +7,10 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EXCLUDED_STAGES = new Set([
-  'Closed Lost', 'No Connect', 'Lead not contacted',
-  'Lead qualification in progress', 'Lead disqualified', 'Project Kept on Hold',
+const INCLUDED_STAGES = new Set([
+  'Initial discussion', 'Demo', 'Decision maker bought in', 'Decision Maker Bought-In',
+  'Proposal Out', 'Revised Pricing', 'Negotiation', 'Differed timeline',
+  'PO pending', 'Closed Won', 'MRR Live',
 ]);
 
 async function getAccessToken(): Promise<{ token: string } | { error: string }> {
@@ -104,14 +105,15 @@ Deno.serve(async (req) => {
     const j = await r.json();
 
     for (const rec of (j.data ?? [])) {
-      const stage   = rec['Deal.Stage']  ?? rec.Deal?.Stage  ?? '';
-      if (EXCLUDED_STAGES.has(stage)) continue;
+      const stage       = rec['Deal.Stage']  ?? rec.Deal?.Stage  ?? '';
+      const probability = rec['Deal.Probability'] ?? rec.Deal?.Probability ?? 0;
+      if (!INCLUDED_STAGES.has(stage)) continue;
+      if (probability < 70) continue;
 
       const recBuName = zohoIdToBuName[rec.Business_Unit?.id];
       if (recBuName !== buName) continue;
 
       const adjustedMRR = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
-      const probability = rec['Deal.Probability']              ?? rec.Deal?.Probability              ?? 0;
       const expectedMRR = probability > 0 ? Math.round(adjustedMRR / (probability / 100)) : adjustedMRR;
 
       deals.push({
