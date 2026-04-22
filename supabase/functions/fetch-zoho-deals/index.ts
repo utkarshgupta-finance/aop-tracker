@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: H,
       body: JSON.stringify({
-        select_query: `SELECT Business_Unit, Deal.Deal_Name, Deal.Stage, Deal.Probability_Adjusted_MRR, Deal.Probability, Deal.Region FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' AND Deal.Probability_Adjusted_MRR > 0 LIMIT 200 OFFSET ${offset}`,
+        select_query: `SELECT Business_Unit, Deal.Deal_Name, Deal.Stage, Deal.Probability_Adjusted_MRR, Deal.Probability, Deal.Region FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
       }),
     });
     const j = await r.json();
@@ -111,6 +111,7 @@ Deno.serve(async (req) => {
       if (recBuName !== buName) continue;
 
       const adjustedMRR = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
+      if (adjustedMRR <= 0) continue;
       const probability = rec['Deal.Probability']              ?? rec.Deal?.Probability              ?? 0;
       const expectedMRR = probability > 0 ? Math.round(adjustedMRR / (probability / 100)) : adjustedMRR;
 

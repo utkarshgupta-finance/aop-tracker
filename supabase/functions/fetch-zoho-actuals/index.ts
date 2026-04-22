@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const r = await fetch('https://www.zohoapis.in/crm/v3/coql', {
       method: 'POST',
       headers: { 'Authorization': 'Zoho-oauthtoken ' + tok.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ select_query: "SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '2026-04-01' and '2026-04-30' AND Deal.Deal_Type_New_or_Existing = 'Farming' AND Deal.Probability_Adjusted_MRR > 0 LIMIT 3 OFFSET 0" }),
+      body: JSON.stringify({ select_query: "SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '2026-04-01' and '2026-04-30' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 3 OFFSET 0" }),
     });
     const raw = await r.text();
     return new Response(raw, { headers: { ...CORS, 'Content-Type': 'application/json' } });
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: H,
         body: JSON.stringify({
-          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' AND Deal.Probability_Adjusted_MRR > 0 LIMIT 200 OFFSET ${offset}`,
+          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
         }),
       });
       const j = await r.json();
@@ -147,6 +147,7 @@ Deno.serve(async (req) => {
         const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
         const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
         if (EXCLUDED_STAGES.has(stage)) continue;
+        if (mrr <= 0) continue;
         const buName = zohoIdToBuName[rec.Business_Unit?.id];
         if (buName && buNames.has(buName)) {
           buTotals[buName] += mrr;
