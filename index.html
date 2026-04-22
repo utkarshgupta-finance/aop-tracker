@@ -141,6 +141,7 @@ tbody tr:hover td.cpast{background:#cce6d8!important}
   <button class="tbtn active" onclick="showTab('mrr',this)">Exit MRR</button>
   <button class="tbtn" onclick="showTab('nrr',this)">NRR</button>
   <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
+  <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span>Sync CRM</button>
   <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
 </nav>
 <main>
@@ -161,28 +162,13 @@ tbody tr:hover td.cpast{background:#cce6d8!important}
 /* ═══════════════════════════════════════════════════════════
    CONFIG
    ═══════════════════════════════════════════════════════════
-
-   AOP DATA — pushed here from Google Sheets via Apps Script
-   (see supabase/google-apps-script.js in the repo)
-
-   ZOHO OAUTH — Direct Zoho CRM API
-      Step 1: Go to https://api-console.zoho.in
-      Step 2: Add Client → Self Client → note Client ID + Secret
-      Step 3: Click Generate Code
-              Scope: ZohoCRM.modules.READ
-              Duration: 10 minutes → copy the code
-      Step 4: In your browser, open this URL (fill in your values):
-              https://accounts.zoho.in/oauth/v2/token?grant_type=authorization_code&client_id=YOUR_ID&client_secret=YOUR_SECRET&code=THE_CODE
-      Step 5: Copy the refresh_token from the JSON response
-      Step 6: Fill in the 3 values below
-
-   The refresh_token never expires. Access token auto-refreshes on every page load.
+   AOP data  — pushed from Google Sheets via Apps Script
+               (see supabase/google-apps-script.js)
+   CRM actuals — fetched from Zoho by the fetch-zoho-actuals
+               Edge Function (Zoho credentials stored there as secrets)
    ─────────────────────────────────────────────────────── */
-const SUPABASE_URL       = 'https://vntqszeaokcbrzuppmew.supabase.co';
-const SUPABASE_ANON_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHFzemVhb2tjYnJ6dXBwbWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzE1NzcsImV4cCI6MjA5MjQwNzU3N30.NIllrkxrhwrNDxWTCgRxxyvk2VbRTBaC7F8_VFWfZDY';
-const ZOHO_CLIENT_ID     = '1000.EJXIHAVDTNAX3T4DZCFZ2FY9YQ4YVA';  // ← from api-console.zoho.in
-const ZOHO_CLIENT_SECRET = 'Y5bddbcb2f13d17dd383f4d7028501438a3da4a715e';  // ← from api-console.zoho.in
-const ZOHO_REFRESH_TOKEN = '1000.598fec5a3184a857e70e0307b5bfb4fc.670908e1e88dd09ff9eb9af60e982aae';  // ← refresh_token from Step 5
+const SUPABASE_URL      = 'https://vntqszeaokcbrzuppmew.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHFzemVhb2tjYnJ6dXBwbWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzE1NzcsImV4cCI6MjA5MjQwNzU3N30.NIllrkxrhwrNDxWTCgRxxyvk2VbRTBaC7F8_VFWfZDY';
 
 /* ─── CONSTANTS ─────────────────────────────────────────── */
 const BUS = ['BAT BU','India ENT BU','India MM BU','KAM BU','MEA BU','SEA BU','SME BU'];
@@ -195,10 +181,6 @@ const MONTH_MAP = [
   {y:2026,m:7},{y:2026,m:8},{y:2026,m:9},{y:2026,m:10},
   {y:2026,m:11},{y:2026,m:12},{y:2027,m:1},{y:2027,m:2},{y:2027,m:3}
 ];
-const EXCLUDED_STAGES = new Set([
-  'Closed Lost','No Connect','Lead not contacted',
-  'Lead qualification in progress','Lead disqualified'
-]);
 
 /* ─── FALLBACK AOP DATA (from Sheet9) ───────────────────── */
 const FB_MRR = {
@@ -220,124 +202,60 @@ const FB_NRR = {
   'SME BU':       [295998,2000000,2000000,2000000,2220000,2220000,2220000,2740000,2740000,2740000,3260000,3260000,3260000],
 };
 
-/* ─── RUNTIME STATE ─────────────────────────────────────────
-   CRM_ACTUAL_MRR stores GROWTH values per BU per month index.
-   Actual MRR = Mar-2026 base + cumulative growth.
-   Seeded with Apr-2026 fallback values from last CRM fetch.
-──────────────────────────────────────────────────────────── */
-let CRM_ACTUAL_MRR = {
-  'BAT BU':       { 1: 0 },
-  'India ENT BU': { 1: -1080611 },
-  'India MM BU':  { 1: 501038 },
-  'KAM BU':       { 1: 250113 },
-  'MEA BU':       { 1: 209696 },
-  'SEA BU':       { 1: 21805 },
-  'SME BU':       { 1: 147354 },
-};
+/* ─── RUNTIME STATE ──────────────────────────────────────── */
+// CRM_ACTUAL_MRR[bu][monthIndex] = farming_mrr from crm_actuals
+// Actual MRR (month N) = MRR[bu][0] base + sum of [1..N]
+let CRM_ACTUAL_MRR = {};
+for (const bu of BUS) CRM_ACTUAL_MRR[bu] = {};
 let MRR = {}, NRR = {};
-let ZOHO_ACCESS_TOKEN = '';
 
-/* ─── ZOHO AUTH ─────────────────────────────────────────────
-   Gets a fresh access token using the refresh token.
-   Called once on every page load.
+/* ─── FETCH ACTUALS FROM SUPABASE ───────────────────────────
+   Reads crm_actuals (populated nightly by fetch-zoho-actuals
+   Edge Function, or on demand via the Sync CRM button).
 ──────────────────────────────────────────────────────────── */
-async function getZohoAccessToken() {
-  if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET || !ZOHO_REFRESH_TOKEN) return false;
-  try {
-    const resp = await fetch('https://accounts.zoho.in/oauth/v2/token', {
-      method: 'POST',
-      body: new URLSearchParams({
-        grant_type:    'refresh_token',
-        client_id:     ZOHO_CLIENT_ID,
-        client_secret: ZOHO_CLIENT_SECRET,
-        refresh_token: ZOHO_REFRESH_TOKEN,
-      }),
-    });
-    const json = await resp.json();
-    if (json.access_token) { ZOHO_ACCESS_TOKEN = json.access_token; return true; }
-    console.error('Token error:', json);
-    return false;
-  } catch(e) { console.error('Token fetch failed:', e); return false; }
+async function fetchCRMActualsFromDB() {
+  const SB_HDR = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer '+SUPABASE_ANON_KEY };
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/crm_actuals?select=month_date,farming_mrr,bu_master(name)&order=month_date.asc`,
+    { headers: SB_HDR }
+  );
+  if (!r.ok) throw new Error('HTTP '+r.status);
+  const rows = await r.json();
+  for (const bu of BUS) CRM_ACTUAL_MRR[bu] = {};
+  for (const row of rows) {
+    const buName = row.bu_master?.name;
+    if (!buName || !CRM_ACTUAL_MRR[buName]) continue;
+    const d  = new Date(row.month_date);
+    const mi = MONTH_MAP.findIndex(m => m.y===d.getUTCFullYear() && m.m===d.getUTCMonth()+1);
+    if (mi >= 1) CRM_ACTUAL_MRR[buName][mi] = row.farming_mrr;
+  }
+  return rows.length;
 }
 
-/* ─── FETCH ACTUALS FROM ZOHO CRM ───────────────────────────
-   For each past month (Apr-2026 to today):
-   1. Pre-fetch all BU_Deal_Map records → dealId→buName map
-   2. For each month: search Farming deals by Closing_Date
-   3. Sum Probability_Adjusted_MRR per BU (excl. dead stages)
-   4. Store growth value in CRM_ACTUAL_MRR[bu][monthIndex]
-   Auto-populates May, Jun, etc. as months pass.
+/* ─── SYNC CRM BUTTON ───────────────────────────────────────
+   Calls the fetch-zoho-actuals Edge Function, which hits Zoho
+   and upserts crm_actuals, then re-reads from DB and re-renders.
 ──────────────────────────────────────────────────────────── */
-async function fetchAllCRMActuals() {
-  if (!ZOHO_ACCESS_TOKEN) return;
-  const sub = document.getElementById('sub');
-  const H   = { 'Authorization': 'Zoho-oauthtoken ' + ZOHO_ACCESS_TOKEN };
-
-  // Step 1: Build dealId → buName map from BU_Deal_Map
-  const dealToBU = {};
-  let buPage = 1, buMore = true;
-  while (buMore) {
-    try {
-      const r = await fetch(
-        `https://www.zohoapis.in/crm/v3/BU_Deal_Map?fields=id,Deal,Business_Unit&per_page=200&page=${buPage}`,
-        { headers: H }
-      );
-      const j = await r.json();
-      for (const rec of (j.data || [])) {
-        if (rec.Deal && rec.Business_Unit) dealToBU[rec.Deal.id] = rec.Business_Unit.name;
-      }
-      buMore = !!(j.info && j.info.more_records);
-      buPage++;
-    } catch(e) { buMore = false; }
+async function syncCRM() {
+  const btn  = document.getElementById('sync-btn');
+  const sdot = document.getElementById('sync-dot');
+  const sub  = document.getElementById('sub');
+  btn.disabled = true;
+  sdot.className = 'dot spin';
+  sub.textContent = 'Syncing with Zoho CRM…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/fetch-zoho-actuals`);
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || 'Unknown error');
+    await fetchCRMActualsFromDB();
+    buildAll();
+    sdot.className = 'dot ok';
+    sub.textContent = 'Zoho CRM synced · '+j.rows_written+' rows · '+new Date().toLocaleTimeString();
+  } catch(e) {
+    sdot.className = 'dot err';
+    sub.textContent = 'Sync failed: '+e.message;
   }
-
-  // Step 2: Fetch deals month by month up to current month
-  const now = new Date();
-  const curY = now.getFullYear(), curM = now.getMonth() + 1;
-
-  for (let mi = 1; mi < MONTH_MAP.length; mi++) {
-    const {y, m} = MONTH_MAP[mi];
-    if (y > curY || (y === curY && m > curM)) break;
-
-    const mStr    = String(m).padStart(2,'0');
-    const lastDay = new Date(y, m, 0).getDate();
-    const dStr    = String(lastDay).padStart(2,'0');
-    const dateFrom = `${y}-${mStr}-01`;
-    const dateTo   = `${y}-${mStr}-${dStr}`;
-    if (sub) sub.textContent = `Fetching actuals… ${y}-${mStr}`;
-
-    const buTotals = {};
-    for (const bu of BUS) buTotals[bu] = 0;
-
-    const criteria = encodeURIComponent(
-      `(Closing_Date:between:${dateFrom},${dateTo})and(Deal_Type_New_or_Existing:equals:Farming)`
-    );
-    let page = 1, more = true;
-    while (more) {
-      try {
-        const r = await fetch(
-          `https://www.zohoapis.in/crm/v3/Deals/search?criteria=${criteria}&fields=id,Stage,Probability_Adjusted_MRR&per_page=200&page=${page}`,
-          { headers: H }
-        );
-        const j = await r.json();
-        for (const deal of (j.data || [])) {
-          if (EXCLUDED_STAGES.has(deal.Stage)) continue;
-          const buName = dealToBU[deal.id];
-          if (buName && buTotals.hasOwnProperty(buName)) {
-            buTotals[buName] += (deal.Probability_Adjusted_MRR || 0);
-          }
-        }
-        more = !!(j.info && j.info.more_records);
-        page++;
-      } catch(e) { more = false; }
-    }
-
-    // Store growth values
-    for (const bu of BUS) {
-      if (!CRM_ACTUAL_MRR[bu]) CRM_ACTUAL_MRR[bu] = {};
-      CRM_ACTUAL_MRR[bu][mi] = Math.round(buTotals[bu]);
-    }
-  }
+  btn.disabled = false;
 }
 
 /* ─── ACTUAL MRR HELPERS ────────────────────────────────────
@@ -416,26 +334,6 @@ function td(v,cls=''){const ng=typeof v==='number'&&v<0?' neg':'';return `<td cl
 function te(cls=''){return `<td class="${cls}"></td>`;}
 function tots(D){return ML.map((_,i)=>BUS.reduce((s,bu)=>s+(D[bu]?D[bu][i]:0),0));}
 
-/* ─── CSV / SHEET PARSE ─────────────────────────────────── */
-function parseCSV(txt){
-  return txt.split(/\r?\n/).map(line=>{
-    const cells=[]; let cur='',q=false;
-    for(const c of line){if(c==='"'){q=!q;}else if(c===','&&!q){cells.push(cur.trim());cur='';}else cur+=c;}
-    cells.push(cur.trim()); return cells;
-  });
-}
-function pn(s){return parseFloat((s||'').replace(/,/g,'').replace(/[^0-9.\-]/g,''))||0;}
-function parseSheet(csv){
-  const rows=parseCSV(csv); const mD={},nD={};
-  let ms=-1,ns=-1;
-  rows.forEach((r,i)=>{if((r[0]||'').includes('Exit MRR'))ms=i;if((r[0]||'').includes('NRR Projection'))ns=i;});
-  if(ms<0||ns<0)return null;
-  for(let i=ms+2;i<=ms+8;i++){const r=rows[i];if(!r||!r[0]||r[0]==='Total')continue;const bu=r[0].trim();if(BUS.includes(bu)){mD[bu]=[];for(let c=1;c<=13;c++)mD[bu].push(pn(r[c]));}}
-  for(let i=ns+2;i<=ns+8;i++){const r=rows[i];if(!r||!r[0]||r[0]==='Total')continue;const bu=r[0].trim();if(BUS.includes(bu)){nD[bu]=[];for(let c=1;c<=13;c++)nD[bu].push(pn(r[c]));}}
-  if(!BUS.every(bu=>mD[bu]&&mD[bu].length===13))return null;
-  if(!BUS.every(bu=>nD[bu]&&nD[bu].length===13))return null;
-  return{mD,nD};
-}
 
 /* ─── LOAD ──────────────────────────────────────────────── */
 async function loadData(){
@@ -462,35 +360,27 @@ async function loadData(){
       }
       MRR=mD; NRR=nD;
       document.getElementById('banner').classList.add('hidden');
-      sub.textContent='Live AOP (Google Sheet push) · fetching Zoho actuals…';
+      sub.textContent='Live AOP (Google Sheet push) · loading CRM actuals…';
     } else {
       MRR=FB_MRR; NRR=FB_NRR;
-      sub.textContent='Cached AOP · fetching Zoho actuals…';
+      sub.textContent='Cached AOP · loading CRM actuals…';
     }
   }catch(e){
     MRR=FB_MRR; NRR=FB_NRR;
-    sub.textContent='AOP unavailable ('+e.message+') · fetching Zoho actuals…';
+    sub.textContent='AOP unavailable ('+e.message+') · loading CRM actuals…';
   }
 
-  // Render immediately with fallback actuals
-  buildAll();
-
-  // Step 2: Zoho OAuth → fetch live actuals
-  const hasCreds = ZOHO_CLIENT_ID && ZOHO_CLIENT_SECRET && ZOHO_REFRESH_TOKEN;
-  if(hasCreds){
-    const ok = await getZohoAccessToken();
-    if(ok){
-      await fetchAllCRMActuals();
-      buildAll();
-      dot.className='dot ok';
-      sub.textContent=sub.textContent.replace(' · fetching Zoho actuals…','')+' · Live actuals from Zoho CRM · '+new Date().toLocaleTimeString();
-    } else {
-      dot.className='dot err';
-      sub.textContent='Zoho auth failed · check CLIENT_ID / SECRET / REFRESH_TOKEN · showing fallback actuals';
-    }
-  } else {
-    dot.className='dot err';
-    sub.textContent=sub.textContent.replace(' · fetching Zoho actuals…','')+' · Fallback actuals (Apr-2026) · Add Zoho credentials for live sync';
+  // Step 2: CRM actuals from Supabase (snapshotted by Edge Function)
+  try{
+    const n = await fetchCRMActualsFromDB();
+    buildAll();
+    dot.className = 'dot ok';
+    const aopSrc = (MRR === FB_MRR) ? 'Cached AOP' : 'Live AOP';
+    sub.textContent = aopSrc + ' · ' + (n > 0 ? 'CRM actuals from DB' : 'No CRM actuals yet — use Sync CRM') + ' · ' + new Date().toLocaleTimeString();
+  } catch(e){
+    buildAll();
+    dot.className = 'dot err';
+    sub.textContent = 'CRM actuals unavailable ('+e.message+') · use Sync CRM to retry';
   }
 }
 
