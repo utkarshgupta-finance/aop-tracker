@@ -117,6 +117,13 @@ Deno.serve(async (req) => {
     bu_id: number; fy_id: number; month_date: string;
     farming_mrr: number; snapshotted_at: string;
   }> = [];
+  const snapshots: Array<{
+    snapshot_date: string; zoho_bu_deal_map_id: string;
+    deal_name: string; account_name: string | null;
+    bu_id: number; fy_id: number; closing_month: string;
+    stage: string; probability: number; adjusted_mrr: number; expected_mrr: number; region: string;
+  }> = [];
+  const snapshotDate = now.toISOString().slice(0, 10);
   let debugSample: unknown = null;
 
   for (const { y, m } of FY_MONTHS) {
@@ -137,7 +144,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: H,
         body: JSON.stringify({
-          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
+          select_query: `SELECT Business_Unit, Deal.Deal_Name, Deal.Account_Name, Deal.Stage, Deal.Probability, Deal.Probability_Adjusted_MRR, Deal.Region FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
         }),
       });
       const j = await r.json();
@@ -151,10 +158,24 @@ Deno.serve(async (req) => {
         if (!INCLUDED_STAGES.has(stage)) continue;
         if (prob < 70) continue;
         const buName = zohoIdToBuName[rec.Business_Unit?.id];
-        if (buName && buNames.has(buName)) {
-          const expectedMRR = prob > 0 ? adjustedMRR / (prob / 100) : adjustedMRR;
-          buTotals[buName] += expectedMRR;
-        }
+        if (!buName || !buNames.has(buName)) continue;
+        const buId = buMap[buName];
+        const expectedMRR = prob > 0 ? adjustedMRR / (prob / 100) : adjustedMRR;
+        buTotals[buName] += expectedMRR;
+        snapshots.push({
+          snapshot_date:        snapshotDate,
+          zoho_bu_deal_map_id:  rec.id,
+          deal_name:            rec['Deal.Deal_Name'] ?? rec.Deal?.Deal_Name ?? '',
+          account_name:         rec['Deal.Account_Name']?.name ?? rec.Deal?.Account_Name?.name ?? null,
+          bu_id:                buId,
+          fy_id:                fyId,
+          closing_month:        dateFrom,
+          stage,
+          probability:          prob,
+          adjusted_mrr:         Math.round(adjustedMRR),
+          expected_mrr:         Math.round(expectedMRR),
+          region:               rec['Deal.Region'] ?? rec.Deal?.Region ?? '',
+        });
       }
 
       more = !!(j.info?.more_records);
@@ -168,18 +189,30 @@ Deno.serve(async (req) => {
     }
   }
 
-  const { error } = await supabase
+  const { error: actualsErr } = await supabase
     .from('crm_actuals')
     .upsert(rows, { onConflict: 'bu_id,fy_id,month_date' });
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  if (actualsErr) {
+    return new Response(JSON.stringify({ error: actualsErr.message }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
+  // Upsert deal-level snapshots in batches of 200
+  for (let i = 0; i < snapshots.length; i += 200) {
+    const { error: snapErr } = await supabase
+      .from('deal_snapshots')
+      .upsert(snapshots.slice(i, i + 200), { onConflict: 'snapshot_date,zoho_bu_deal_map_id' });
+    if (snapErr) {
+      return new Response(JSON.stringify({ error: 'deal_snapshots: ' + snapErr.message }), {
+        status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
   return new Response(
-    JSON.stringify({ success: true, rows_written: rows.length, snapshotted_at: snappedAt, debug_sample: debugSample }),
+    JSON.stringify({ success: true, rows_written: rows.length, deals_snapshotted: snapshots.length, snapshotted_at: snappedAt, debug_sample: debugSample }),
     { headers: { ...CORS, 'Content-Type': 'application/json' } },
   );
 });
