@@ -72,6 +72,12 @@ td.caop{background:#fff}td.caopg{background:#fff}
 td.cact{background:#fff;color:#000}
 td.cactg{background:#fff;color:#000}
 td.cvarv{background:#fff}td.cvarg{background:#fff}
+td.cvarg.pos{background:#d4edda;color:#155724!important}
+td.cvarg.neg{background:#f8d7da;color:#721c24!important}
+tr.alt td.cvarg.pos{background:#c3e6cb;color:#155724!important}
+tr.alt td.cvarg.neg{background:#f5c6cb;color:#721c24!important}
+tr.tot td.cvarg.pos{background:#28a745;color:#fff!important}
+tr.tot td.cvarg.neg{background:#dc3545;color:#fff!important}
 td.neg{color:#c00!important}
 td.ql{border-left:2px solid #bbb}
 td.cqaop{background:#fff;color:#000;font-weight:500}
@@ -299,7 +305,8 @@ function growthVarCell(bu, mi, aopG, cls) {
   const g = getGrowth(bu, mi);
   if (g === null) return te(cls);
   const v = g - aopG;
-  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+  const sign = v > 0 ? ' pos' : v < 0 ? ' neg' : '';
+  return `<td class="${cls}${sign}">${f(v)}</td>`;
 }
 function actMRRTotalCell(mi, cls) {
   if (!BUS.some(bu => getActualMRR(bu,mi) !== null)) return te(cls);
@@ -321,7 +328,8 @@ function growthVarTotalCell(mi, aopG, cls) {
   if (!BUS.some(bu => getGrowth(bu,mi) !== null)) return te(cls);
   const t = BUS.reduce((s,bu)=>{ const v=getGrowth(bu,mi); return s+(v!==null?v:0); },0);
   const v = t - aopG;
-  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+  const sign = v > 0 ? ' pos' : v < 0 ? ' neg' : '';
+  return `<td class="${cls}${sign}">${f(v)}</td>`;
 }
 
 /* ─── FORMAT HELPERS ─────────────────────────────────────── */
