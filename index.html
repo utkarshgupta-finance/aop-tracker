@@ -282,12 +282,12 @@ function getActualMRR(bu, mi) {
 function actMRRCell(bu, mi, cls) {
   const v = getActualMRR(bu, mi);
   if (v === null) return te(cls);
-  return `<td class="${cls}${v<0?' neg':''}" title="Actual MRR = Mar-26 base + CRM growth">${f(v)}</td>`;
+  return `<td class="${cls}${v<0?' neg':''}" title="Commit MRR = Mar-26 base + CRM growth">${f(v)}</td>`;
 }
 function actGrowthCell(bu, mi, cls) {
   const v = getGrowth(bu, mi);
   if (v === null) return te(cls);
-  return `<td class="${cls}${v<0?' neg':''}" title="Actual Growth from Zoho CRM">${f(v)}</td>`;
+  return `<td class="${cls}${v<0?' neg':''}" title="Commit Growth from Zoho CRM">${f(v)}</td>`;
 }
 function mrrVarCell(bu, mi, aopMRR, cls) {
   const a = getActualMRR(bu, mi);
@@ -399,8 +399,8 @@ function showTab(id,btn){
 /* ─── TABLE HEADER HELPER ───────────────────────────────── */
 function subHdrs(aop,aopg,act,actg,varv,varg,lbl='MRR'){
   return `<th class="${aop}">AOP ${lbl}</th><th class="${aopg}">AOP Growth</th>`+
-         `<th class="${act}">Actual ${lbl}</th><th class="${actg}">Actual Growth</th>`+
-         `<th class="${varv}">${lbl} Variance</th><th class="${varg}">Growth Variance</th>`;
+         `<th class="${act}">Commit ${lbl}</th><th class="${actg}">Commit Growth</th>`+
+         `<th class="${varv}">AOP ${lbl} vs Commit ${lbl} Variance</th><th class="${varg}">AOP Growth vs Commit Growth Variance</th>`;
 }
 
 /* ─── BUILD EXIT MRR TAB ────────────────────────────────── */
@@ -408,7 +408,7 @@ function buildMRR(){
   const T=tots(MRR);
   let r1=`<tr><th class="th-bu" rowspan="2">BU</th>`;
   let r2=`<tr>`;
-  r1+=`<th class="th-mar" rowspan="2">Mar-2026<br><small style="font-weight:400;opacity:.8;font-size:9px">Actual MRR</small></th>`;
+  r1+=`<th class="th-mar" rowspan="2">Mar-2026<br><small style="font-weight:400;opacity:.8;font-size:9px">Commit MRR</small></th>`;
   for(let i=1;i<=12;i++){
     r1+=`<th class="th-mon" colspan="6">${ML[i]}</th>`;
     r2+=subHdrs('s-aop','s-aopg','s-act','s-actg','s-varv','s-varg','MRR');
