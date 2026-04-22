@@ -329,7 +329,9 @@ function actMRRCell(bu, mi, cls) {
   if (v === null) return te(cls);
   const { y, m } = MONTH_MAP[mi];
   const monthStr = `${y}-${String(m).padStart(2,'0')}`;
-  return `<td class="${cls}${v<0?' neg':''} clickable" data-bu="${bu}" data-month="${monthStr}" data-label="${ML[mi]}" title="Click to view deals">${f(v)}</td>`;
+  const idx = _drillCellIdx++;
+  _drillCells[idx] = [bu, monthStr, ML[mi]];
+  return `<td class="${cls}${v<0?' neg':''} clickable" onclick="openDrillByIdx(${idx})" title="Click to view deals">${f(v)}</td>`;
 }
 function actGrowthCell(bu, mi, cls) {
   const v = getGrowth(bu, mi);
@@ -454,6 +456,7 @@ function subHdrs(aop,aopg,act,actg,varv,varg,lbl='MRR'){
 
 /* ─── BUILD EXIT MRR TAB ────────────────────────────────── */
 function buildMRR(){
+  _drillCells = {}; _drillCellIdx = 0;
   const T=tots(MRR);
   let r1=`<tr><th class="th-bu" rowspan="2">BU</th>`;
   let r2=`<tr>`;
@@ -593,6 +596,13 @@ function buildOverall(){
 function buildAll(){buildMRR();buildNRR();buildOverall();}
 
 /* ─── DRILL-DOWN MODAL ──────────────────────────────────── */
+let _drillCells = {}, _drillCellIdx = 0;
+function openDrillByIdx(idx) {
+  const c = _drillCells[idx];
+  if (!c) return;
+  openDrillDown(c[0], c[1], c[2]);
+}
+
 let drillData = [];
 let drillSort = { col: 'adjusted_mrr', dir: -1 };
 
@@ -624,11 +634,7 @@ function closeDrill() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrill(); });
-document.addEventListener('click', e => {
-  const td = e.target.closest('td.clickable');
-  if (!td) return;
-  openDrillDown(td.dataset.bu, td.dataset.month, td.dataset.label);
-});
+// clicks on td.clickable handled via inline onclick="openDrillByIdx(N)"
 
 function sortDrill(col) {
   drillSort.dir = (drillSort.col === col) ? -drillSort.dir : (col === 'deal_name' || col === 'region' ? 1 : -1);
