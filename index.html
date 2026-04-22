@@ -122,6 +122,31 @@ tbody tr:hover td.bu{background:#e4eaf8!important}
 tbody tr:hover td.cpast{background:#e8e8e8!important}
 .crm-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);background:#e6f1fb;color:#0c447c;padding:2px 8px;border-radius:10px;border:1px solid #b5d4f4;margin-left:8px}
 .crm-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11}
+td.cact.clickable{cursor:pointer}
+td.cact.clickable:hover{background:#dbeafe!important;color:#1e40af!important;text-decoration:underline}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.hidden{display:none}
+.modal{background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(960px,calc(100vw - 2rem));max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.25rem;border-bottom:1px solid var(--brd);background:#f5f7fa;flex-shrink:0}
+.modal-title{font-size:13px;font-weight:600;color:var(--navy);font-family:var(--sans)}
+.modal-actions{display:flex;align-items:center;gap:.5rem}
+.modal-csv{background:var(--navy);color:#fff;border:none;padding:.3rem .9rem;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--sans);letter-spacing:.02em}
+.modal-csv:hover{background:var(--navy2)}
+.modal-close{background:none;border:1px solid var(--brd2);color:var(--txt2);width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:#eee}
+.modal-body{overflow:auto;flex:1;min-height:0}
+.modal-table{border-collapse:collapse;font-size:11.5px;font-family:var(--mono);width:100%}
+.modal-table thead th{background:#ececec;color:#000;padding:.5rem .8rem;text-align:right;white-space:nowrap;border-bottom:2px solid #bbb;border-right:1px solid #ccc;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;user-select:none;position:sticky;top:0;z-index:2}
+.modal-table thead th:first-child{text-align:left}
+.modal-table thead th.sort-asc::after{content:' ▲';font-size:8px;opacity:.7}
+.modal-table thead th.sort-desc::after{content:' ▼';font-size:8px;opacity:.7}
+.modal-table tbody td{padding:.4rem .8rem;border-bottom:1px solid #eee;border-right:1px solid #eee;text-align:right;color:#111}
+.modal-table tbody td:first-child{text-align:left;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modal-table tbody tr:hover td{background:#eff6ff}
+.modal-table tfoot td{padding:.45rem .8rem;background:#e8e8e8;color:#000;font-weight:700;border-top:2px solid #bbb;text-align:right}
+.modal-table tfoot td:first-child{text-align:left}
+.modal-loading{padding:3rem;text-align:center;color:var(--txt3);font-size:13px;font-family:var(--sans)}
+.modal-err{padding:2rem;color:#a32d2d;font-size:12px;text-align:center;font-family:var(--sans)}
 </style>
 </head>
 <body>
@@ -165,6 +190,20 @@ tbody tr:hover td.cpast{background:#e8e8e8!important}
     <div class="twrap" id="w-overall"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
   </div>
 </main>
+<div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title" id="drill-title">Deals</span>
+      <div class="modal-actions">
+        <button class="modal-csv" onclick="exportDrillCSV()">Export CSV</button>
+        <button class="modal-close" onclick="closeDrill()">&#215;</button>
+      </div>
+    </div>
+    <div class="modal-body" id="drill-body">
+      <div class="modal-loading">Loading…</div>
+    </div>
+  </div>
+</div>
 <script>
 /* ═══════════════════════════════════════════════════════════
    CONFIG
@@ -288,7 +327,10 @@ function getActualMRR(bu, mi) {
 function actMRRCell(bu, mi, cls) {
   const v = getActualMRR(bu, mi);
   if (v === null) return te(cls);
-  return `<td class="${cls}${v<0?' neg':''}" title="Commit MRR = Mar-26 base + CRM growth">${f(v)}</td>`;
+  const { y, m } = MONTH_MAP[mi];
+  const monthStr = `${y}-${String(m).padStart(2,'0')}`;
+  const bu_ = JSON.stringify(bu), mo_ = JSON.stringify(monthStr), lbl_ = JSON.stringify(ML[mi]);
+  return `<td class="${cls}${v<0?' neg':''} clickable" onclick="openDrillDown(${bu_},${mo_},${lbl_})" title="Click to view deals">${f(v)}</td>`;
 }
 function actGrowthCell(bu, mi, cls) {
   const v = getGrowth(bu, mi);
@@ -550,6 +592,95 @@ function buildOverall(){
 }
 
 function buildAll(){buildMRR();buildNRR();buildOverall();}
+
+/* ─── DRILL-DOWN MODAL ──────────────────────────────────── */
+let drillData = [];
+let drillSort = { col: 'adjusted_mrr', dir: -1 };
+
+async function openDrillDown(bu, monthStr, monthLabel) {
+  const overlay = document.getElementById('drill-overlay');
+  const body    = document.getElementById('drill-body');
+  document.getElementById('drill-title').textContent = `${bu}  ·  ${monthLabel}  —  Farming Deals`;
+  body.innerHTML = '<div class="modal-loading">Loading deals from Zoho…</div>';
+  overlay.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/functions/v1/fetch-zoho-deals?bu_name=${encodeURIComponent(bu)}&month=${encodeURIComponent(monthStr)}`,
+      { headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY } }
+    );
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status);
+    drillData = j.deals ?? [];
+    drillSort = { col: 'adjusted_mrr', dir: -1 };
+    renderDrillTable();
+  } catch(e) {
+    body.innerHTML = `<div class="modal-err">Failed to load deals: ${e.message}</div>`;
+  }
+}
+
+function closeDrill() {
+  document.getElementById('drill-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrill(); });
+
+function sortDrill(col) {
+  drillSort.dir = (drillSort.col === col) ? -drillSort.dir : (col === 'deal_name' || col === 'region' ? 1 : -1);
+  drillSort.col = col;
+  renderDrillTable();
+}
+
+function renderDrillTable() {
+  const COLS = [
+    { key:'deal_name',    label:'Deal Name',     num:false },
+    { key:'business_unit',label:'Business Unit', num:false },
+    { key:'adjusted_mrr', label:'Adjusted MRR',  num:true  },
+    { key:'expected_mrr', label:'Expected MRR',  num:true  },
+    { key:'probability',  label:'Probability %', num:true  },
+    { key:'region',       label:'Region',        num:false },
+  ];
+  const sorted = [...drillData].sort((a, b) => {
+    const av = a[drillSort.col], bv = b[drillSort.col];
+    if (typeof av === 'number') return (av - bv) * drillSort.dir;
+    return String(av ?? '').localeCompare(String(bv ?? '')) * drillSort.dir;
+  });
+  const hdr = COLS.map(c => {
+    const cls = drillSort.col === c.key ? (drillSort.dir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    return `<th class="${cls}" onclick="sortDrill('${c.key}')">${c.label}</th>`;
+  }).join('');
+  const rows = sorted.map(d =>
+    `<tr><td title="${(d.deal_name||'').replace(/"/g,'&quot;')}">${d.deal_name||'—'}</td>`+
+    `<td>${d.business_unit||'—'}</td>`+
+    `<td>${f(d.adjusted_mrr)}</td>`+
+    `<td>${f(d.expected_mrr)}</td>`+
+    `<td>${d.probability ?? ''}%</td>`+
+    `<td>${d.region||'—'}</td></tr>`
+  ).join('');
+  const totAdj = sorted.reduce((s,d)=>s+(d.adjusted_mrr||0),0);
+  const totExp = sorted.reduce((s,d)=>s+(d.expected_mrr||0),0);
+  const foot = `<tr><td>Total (${sorted.length} deal${sorted.length!==1?'s':''})</td>`+
+    `<td></td><td>${f(totAdj)}</td><td>${f(totExp)}</td><td></td><td></td></tr>`;
+  document.getElementById('drill-body').innerHTML =
+    `<table class="modal-table"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody>`+
+    `<tfoot>${foot}</tfoot></table>`;
+}
+
+function exportDrillCSV() {
+  if (!drillData.length) return;
+  const hdr = ['Deal Name','Business Unit','Adjusted MRR','Expected MRR','Probability %','Region'];
+  const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  const body = drillData.map(d =>
+    [esc(d.deal_name),esc(d.business_unit),d.adjusted_mrr,d.expected_mrr,d.probability,esc(d.region)].join(',')
+  );
+  const csv = [hdr.join(','), ...body].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = `deals_${document.getElementById('drill-title').textContent.replace(/\s+/g,'_').replace(/[^\w_]/g,'')}.csv`;
+  a.click();
+}
+
 loadData();
 </script>
 </body>
