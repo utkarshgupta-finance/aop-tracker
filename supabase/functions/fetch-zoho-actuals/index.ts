@@ -9,9 +9,11 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EXCLUDED_STAGES = new Set([
-  'Closed Lost', 'No Connect', 'Lead not contacted',
-  'Lead qualification in progress', 'Lead disqualified', 'Project Kept on Hold',
+// Matches the Zoho analytics chart filter: Stage is one of these AND Probability >= 70
+const INCLUDED_STAGES = new Set([
+  'Initial discussion', 'Demo', 'Decision maker bought in', 'Decision Maker Bought-In',
+  'Proposal Out', 'Revised Pricing', 'Negotiation', 'Differed timeline',
+  'PO pending', 'Closed Won', 'MRR Live',
 ]);
 
 // FY2627 months to fetch: Apr-2026 → Mar-2027
@@ -135,7 +137,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: H,
         body: JSON.stringify({
-          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
+          select_query: `SELECT Business_Unit, Deal.Stage, Deal.Probability, Deal.Probability_Adjusted_MRR FROM BU_Deal_Map WHERE Deal.Closing_Date between '${dateFrom}' and '${dateTo}' AND Deal.Deal_Type_New_or_Existing = 'Farming' LIMIT 200 OFFSET ${offset}`,
         }),
       });
       const j = await r.json();
@@ -143,10 +145,11 @@ Deno.serve(async (req) => {
       if (!debugSample && j.data?.[0]) debugSample = j.data[0];
 
       for (const rec of (j.data ?? [])) {
-        // support both flat dot-notation keys and nested Deal object
         const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
+        const prob  = rec['Deal.Probability'] ?? rec.Deal?.Probability ?? 0;
         const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
-        if (EXCLUDED_STAGES.has(stage)) continue;
+        if (!INCLUDED_STAGES.has(stage)) continue;
+        if (prob < 70) continue;
         const buName = zohoIdToBuName[rec.Business_Unit?.id];
         if (buName && buNames.has(buName)) {
           buTotals[buName] += mrr;
