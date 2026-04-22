@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AOP Tracker FY 2026–27</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f2340;--navy2:#1a3a5c;--navy3:#2a5f9e;
+  --green:#3b6d11;--greenbg:#f4faf0;--greendark:#1a5c2e;
+  --amber:#854f0b;--amberbg:#fef9f0;
+  --red:#a32d2d;
+  --qhdr:#163d6e;--fyhdr:#0d2d52;
+  --surf:#fff;--surf2:#f4f6f9;--surf3:#edf0f5;
+  --brd:#dde2ea;--brd2:#c5cdd8;
+  --txt:#0f2340;--txt2:#4a5568;--txt3:#8896a8;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+body{font-family:var(--sans);background:var(--surf2);color:var(--txt);min-height:100vh}
+header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px solid var(--navy3)}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:.4rem}
+.htitle{font-size:20px;font-weight:500;color:#fff}
+.hsub{font-size:12px;color:rgba(255,255,255,.35);margin-top:.3rem;font-family:var(--mono)}
+#banner{background:#1a3a5c;padding:.9rem 2rem;display:flex;align-items:flex-start;gap:1rem;border-bottom:1px solid #2a5f9e}
+#banner.hidden{display:none}
+.btext{color:#c8ddf0;font-size:12.5px;line-height:1.7;flex:1}
+.btext strong{color:#fff}
+.btext code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:11px}
+.btext ol{margin:.4rem 0 0 1.2rem;color:#a0c4e0}
+.btext li{margin:.15rem 0}
+.bdismiss{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:.3rem .8rem;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;align-self:flex-start}
+.bdismiss:hover{background:rgba(255,255,255,.2)}
+nav{background:var(--surf);border-bottom:1px solid var(--brd);display:flex;padding:0 2rem;align-items:center}
+.tbtn{padding:.85rem 1.4rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
+.tbtn:hover{color:var(--navy2)}.tbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.rbtn{margin-left:auto;background:none;border:1px solid var(--brd2);color:var(--txt2);padding:.32rem .85rem;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--sans);display:flex;align-items:center;gap:5px}
+.rbtn:hover{background:var(--surf3)}
+.dot{width:7px;height:7px;border-radius:50%;background:#ccc;display:inline-block;flex-shrink:0}
+.dot.ok{background:#3b6d11}.dot.err{background:#a32d2d}.dot.spin{background:#854f0b}
+main{padding:1.5rem 2rem}
+.pane{display:none}.pane.active{display:block}
+.slabel{font-size:11px;font-weight:500;font-family:var(--mono);color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
+.twrap{overflow-x:auto;border-radius:8px;border:1px solid var(--brd);background:var(--surf)}
+table{border-collapse:collapse;font-size:11px;font-family:var(--mono);min-width:100%}
+thead th{background:var(--navy);color:#fff;font-size:9.5px;font-weight:500;letter-spacing:.05em;padding:.5rem .65rem;text-align:center;border-right:1px solid rgba(255,255,255,.1);border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap;vertical-align:middle}
+thead th.th-bu{text-align:left;position:sticky;left:0;z-index:4;min-width:120px;background:var(--navy);border-right:2px solid rgba(255,255,255,.2)}
+thead th.th-mar{background:#14522a;border-right:1px solid rgba(255,255,255,.15)}
+thead th.th-mon{background:var(--navy);border-left:2px solid rgba(255,255,255,.15);border-right:2px solid rgba(255,255,255,.08)}
+thead th.th-q{background:var(--qhdr);border-left:2px solid rgba(255,255,255,.25);border-right:2px solid rgba(255,255,255,.15)}
+thead th.th-fy{background:var(--fyhdr);border-left:2px solid rgba(255,255,255,.25)}
+thead tr:last-child th{border-bottom:2px solid var(--brd2)}
+th.s-past{background:#14522a;color:#fff}
+th.s-aop{background:#1a3a5c;color:#fff}
+th.s-aopg{background:#2a5f9e;color:#fff}
+th.s-act{background:#185f3a;color:#fff}
+th.s-actg{background:#267a4c;color:#fff}
+th.s-varv{background:#6b3a08;color:#fff}
+th.s-varg{background:#8f5010;color:#fff}
+th.s-qaop{background:#0f3060;color:#fff}
+th.s-qaopg{background:#1d4e90;color:#fff}
+th.s-qact{background:#0f3d22;color:#fff}
+th.s-qactg{background:#1a5530;color:#fff}
+th.s-qvarv{background:#4a2504;color:#fff}
+th.s-qvarg{background:#6b3808;color:#fff}
+td{padding:.4rem .65rem;text-align:right;border-right:1px solid var(--brd);border-bottom:1px solid var(--brd);white-space:nowrap;color:var(--txt);font-size:11px;vertical-align:middle}
+td.bu{text-align:left;font-family:var(--sans);font-weight:500;font-size:11px;background:var(--surf3);color:var(--navy2);position:sticky;left:0;z-index:2;min-width:120px;border-right:2px solid var(--brd2)}
+td.cpast{background:#e5f2eb;color:#14522a;font-weight:500}
+td.caop{background:#f0f4fb}td.caopg{background:#e8f0f9}
+td.cact{background:var(--greenbg);color:var(--greendark)}
+td.cactg{background:#ecf7f0;color:#1a5c2e}
+td.cvarv{background:var(--amberbg)}td.cvarg{background:#faeeda}
+td.neg{color:var(--red)!important}
+td.ql{border-left:2px solid var(--brd2)}
+td.cqaop{background:#dce8f5;color:#0f3060;font-weight:500}
+td.cqaopg{background:#d0dff2;color:#0f3060;font-weight:500}
+td.cqact{background:#d8eedc;color:#0f3d22;font-weight:500}
+td.cqactg{background:#cce8d2;color:#0f3d22;font-weight:500}
+td.cqvarv{background:#f5e8d5;font-weight:500}td.cqvarg{background:#f0dfc8;font-weight:500}
+td.fl{border-left:2px solid #8896a8}
+td.cfyaop{background:#c8d8f0;color:#0a2240;font-weight:500}
+td.cfyaopg{background:#bccde8;color:#0a2240;font-weight:500}
+td.cfyact{background:#c8e8cc;color:#0a2810;font-weight:500}
+td.cfyactg{background:#bce0c0;color:#0a2810;font-weight:500}
+td.cfyvarv{background:#f0dcc0;font-weight:500}td.cfyvarg{background:#e8d0b0;font-weight:500}
+tr.alt td{background:#fafbfd}
+tr.alt td.bu{background:#eef1f6}
+tr.alt td.cpast{background:#d8eee2}
+tr.alt td.caop{background:#e8eef8}tr.alt td.caopg{background:#dfe8f5}
+tr.alt td.cact{background:#edf7ed}tr.alt td.cactg{background:#e4f2e8}
+tr.alt td.cvarv{background:#fdf5e8}tr.alt td.cvarg{background:#f8eed8}
+tr.alt td.cqaop{background:#d4e2f2}tr.alt td.cqaopg{background:#c8d8ee}
+tr.alt td.cqact{background:#cce6d0}tr.alt td.cqactg{background:#c0e0c8}
+tr.alt td.cqvarv{background:#f0e0cc}tr.alt td.cqvarg{background:#ecd4bc}
+tr.alt td.cfyaop{background:#bccde8}tr.alt td.cfyaopg{background:#b0c2e0}
+tr.alt td.cfyact{background:#bce0c0}tr.alt td.cfyactg{background:#b0d8b8}
+tr.alt td.cfyvarv{background:#e8d0b0}tr.alt td.cfyvarg{background:#e0c8a8}
+tr.tot td{background:var(--navy);color:#fff;font-weight:500;border-color:rgba(255,255,255,.1)}
+tr.tot td.bu{background:var(--navy);color:#fff;border-right:2px solid rgba(255,255,255,.2)}
+tr.tot td.cpast{background:#0c3a1e;color:#80c8a0}
+tr.tot td.caop{background:#0c1e38;color:#a8c4e8}tr.tot td.caopg{background:#0a1a30;color:#90b8e0}
+tr.tot td.cact{background:#0a2818;color:#80c890}tr.tot td.cactg{background:#082010;color:#70b880}
+tr.tot td.cvarv{background:#281400;color:#e0b060}tr.tot td.cvarg{background:#201000;color:#d8a050}
+tr.tot td.cqaop{background:#081828;color:#90b0d8;border-left:2px solid rgba(255,255,255,.1)}
+tr.tot td.cqaopg{background:#061018;color:#80a8d0}
+tr.tot td.cqact{background:#081510;color:#80c080}tr.tot td.cqactg{background:#061008;color:#70b070}
+tr.tot td.cqvarv{background:#180c00;color:#d09040}tr.tot td.cqvarg{background:#100800;color:#c08038}
+tr.tot td.cfyaop{background:#040e1c;color:#88a8d0;border-left:2px solid rgba(255,255,255,.1)}
+tr.tot td.cfyaopg{background:#030a14;color:#7898c8}
+tr.tot td.cfyact{background:#040e06;color:#78b078}tr.tot td.cfyactg{background:#030a04;color:#68a068}
+tr.tot td.cfyvarv{background:#0e0600;color:#c08030}tr.tot td.cfyvarg{background:#080400;color:#b07028}
+tbody tr:hover td{background:#edf2fa!important}
+tbody tr:hover td.bu{background:#e0e8f2!important}
+tbody tr:hover td.cpast{background:#cce6d8!important}
+.crm-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);background:#e6f1fb;color:#0c447c;padding:2px 8px;border-radius:10px;border:1px solid #b5d4f4;margin-left:8px}
+.crm-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Annual Operating Plan · FY 2026–27</div>
+  <div class="htitle">AOP Revenue Tracker</div>
+  <div class="hsub" id="sub">Loading…</div>
+</header>
+<div id="banner">
+  <div class="btext">
+    <strong>Connect your Google Sheet for live AOP data.</strong>
+    Currently showing cached AOP values. To enable live sync:
+    <ol>
+      <li>Open your sheet → <strong>File → Share → Publish to web</strong></li>
+      <li>Choose <strong>Sheet9</strong> → format: <strong>CSV</strong> → click <strong>Publish</strong> → copy the URL</li>
+      <li>Paste it as the value of <code>SHEET_CSV_URL</code> at the top of this file's script section</li>
+    </ol>
+    <strong>Actual MRR</strong> is fetched live from Zoho CRM on every page load.
+  </div>
+  <button class="bdismiss" onclick="document.getElementById('banner').classList.add('hidden')">Dismiss</button>
+</div>
+<nav>
+  <button class="tbtn active" onclick="showTab('mrr',this)">Exit MRR</button>
+  <button class="tbtn" onclick="showTab('nrr',this)">NRR</button>
+  <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
+  <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
+</nav>
+<main>
+  <div id="mrr" class="pane active">
+    <p class="slabel">Exit MRR — Monthly AOP vs Actual <span class="crm-badge"><span class="crm-dot"></span>Live from Zoho CRM</span></p>
+    <div class="twrap" id="w-mrr"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
+  </div>
+  <div id="nrr" class="pane">
+    <p class="slabel">NRR — Monthly AOP vs Actual</p>
+    <div class="twrap" id="w-nrr"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
+  </div>
+  <div id="overall" class="pane">
+    <p class="slabel">Overall Revenue — AOP vs Actual by BU</p>
+    <div class="twrap" id="w-overall"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
+  </div>
+</main>
+<script>
+/* ═══════════════════════════════════════════════════════════
+   CONFIG — fill in all 4 values before pushing to GitHub Pages
+   ═══════════════════════════════════════════════════════════
+
+   1. SHEET_CSV_URL — Google Sheets AOP data (Sheet9)
+      File → Share → Publish to web → Sheet9 → CSV → copy URL
+
+   2. ZOHO OAUTH — Direct Zoho CRM API
+      Step 1: Go to https://api-console.zoho.in
+      Step 2: Add Client → Self Client → note Client ID + Secret
+      Step 3: Click Generate Code
+              Scope: ZohoCRM.modules.READ
+              Duration: 10 minutes → copy the code
+      Step 4: In your browser, open this URL (fill in your values):
+              https://accounts.zoho.in/oauth/v2/token?grant_type=authorization_code&client_id=YOUR_ID&client_secret=YOUR_SECRET&code=THE_CODE
+      Step 5: Copy the refresh_token from the JSON response
+      Step 6: Fill in the 3 values below
+
+   The refresh_token never expires. Access token auto-refreshes on every page load.
+   ─────────────────────────────────────────────────────── */
+const SHEET_CSV_URL      = '';  // ← Google Sheet CSV URL
+const ZOHO_CLIENT_ID     = '1000.EJXIHAVDTNAX3T4DZCFZ2FY9YQ4YVA';  // ← from api-console.zoho.in
+const ZOHO_CLIENT_SECRET = 'Y5bddbcb2f13d17dd383f4d7028501438a3da4a715e';  // ← from api-console.zoho.in
+const ZOHO_REFRESH_TOKEN = '1000.598fec5a3184a857e70e0307b5bfb4fc.670908e1e88dd09ff9eb9af60e982aae';  // ← refresh_token from Step 5
+
+/* ─── CONSTANTS ─────────────────────────────────────────── */
+const BUS = ['BAT BU','India ENT BU','India MM BU','KAM BU','MEA BU','SEA BU','SME BU'];
+const ML  = ['Mar-2026','Apr-2026','May-2026','Jun-2026','Jul-2026','Aug-2026',
+             'Sep-2026','Oct-2026','Nov-2026','Dec-2026','Jan-2027','Feb-2027','Mar-2027'];
+const QS  = [{l:'Q1',s:1,e:3},{l:'Q2',s:4,e:6},{l:'Q3',s:7,e:9},{l:'Q4',s:10,e:12}];
+const QA  = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
+const MONTH_MAP = [
+  {y:2026,m:3},{y:2026,m:4},{y:2026,m:5},{y:2026,m:6},
+  {y:2026,m:7},{y:2026,m:8},{y:2026,m:9},{y:2026,m:10},
+  {y:2026,m:11},{y:2026,m:12},{y:2027,m:1},{y:2027,m:2},{y:2027,m:3}
+];
+const EXCLUDED_STAGES = new Set([
+  'Closed Lost','No Connect','Lead not contacted',
+  'Lead qualification in progress','Lead disqualified'
+]);
+
+/* ─── FALLBACK AOP DATA (from Sheet9) ───────────────────── */
+const FB_MRR = {
+  'BAT BU':       [9879450,10113450,10245450,11937450,13797450,16527450,17697450,19311450,20217450,20307450,20397450,21153450,21243450],
+  'India ENT BU': [23246042,23247042,23598042,24544042,25907042,26708042,27669042,28720042,29477042,30559042,31668042,32784042,34221042],
+  'India MM BU':  [21641157,22006157,22471157,22886157,23436157,23986157,24586157,25336157,26086157,26886157,27636157,28386157,29186157],
+  'KAM BU':       [6345040,6600000,8300000,8800000,9900000,13000000,14500000,16700000,18500000,18900000,23100000,23900000,25300000],
+  'MEA BU':       [5956092,6048592,6078614,6442614,6442614,6792614,7092614,7492614,8042614,9242614,9742614,10092614,11392614],
+  'SEA BU':       [1488025,1488025,1560025,1783525,2151525,2363025,3579025,3633025,4885025,5945025,6235025,6689025,7514025],
+  'SME BU':       [8537446,9002446,9467446,9932446,10452446,10972446,11492446,12062446,12632446,13202446,13832446,14462446,15092446],
+};
+const FB_NRR = {
+  'BAT BU':       [80489427,33474000,24552000,40512000,26273900,31668000,24330000,34530000,23130000,15930000,14250000,39990000,31770000],
+  'India ENT BU': [8195550,6075000,9746000,4380000,11945000,12505000,9974000,7575000,8505000,8245000,8542000,9472000,9062000],
+  'India MM BU':  [378129,930000,1530000,1530000,1830000,1830000,2280000,3680000,3680000,4230000,4030000,4030000,4580000],
+  'KAM BU':       [2310704,6400000,14700000,11900000,26600000,15500000,24800000,25900000,19800000,14800000,40600000,5200000,28200000],
+  'MEA BU':       [317875,700000,-100000,2194700,1550000,3450000,15283750,2000000,4650000,15206000,4750000,4750000,14902250],
+  'SEA BU':       [-490666,810000,1220000,1349000,990000,1395000,2255000,2240000,1800000,2200000,1815000,1505000,1770000],
+  'SME BU':       [295998,2000000,2000000,2000000,2220000,2220000,2220000,2740000,2740000,2740000,3260000,3260000,3260000],
+};
+
+/* ─── RUNTIME STATE ─────────────────────────────────────────
+   CRM_ACTUAL_MRR stores GROWTH values per BU per month index.
+   Actual MRR = Mar-2026 base + cumulative growth.
+   Seeded with Apr-2026 fallback values from last CRM fetch.
+──────────────────────────────────────────────────────────── */
+let CRM_ACTUAL_MRR = {
+  'BAT BU':       { 1: 0 },
+  'India ENT BU': { 1: -1080611 },
+  'India MM BU':  { 1: 501038 },
+  'KAM BU':       { 1: 250113 },
+  'MEA BU':       { 1: 209696 },
+  'SEA BU':       { 1: 21805 },
+  'SME BU':       { 1: 147354 },
+};
+let MRR = {}, NRR = {};
+let ZOHO_ACCESS_TOKEN = '';
+
+/* ─── ZOHO AUTH ─────────────────────────────────────────────
+   Gets a fresh access token using the refresh token.
+   Called once on every page load.
+──────────────────────────────────────────────────────────── */
+async function getZohoAccessToken() {
+  if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET || !ZOHO_REFRESH_TOKEN) return false;
+  try {
+    const resp = await fetch('https://accounts.zoho.in/oauth/v2/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        client_id:     ZOHO_CLIENT_ID,
+        client_secret: ZOHO_CLIENT_SECRET,
+        refresh_token: ZOHO_REFRESH_TOKEN,
+      }),
+    });
+    const json = await resp.json();
+    if (json.access_token) { ZOHO_ACCESS_TOKEN = json.access_token; return true; }
+    console.error('Token error:', json);
+    return false;
+  } catch(e) { console.error('Token fetch failed:', e); return false; }
+}
+
+/* ─── FETCH ACTUALS FROM ZOHO CRM ───────────────────────────
+   For each past month (Apr-2026 to today):
+   1. Pre-fetch all BU_Deal_Map records → dealId→buName map
+   2. For each month: search Farming deals by Closing_Date
+   3. Sum Probability_Adjusted_MRR per BU (excl. dead stages)
+   4. Store growth value in CRM_ACTUAL_MRR[bu][monthIndex]
+   Auto-populates May, Jun, etc. as months pass.
+──────────────────────────────────────────────────────────── */
+async function fetchAllCRMActuals() {
+  if (!ZOHO_ACCESS_TOKEN) return;
+  const sub = document.getElementById('sub');
+  const H   = { 'Authorization': 'Zoho-oauthtoken ' + ZOHO_ACCESS_TOKEN };
+
+  // Step 1: Build dealId → buName map from BU_Deal_Map
+  const dealToBU = {};
+  let buPage = 1, buMore = true;
+  while (buMore) {
+    try {
+      const r = await fetch(
+        `https://www.zohoapis.in/crm/v3/BU_Deal_Map?fields=id,Deal,Business_Unit&per_page=200&page=${buPage}`,
+        { headers: H }
+      );
+      const j = await r.json();
+      for (const rec of (j.data || [])) {
+        if (rec.Deal && rec.Business_Unit) dealToBU[rec.Deal.id] = rec.Business_Unit.name;
+      }
+      buMore = !!(j.info && j.info.more_records);
+      buPage++;
+    } catch(e) { buMore = false; }
+  }
+
+  // Step 2: Fetch deals month by month up to current month
+  const now = new Date();
+  const curY = now.getFullYear(), curM = now.getMonth() + 1;
+
+  for (let mi = 1; mi < MONTH_MAP.length; mi++) {
+    const {y, m} = MONTH_MAP[mi];
+    if (y > curY || (y === curY && m > curM)) break;
+
+    const mStr    = String(m).padStart(2,'0');
+    const lastDay = new Date(y, m, 0).getDate();
+    const dStr    = String(lastDay).padStart(2,'0');
+    const dateFrom = `${y}-${mStr}-01`;
+    const dateTo   = `${y}-${mStr}-${dStr}`;
+    if (sub) sub.textContent = `Fetching actuals… ${y}-${mStr}`;
+
+    const buTotals = {};
+    for (const bu of BUS) buTotals[bu] = 0;
+
+    const criteria = encodeURIComponent(
+      `(Closing_Date:between:${dateFrom},${dateTo})and(Deal_Type_New_or_Existing:equals:Farming)`
+    );
+    let page = 1, more = true;
+    while (more) {
+      try {
+        const r = await fetch(
+          `https://www.zohoapis.in/crm/v3/Deals/search?criteria=${criteria}&fields=id,Stage,Probability_Adjusted_MRR&per_page=200&page=${page}`,
+          { headers: H }
+        );
+        const j = await r.json();
+        for (const deal of (j.data || [])) {
+          if (EXCLUDED_STAGES.has(deal.Stage)) continue;
+          const buName = dealToBU[deal.id];
+          if (buName && buTotals.hasOwnProperty(buName)) {
+            buTotals[buName] += (deal.Probability_Adjusted_MRR || 0);
+          }
+        }
+        more = !!(j.info && j.info.more_records);
+        page++;
+      } catch(e) { more = false; }
+    }
+
+    // Store growth values
+    for (const bu of BUS) {
+      if (!CRM_ACTUAL_MRR[bu]) CRM_ACTUAL_MRR[bu] = {};
+      CRM_ACTUAL_MRR[bu][mi] = Math.round(buTotals[bu]);
+    }
+  }
+}
+
+/* ─── ACTUAL MRR HELPERS ────────────────────────────────────
+   CRM stores GROWTH values. Actual MRR = base + growth.
+   Actual MRR  (mi) = MRR[bu][0]  + sum of growths 1..mi
+   MRR Variance     = Actual MRR  - AOP MRR
+   Growth Variance  = Actual Growth - AOP Growth
+──────────────────────────────────────────────────────────── */
+function getGrowth(bu, mi) {
+  const d = CRM_ACTUAL_MRR[bu];
+  return (d && d[mi] !== undefined) ? d[mi] : null;
+}
+function getActualMRR(bu, mi) {
+  if (getGrowth(bu, mi) === null) return null;
+  let base = MRR[bu][0];
+  for (let m = 1; m <= mi; m++) { const g = getGrowth(bu, m); if (g !== null) base += g; }
+  return base;
+}
+function actMRRCell(bu, mi, cls) {
+  const v = getActualMRR(bu, mi);
+  if (v === null) return te(cls);
+  return `<td class="${cls}${v<0?' neg':''}" title="Actual MRR = Mar-26 base + CRM growth">${f(v)}</td>`;
+}
+function actGrowthCell(bu, mi, cls) {
+  const v = getGrowth(bu, mi);
+  if (v === null) return te(cls);
+  return `<td class="${cls}${v<0?' neg':''}" title="Actual Growth from Zoho CRM">${f(v)}</td>`;
+}
+function mrrVarCell(bu, mi, aopMRR, cls) {
+  const a = getActualMRR(bu, mi);
+  if (a === null) return te(cls);
+  const v = a - aopMRR;
+  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+}
+function growthVarCell(bu, mi, aopG, cls) {
+  const g = getGrowth(bu, mi);
+  if (g === null) return te(cls);
+  const v = g - aopG;
+  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+}
+function actMRRTotalCell(mi, cls) {
+  if (!BUS.some(bu => getActualMRR(bu,mi) !== null)) return te(cls);
+  const t = BUS.reduce((s,bu)=>{ const v=getActualMRR(bu,mi); return s+(v!==null?v:0); },0);
+  return `<td class="${cls}${t<0?' neg':''}">${f(t)}</td>`;
+}
+function actGrowthTotalCell(mi, cls) {
+  if (!BUS.some(bu => getGrowth(bu,mi) !== null)) return te(cls);
+  const t = BUS.reduce((s,bu)=>{ const v=getGrowth(bu,mi); return s+(v!==null?v:0); },0);
+  return `<td class="${cls}${t<0?' neg':''}">${f(t)}</td>`;
+}
+function mrrVarTotalCell(mi, aopT, cls) {
+  if (!BUS.some(bu => getActualMRR(bu,mi) !== null)) return te(cls);
+  const t = BUS.reduce((s,bu)=>{ const v=getActualMRR(bu,mi); return s+(v!==null?v:0); },0);
+  const v = t - aopT;
+  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+}
+function growthVarTotalCell(mi, aopG, cls) {
+  if (!BUS.some(bu => getGrowth(bu,mi) !== null)) return te(cls);
+  const t = BUS.reduce((s,bu)=>{ const v=getGrowth(bu,mi); return s+(v!==null?v:0); },0);
+  const v = t - aopG;
+  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+}
+
+/* ─── FORMAT HELPERS ─────────────────────────────────────── */
+function f(v) {
+  if (v===null||v===undefined||v==='') return '';
+  const neg=v<0, s=Math.abs(Math.round(v)).toString();
+  let r;
+  if(s.length<=3) r=s;
+  else if(s.length<=5) r=s.slice(0,-3)+','+s.slice(-3);
+  else if(s.length<=7) r=s.slice(0,-5)+','+s.slice(-5,-3)+','+s.slice(-3);
+  else r=s.slice(0,-7)+','+s.slice(-7,-5)+','+s.slice(-5,-3)+','+s.slice(-3);
+  return (neg?'-':'')+r;
+}
+function td(v,cls=''){const ng=typeof v==='number'&&v<0?' neg':'';return `<td class="${cls}${ng}">${f(v)}</td>`;}
+function te(cls=''){return `<td class="${cls}"></td>`;}
+function tots(D){return ML.map((_,i)=>BUS.reduce((s,bu)=>s+(D[bu]?D[bu][i]:0),0));}
+
+/* ─── CSV / SHEET PARSE ─────────────────────────────────── */
+function parseCSV(txt){
+  return txt.split(/\r?\n/).map(line=>{
+    const cells=[]; let cur='',q=false;
+    for(const c of line){if(c==='"'){q=!q;}else if(c===','&&!q){cells.push(cur.trim());cur='';}else cur+=c;}
+    cells.push(cur.trim()); return cells;
+  });
+}
+function pn(s){return parseFloat((s||'').replace(/,/g,'').replace(/[^0-9.\-]/g,''))||0;}
+function parseSheet(csv){
+  const rows=parseCSV(csv); const mD={},nD={};
+  let ms=-1,ns=-1;
+  rows.forEach((r,i)=>{if((r[0]||'').includes('Exit MRR'))ms=i;if((r[0]||'').includes('NRR Projection'))ns=i;});
+  if(ms<0||ns<0)return null;
+  for(let i=ms+2;i<=ms+8;i++){const r=rows[i];if(!r||!r[0]||r[0]==='Total')continue;const bu=r[0].trim();if(BUS.includes(bu)){mD[bu]=[];for(let c=1;c<=13;c++)mD[bu].push(pn(r[c]));}}
+  for(let i=ns+2;i<=ns+8;i++){const r=rows[i];if(!r||!r[0]||r[0]==='Total')continue;const bu=r[0].trim();if(BUS.includes(bu)){nD[bu]=[];for(let c=1;c<=13;c++)nD[bu].push(pn(r[c]));}}
+  if(!BUS.every(bu=>mD[bu]&&mD[bu].length===13))return null;
+  if(!BUS.every(bu=>nD[bu]&&nD[bu].length===13))return null;
+  return{mD,nD};
+}
+
+/* ─── LOAD ──────────────────────────────────────────────── */
+async function loadData(){
+  const dot=document.getElementById('dot'), sub=document.getElementById('sub');
+  dot.className='dot spin';
+
+  // Step 1: AOP data — Google Sheet or fallback
+  if(!SHEET_CSV_URL){
+    MRR=FB_MRR; NRR=FB_NRR;
+    sub.textContent='Cached AOP · fetching Zoho actuals…';
+  } else {
+    try{
+      const r=await fetch(SHEET_CSV_URL);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const p=parseSheet(await r.text());
+      if(!p) throw new Error('Parse error');
+      MRR=p.mD; NRR=p.nD;
+      document.getElementById('banner').classList.add('hidden');
+      sub.textContent='Live AOP · fetching Zoho actuals…';
+    }catch(e){
+      MRR=FB_MRR; NRR=FB_NRR;
+      sub.textContent='Sheet unavailable ('+e.message+') · fetching Zoho actuals…';
+    }
+  }
+
+  // Render immediately with fallback actuals
+  buildAll();
+
+  // Step 2: Zoho OAuth → fetch live actuals
+  const hasCreds = ZOHO_CLIENT_ID && ZOHO_CLIENT_SECRET && ZOHO_REFRESH_TOKEN;
+  if(hasCreds){
+    const ok = await getZohoAccessToken();
+    if(ok){
+      await fetchAllCRMActuals();
+      buildAll();
+      const src = SHEET_CSV_URL ? 'Live AOP (Google Sheet)' : 'Cached AOP';
+      dot.className='dot ok';
+      sub.textContent=src+' · Live actuals from Zoho CRM · '+new Date().toLocaleTimeString();
+    } else {
+      dot.className='dot err';
+      sub.textContent='Zoho auth failed · check CLIENT_ID / SECRET / REFRESH_TOKEN · showing fallback actuals';
+    }
+  } else {
+    dot.className='dot err';
+    const src = SHEET_CSV_URL ? 'Live AOP (Google Sheet)' : 'Cached AOP';
+    sub.textContent=src+' · Fallback actuals (Apr-2026) · Add Zoho credentials for live sync';
+  }
+}
+
+function showTab(id,btn){
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ─── TABLE HEADER HELPER ───────────────────────────────── */
+function subHdrs(aop,aopg,act,actg,varv,varg,lbl='MRR'){
+  return `<th class="${aop}">AOP ${lbl}</th><th class="${aopg}">AOP Growth</th>`+
+         `<th class="${act}">Actual ${lbl}</th><th class="${actg}">Actual Growth</th>`+
+         `<th class="${varv}">${lbl} Variance</th><th class="${varg}">Growth Variance</th>`;
+}
+
+/* ─── BUILD EXIT MRR TAB ────────────────────────────────── */
+function buildMRR(){
+  const T=tots(MRR);
+  let r1=`<tr><th class="th-bu" rowspan="2">BU</th>`;
+  let r2=`<tr>`;
+  r1+=`<th class="th-mar" rowspan="2">Mar-2026<br><small style="font-weight:400;opacity:.8;font-size:9px">Actual MRR</small></th>`;
+  for(let i=1;i<=12;i++){
+    r1+=`<th class="th-mon" colspan="6">${ML[i]}</th>`;
+    r2+=subHdrs('s-aop','s-aopg','s-act','s-actg','s-varv','s-varg','MRR');
+    if(QA[i]){r1+=`<th class="th-q" colspan="6">${QA[i]}</th>`;r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','MRR');}
+  }
+  r1+=`<th class="th-fy" colspan="6">FY27</th></tr>`;
+  r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','MRR')+`</tr>`;
+  let body='<tbody>';
+  BUS.forEach((bu,bi)=>{
+    const alt=bi%2===1?' alt':'';
+    let row=`<tr class="${alt}"><td class="bu">${bu}</td><td class="cpast">${f(MRR[bu][0])}</td>`;
+    let fyAOP=MRR[bu][0];
+    for(let i=1;i<=12;i++){
+      const aop=MRR[bu][i], aopG=aop-MRR[bu][i-1]; fyAOP+=aop;
+      row+=td(aop,'caop')+td(aopG,'caopg');
+      row+=actMRRCell(bu,i,'cact')+actGrowthCell(bu,i,'cactg')+mrrVarCell(bu,i,aop,'cvarv')+growthVarCell(bu,i,aopG,'cvarg');
+      if(QA[i]){
+        const q=QS.find(q=>q.l===QA[i]);
+        row+=`<td class="ql cqaop">${f(MRR[bu][q.e])}</td>`+td(MRR[bu][q.e]-MRR[bu][q.s-1],'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+      }
+    }
+    row+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+    body+=row;
+  });
+  let tr=`<tr class="tot"><td class="bu">Total</td><td class="cpast">${f(T[0])}</td>`;
+  let fyAOP=T[0];
+  for(let i=1;i<=12;i++){
+    const aop=T[i],aopG=aop-T[i-1]; fyAOP+=aop;
+    tr+=td(aop,'caop')+td(aopG,'caopg');
+    tr+=actMRRTotalCell(i,'cact')+actGrowthTotalCell(i,'cactg')+mrrVarTotalCell(i,aop,'cvarv')+growthVarTotalCell(i,aopG,'cvarg');
+    if(QA[i]){
+      const q=QS.find(q=>q.l===QA[i]);
+      tr+=`<td class="ql cqaop">${f(T[q.e])}</td>`+td(T[q.e]-T[q.s-1],'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+    }
+  }
+  tr+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+  body+=tr+'</tbody>';
+  document.getElementById('w-mrr').innerHTML=`<table><thead>${r1}${r2}</thead>${body}</table>`;
+}
+
+/* ─── BUILD NRR TAB ─────────────────────────────────────── */
+function buildNRR(){
+  const T=tots(NRR);
+  let r1=`<tr><th class="th-bu" rowspan="2">BU</th>`;
+  let r2=`<tr>`;
+  r1+=`<th class="th-mar" rowspan="2">Mar-2026<br><small style="font-weight:400;opacity:.8;font-size:9px">Actual NRR</small></th>`;
+  for(let i=1;i<=12;i++){
+    r1+=`<th class="th-mon" colspan="6">${ML[i]}</th>`;
+    r2+=subHdrs('s-aop','s-aopg','s-act','s-actg','s-varv','s-varg','NRR');
+    if(QA[i]){r1+=`<th class="th-q" colspan="6">${QA[i]}</th>`;r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','NRR');}
+  }
+  r1+=`<th class="th-fy" colspan="6">FY27</th></tr>`;
+  r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','NRR')+`</tr>`;
+  let body='<tbody>';
+  BUS.forEach((bu,bi)=>{
+    const alt=bi%2===1?' alt':'';
+    let row=`<tr class="${alt}"><td class="bu">${bu}</td>`+td(NRR[bu][0],'cpast');
+    let fyAOP=NRR[bu][0];
+    for(let i=1;i<=12;i++){
+      const aop=NRR[bu][i], aopG=aop-NRR[bu][i-1]; fyAOP+=aop;
+      row+=td(aop,'caop')+td(aopG,'caopg')+te('cact')+te('cactg')+te('cvarv')+te('cvarg');
+      if(QA[i]){
+        const q=QS.find(q=>q.l===QA[i]);
+        const qAOP=NRR[bu].slice(q.s,q.e+1).reduce((a,b)=>a+b,0);
+        row+=`<td class="ql cqaop">${f(qAOP)}</td>`+td(NRR[bu][q.e]-NRR[bu][q.s-1],'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+      }
+    }
+    row+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+    body+=row;
+  });
+  let tr=`<tr class="tot"><td class="bu">Total</td>`+td(T[0],'cpast');
+  let fyAOP=T[0];
+  for(let i=1;i<=12;i++){
+    const aop=T[i],aopG=aop-T[i-1]; fyAOP+=aop;
+    tr+=td(aop,'caop')+td(aopG,'caopg')+te('cact')+te('cactg')+te('cvarv')+te('cvarg');
+    if(QA[i]){
+      const q=QS.find(q=>q.l===QA[i]);
+      tr+=`<td class="ql cqaop">${f(T.slice(q.s,q.e+1).reduce((a,b)=>a+b,0))}</td>`+td(T[q.e]-T[q.s-1],'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+    }
+  }
+  tr+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+  body+=tr+'</tbody>';
+  document.getElementById('w-nrr').innerHTML=`<table><thead>${r1}${r2}</thead>${body}</table>`;
+}
+
+/* ─── BUILD OVERALL TAB ─────────────────────────────────── */
+function buildOverall(){
+  const mT=tots(MRR), nT=tots(NRR);
+  let r1=`<tr><th class="th-bu" rowspan="2">BU</th>`;
+  let r2=`<tr>`;
+  r1+=`<th class="th-mar" rowspan="2">Mar-2026<br><small style="font-weight:400;opacity:.8;font-size:9px">Actual Revenue</small></th>`;
+  for(let i=1;i<=12;i++){
+    r1+=`<th class="th-mon" colspan="6">${ML[i]}</th>`;
+    r2+=subHdrs('s-aop','s-aopg','s-act','s-actg','s-varv','s-varg','Revenue');
+    if(QA[i]){r1+=`<th class="th-q" colspan="6">${QA[i]}</th>`;r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','Revenue');}
+  }
+  r1+=`<th class="th-fy" colspan="6">FY27</th></tr>`;
+  r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','Revenue')+`</tr>`;
+  let body='<tbody>';
+  BUS.forEach((bu,bi)=>{
+    const alt=bi%2===1?' alt':'';
+    const m0=MRR[bu][0]+NRR[bu][0];
+    let row=`<tr class="${alt}"><td class="bu">${bu}</td><td class="cpast">${f(m0)}</td>`;
+    let fyAOP=m0;
+    for(let i=1;i<=12;i++){
+      const aop=MRR[bu][i]+NRR[bu][i], aopG=aop-(MRR[bu][i-1]+NRR[bu][i-1]); fyAOP+=aop;
+      row+=td(aop,'caop')+td(aopG,'caopg')+te('cact')+te('cactg')+te('cvarv')+te('cvarg');
+      if(QA[i]){
+        const q=QS.find(q=>q.l===QA[i]);
+        const qAOP=Array.from({length:q.e-q.s+1},(_,j)=>MRR[bu][q.s+j]+NRR[bu][q.s+j]).reduce((a,b)=>a+b,0);
+        row+=`<td class="ql cqaop">${f(qAOP)}</td>`+td((MRR[bu][q.e]+NRR[bu][q.e])-(MRR[bu][q.s-1]+NRR[bu][q.s-1]),'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+      }
+    }
+    row+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+    body+=row;
+  });
+  const revT=ML.map((_,i)=>mT[i]+nT[i]);
+  let tr=`<tr class="tot"><td class="bu">Total</td><td class="cpast">${f(revT[0])}</td>`;
+  let fyAOP=revT[0];
+  for(let i=1;i<=12;i++){
+    const aop=revT[i],aopG=aop-revT[i-1]; fyAOP+=aop;
+    tr+=td(aop,'caop')+td(aopG,'caopg')+te('cact')+te('cactg')+te('cvarv')+te('cvarg');
+    if(QA[i]){
+      const q=QS.find(q=>q.l===QA[i]);
+      tr+=`<td class="ql cqaop">${f(revT.slice(q.s,q.e+1).reduce((a,b)=>a+b,0))}</td>`+td(revT[q.e]-revT[q.s-1],'cqaopg')+te('cqact')+te('cqactg')+te('cqvarv')+te('cqvarg');
+    }
+  }
+  tr+=`<td class="fl cfyaop">${f(fyAOP)}</td>`+te('cfyaopg')+te('cfyact')+te('cfyactg')+te('cfyvarv')+te('cfyvarg')+'</tr>';
+  body+=tr+'</tbody>';
+  document.getElementById('w-overall').innerHTML=`<table><thead>${r1}${r2}</thead>${body}</table>`;
+}
+
+function buildAll(){buildMRR();buildNRR();buildOverall();}
+loadData();
+</script>
+</body>
+</html>
