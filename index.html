@@ -122,8 +122,8 @@ tbody tr:hover td.bu{background:#e4eaf8!important}
 tbody tr:hover td.cpast{background:#e8e8e8!important}
 .crm-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);background:#e6f1fb;color:#0c447c;padding:2px 8px;border-radius:10px;border:1px solid #b5d4f4;margin-left:8px}
 .crm-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11}
-td.cact.clickable{cursor:pointer}
-td.cact.clickable:hover{background:#dbeafe!important;color:#1e40af!important;text-decoration:underline}
+td.cactg.clickable{cursor:pointer}
+td.cactg.clickable:hover{background:#dbeafe!important;color:#1e40af!important;text-decoration:underline}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem}
 .modal-overlay.hidden{display:none}
 .modal{background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(960px,calc(100vw - 2rem));max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden}
@@ -327,16 +327,16 @@ function getActualMRR(bu, mi) {
 function actMRRCell(bu, mi, cls) {
   const v = getActualMRR(bu, mi);
   if (v === null) return te(cls);
+  return `<td class="${cls}${v<0?' neg':''}">${f(v)}</td>`;
+}
+function actGrowthCell(bu, mi, cls) {
+  const v = getGrowth(bu, mi);
+  if (v === null) return te(cls);
   const { y, m } = MONTH_MAP[mi];
   const monthStr = `${y}-${String(m).padStart(2,'0')}`;
   const idx = _drillCellIdx++;
   _drillCells[idx] = [bu, monthStr, ML[mi]];
   return `<td class="${cls}${v<0?' neg':''} clickable" onclick="openDrillByIdx(${idx})" title="Click to view deals">${f(v)}</td>`;
-}
-function actGrowthCell(bu, mi, cls) {
-  const v = getGrowth(bu, mi);
-  if (v === null) return te(cls);
-  return `<td class="${cls}${v<0?' neg':''}" title="Commit Growth from Zoho CRM">${f(v)}</td>`;
 }
 function mrrVarCell(bu, mi, aopMRR, cls) {
   const a = getActualMRR(bu, mi);
