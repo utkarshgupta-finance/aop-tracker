@@ -147,7 +147,6 @@ Deno.serve(async (req) => {
         const stage = rec['Deal.Stage'] ?? rec.Deal?.Stage ?? '';
         const mrr   = rec['Deal.Probability_Adjusted_MRR'] ?? rec.Deal?.Probability_Adjusted_MRR ?? 0;
         if (EXCLUDED_STAGES.has(stage)) continue;
-        if (mrr <= 0) continue;
         const buName = zohoIdToBuName[rec.Business_Unit?.id];
         if (buName && buNames.has(buName)) {
           buTotals[buName] += mrr;
