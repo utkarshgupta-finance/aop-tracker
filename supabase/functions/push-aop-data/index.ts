@@ -14,9 +14,6 @@ const MONTH_DATES = [
   '2026-11-01', '2026-12-01', '2027-01-01', '2027-02-01', '2027-03-01',
 ];
 
-type BuMap     = Record<string, number>;
-type MetricMap = Record<string, number>;
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -51,55 +48,47 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   );
 
-  // Load master lookup tables in parallel
-  const [{ data: buRows }, { data: fyRow }, { data: metricRows }] = await Promise.all([
+  // Load BU and FY lookups in parallel
+  const [{ data: buRows }, { data: fyRow }] = await Promise.all([
     supabase.from('bu_master').select('id, name').eq('is_active', true),
     supabase.from('fy_master').select('id').eq('is_current', true).single(),
-    supabase.from('metric_master').select('id, code'),
   ]);
 
-  if (!buRows || !fyRow || !metricRows) {
+  if (!buRows || !fyRow) {
     return new Response(JSON.stringify({ error: 'Failed to load master data' }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
-  const buMap: BuMap     = Object.fromEntries(buRows.map((b) => [b.name, b.id]));
-  const metricMap: MetricMap = Object.fromEntries(metricRows.map((m) => [m.code, m.id]));
-  const fyId        = fyRow.id;
-  const mrrMetricId = metricMap['EXIT_MRR'];
-  const nrrMetricId = metricMap['NRR'];
-  const pushedAt    = new Date().toISOString();
+  const buMap: Record<string, number> = Object.fromEntries(buRows.map((b) => [b.name, b.id]));
+  const fyId     = fyRow.id;
+  const pushedAt = new Date().toISOString();
 
-  // Build normalized rows for upsert
+  // Build one row per BU × month with mrr_aop + nrr_aop side by side
   const targetRows: Array<{
-    bu_id: number; fy_id: number; metric_id: number;
-    month_date: string; target_value: number; pushed_at: string;
+    bu_id: number; fy_id: number; month_date: string;
+    mrr_aop: number; nrr_aop: number; pushed_at: string;
   }> = [];
 
-  for (const [buName, values] of Object.entries(body.mrr_data)) {
+  for (const buName of Object.keys(body.mrr_data)) {
     const buId = buMap[buName];
     if (!buId) continue;
-    values.forEach((val, i) => {
+    const mrrVals = body.mrr_data[buName];
+    const nrrVals = body.nrr_data[buName] ?? [];
+    mrrVals.forEach((mrr, i) => {
       if (MONTH_DATES[i]) {
-        targetRows.push({ bu_id: buId, fy_id: fyId, metric_id: mrrMetricId, month_date: MONTH_DATES[i], target_value: val, pushed_at: pushedAt });
-      }
-    });
-  }
-
-  for (const [buName, values] of Object.entries(body.nrr_data)) {
-    const buId = buMap[buName];
-    if (!buId) continue;
-    values.forEach((val, i) => {
-      if (MONTH_DATES[i]) {
-        targetRows.push({ bu_id: buId, fy_id: fyId, metric_id: nrrMetricId, month_date: MONTH_DATES[i], target_value: val, pushed_at: pushedAt });
+        targetRows.push({
+          bu_id: buId, fy_id: fyId, month_date: MONTH_DATES[i],
+          mrr_aop: mrr, nrr_aop: nrrVals[i] ?? 0,
+          pushed_at: pushedAt,
+        });
       }
     });
   }
 
   // Write normalized rows + snapshot in parallel
   const [targetsResult, snapshotResult] = await Promise.all([
-    supabase.from('aop_targets').upsert(targetRows, { onConflict: 'bu_id,fy_id,metric_id,month_date' }),
+    supabase.from('aop_targets').upsert(targetRows, { onConflict: 'bu_id,fy_id,month_date' }),
     supabase.from('aop_snapshots').insert({ mrr_data: body.mrr_data, nrr_data: body.nrr_data }),
   ]);
 
