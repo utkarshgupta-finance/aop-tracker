@@ -23,7 +23,7 @@ const FY_MONTHS = [
   { y: 2027, m: 1 },  { y: 2027, m: 2 },  { y: 2027, m: 3 },
 ];
 
-async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(): Promise<{ token: string } | { error: string }> {
   const resp = await fetch('https://accounts.zoho.in/oauth/v2/token', {
     method: 'POST',
     body: new URLSearchParams({
@@ -34,7 +34,8 @@ async function getAccessToken(): Promise<string | null> {
     }),
   });
   const json = await resp.json();
-  return json.access_token ?? null;
+  if (json.access_token) return { token: json.access_token };
+  return { error: json.error ?? JSON.stringify(json) };
 }
 
 Deno.serve(async (req) => {
@@ -46,14 +47,14 @@ Deno.serve(async (req) => {
   );
 
   // Get Zoho access token
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    return new Response(JSON.stringify({ error: 'Failed to get Zoho access token' }), {
+  const tokenResult = await getAccessToken();
+  if ('error' in tokenResult) {
+    return new Response(JSON.stringify({ error: 'Zoho token failed: ' + tokenResult.error }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
-  const H = { 'Authorization': 'Zoho-oauthtoken ' + accessToken };
+  const H = { 'Authorization': 'Zoho-oauthtoken ' + tokenResult.token };
 
   // Load BU and FY masters
   const [{ data: buRows }, { data: fyRow }] = await Promise.all([
