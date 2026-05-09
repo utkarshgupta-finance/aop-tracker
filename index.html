@@ -847,16 +847,16 @@ function buildAOPPlan() {
 async function initAOPPlan() {
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/aop_line_items?select=amount_cr,month_date,bu_master(name),deal_type_master(name),revenue_type_master(code)&fy_id=eq.1&order=month_date.asc&limit=2000`,
+      `${SUPABASE_URL}/rest/v1/aop_plan_view?select=amount_cr,month_date,bu_name,deal_type_name,revenue_type_code&fy_id=eq.1&order=month_date.asc`,
       { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY } }
     );
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const rows = await r.json();
 
     AOP_PLAN_ROWS = rows.map(row => ({
-      bu:     row.bu_master?.name    || 'Unknown',
-      deal:   row.deal_type_master?.name     || '',
-      rev:    row.revenue_type_master?.code  || '',
+      bu:     row.bu_name             || 'Unknown',
+      deal:   row.deal_type_name      || '',
+      rev:    row.revenue_type_code   || '',
       month:  (row.month_date || '').slice(0, 7),
       amount: parseFloat(row.amount_cr) || 0,
     }));
