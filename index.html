@@ -209,10 +209,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <p class="slabel">AOP Plan FY 2026–27 — Targets by BU <span class="crm-badge"><span class="crm-dot" style="background:#854f0b"></span>From AOP Sheet</span></p>
     <div class="aop-filter-bar">
       <div class="fg">
-        <div class="flabel">Deal Type</div>
-        <div class="fchips" id="fc-deal"><button class="chip active" onclick="">Loading…</button></div>
-      </div>
-      <div class="fg">
         <div class="flabel">Revenue Type</div>
         <div class="fchips" id="fc-rev"></div>
       </div>
@@ -732,7 +728,7 @@ function exportDrillCSV() {
 
 /* ─── AOP PLAN TAB ────────────────────────────────────────── */
 let AOP_PLAN_ROWS = [];
-const aopF = { deal: new Set(), rev: new Set(), bu: new Set() };
+const aopF = { rev: null, bu: null };
 let aopView = 'monthly';
 const AOP_MONTHS = ['2026-04','2026-05','2026-06','2026-07','2026-08','2026-09',
                     '2026-10','2026-11','2026-12','2027-01','2027-02','2027-03'];
@@ -745,10 +741,7 @@ function fc(v) {
 }
 
 function aopChip(group, value) {
-  const s = aopF[group];
-  if (value === 'all') { s.clear(); }
-  else if (s.has(value)) { s.delete(value); }
-  else { s.add(value); }
+  aopF[group] = value === 'all' ? null : value;
   _renderAopChipStates();
   buildAOPPlan();
 }
@@ -762,12 +755,12 @@ function aopViewChip(v) {
 }
 
 function _renderAopChipStates() {
-  ['deal','rev','bu'].forEach(group => {
+  ['rev','bu'].forEach(group => {
     const el = document.getElementById('fc-' + group);
     if (!el) return;
     el.querySelectorAll('.chip').forEach(c => {
       const v = c.dataset.val;
-      c.classList.toggle('active', v === 'all' ? aopF[group].size === 0 : aopF[group].has(v));
+      c.classList.toggle('active', v === 'all' ? aopF[group] === null : aopF[group] === v);
     });
   });
 }
@@ -793,9 +786,8 @@ function getAopPeriods() {
 function buildAOPPlan() {
   const periods  = getAopPeriods();
   const filtered = AOP_PLAN_ROWS.filter(r =>
-    (aopF.deal.size === 0 || aopF.deal.has(r.deal)) &&
-    (aopF.rev.size  === 0 || aopF.rev.has(r.rev))   &&
-    (aopF.bu.size   === 0 || aopF.bu.has(r.bu))
+    (aopF.rev === null || aopF.rev === r.rev) &&
+    (aopF.bu  === null || aopF.bu  === r.bu)
   );
 
   const buSums = {};
@@ -861,17 +853,15 @@ async function initAOPPlan() {
       amount: parseFloat(row.amount_cr) || 0,
     }));
 
-    const dealVals = [...new Set(AOP_PLAN_ROWS.map(r => r.deal))].sort();
-    const revVals  = [...new Set(AOP_PLAN_ROWS.map(r => r.rev))].sort();
-    const buVals   = [...new Set(AOP_PLAN_ROWS.map(r => r.bu))].sort();
+    const revVals = [...new Set(AOP_PLAN_ROWS.map(r => r.rev))].sort();
+    const buVals  = [...new Set(AOP_PLAN_ROWS.map(r => r.bu))].sort();
 
     const mkChips = (group, vals) =>
       `<button class="chip active" data-val="all" onclick="aopChip('${group}','all')">All</button>` +
       vals.map(v => `<button class="chip" data-val="${v}" onclick="aopChip('${group}','${v.replace(/'/g,"\\'")}')">${v}</button>`).join('');
 
-    document.getElementById('fc-deal').innerHTML = mkChips('deal', dealVals);
-    document.getElementById('fc-rev').innerHTML  = mkChips('rev',  revVals);
-    document.getElementById('fc-bu').innerHTML   = mkChips('bu',   buVals);
+    document.getElementById('fc-rev').innerHTML = mkChips('rev', revVals);
+    document.getElementById('fc-bu').innerHTML  = mkChips('bu',  buVals);
 
     const views = [
       { v:'monthly',    l:'Monthly'     },
