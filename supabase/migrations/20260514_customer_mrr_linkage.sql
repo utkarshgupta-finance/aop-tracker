@@ -72,3 +72,7 @@ SET zoho_name = 'Health Care Medicines (Surinder Pal)'
 WHERE zoho_name = 'Health Care Medicines (Surinder  Pal)';
 
 -- Final state: 1052/1052 mrr_lines linked, 1449 total linkages, 0 unlinked
+
+-- Removed 27 orphan customer_master rows (null regrouped/install/domain with duplicate zoho_name)
+-- Re-inserted 7 dot-name rows that were accidentally fully deleted
+-- Final state: 1052/1052 linked, 1427 total linkages, 0 unlinked, 1452 customer_master rows
