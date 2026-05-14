@@ -1297,6 +1297,8 @@ async function nretLoad() {
     }
     const allRows = (await Promise.all(fetches)).flat();
     const matrix = {};
+    // seed every go-live month so rows without MRR still appear
+    for (const l of lines) matrix[l.go_live_date.slice(0,7)] = matrix[l.go_live_date.slice(0,7)] || {};
     const mrrMonthSet = new Set();
     for (const row of allRows) {
       const gl = lineGoLive[row.mrr_line_id];
