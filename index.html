@@ -1284,17 +1284,26 @@ async function nretLoad() {
   const lineIds = lines.map(l => l.id);
   const lineGoLive = {};
   for (const l of lines) lineGoLive[l.id] = l.go_live_date.slice(0,7);
+  async function fetchAllPages(ids) {
+    const PAGE = 1000, base =
+      `${SUPABASE_URL}/rest/v1/customer_mrr?select=mrr_line_id,month_date,mrr_amount` +
+      `&mrr_line_id=in.(${ids.join(',')})&order=mrr_line_id`;
+    let offset = 0, all = [];
+    while (true) {
+      const r = await fetch(`${base}&offset=${offset}&limit=${PAGE}`, { headers: cmrrHdr() });
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const page = await r.json();
+      all = all.concat(page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
   try {
     const BATCH = 300;
     const fetches = [];
-    for (let i = 0; i < lineIds.length; i += BATCH) {
-      const ids = lineIds.slice(i, i+BATCH);
-      fetches.push(fetch(
-        `${SUPABASE_URL}/rest/v1/customer_mrr?select=mrr_line_id,month_date,mrr_amount` +
-        `&mrr_line_id=in.(${ids.join(',')})&limit=50000`,
-        { headers: cmrrHdr() }
-      ).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status))));
-    }
+    for (let i = 0; i < lineIds.length; i += BATCH)
+      fetches.push(fetchAllPages(lineIds.slice(i, i+BATCH)));
     const allRows = (await Promise.all(fetches)).flat();
     const matrix = {};
     // seed every go-live month so rows without MRR still appear
