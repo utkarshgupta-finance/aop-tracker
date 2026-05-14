@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AOP Tracker FY 2026–27</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -162,6 +163,24 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .modal-table tfoot td:first-child{text-align:left}
 .modal-loading{padding:3rem;text-align:center;color:var(--txt3);font-size:13px;font-family:var(--sans)}
 .modal-err{padding:2rem;color:#a32d2d;font-size:12px;text-align:center;font-family:var(--sans)}
+/* ── Customer MRR tab ──────────────────────────────────────── */
+.cmrr-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
+.cmrr-combo-wrap{display:flex;flex-direction:column;gap:.35rem}
+.cust-combo{position:relative;width:400px}
+.cust-input{width:100%;padding:.45rem .75rem;font-size:13px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:5px;color:var(--txt);background:#fff;outline:none;transition:border-color .15s,box-shadow .15s}
+.cust-input:focus{border-color:var(--navy3);box-shadow:0 0 0 2px rgba(42,95,158,.15)}
+.cust-input:disabled{background:var(--surf3);color:var(--txt3)}
+.cust-dd{position:absolute;top:calc(100% + 3px);left:0;right:0;background:#fff;border:1px solid var(--brd2);border-radius:5px;box-shadow:0 6px 20px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;z-index:200;display:none}
+.cust-dd.open{display:block}
+.cust-opt{padding:.38rem .75rem;font-size:12.5px;font-family:var(--sans);cursor:pointer;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cust-opt:hover,.cust-opt.hl{background:#eff6ff;color:var(--navy2)}
+.cmrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3);padding-bottom:.5rem}
+.cmrr-info{display:flex;flex-wrap:wrap;gap:.4rem .6rem;margin-bottom:1.1rem}
+.cmrr-pill{display:inline-flex;align-items:center;font-size:11.5px;font-family:var(--sans);padding:.22rem .7rem;border-radius:20px;border:1px solid var(--brd2);background:#fff;color:var(--txt2);white-space:nowrap}
+.cmrr-pill b{color:var(--txt);font-weight:500;margin-right:.3rem}
+.cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
+.cmrr-chart-lbl{font-size:10px;font-family:var(--mono);font-weight:500;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
+.cmrr-chart-inner{height:220px;position:relative}
 </style>
 </head>
 <body>
@@ -189,6 +208,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="tbtn" onclick="showTab('nrr',this)">NRR</button>
   <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
   <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
+  <button class="tbtn" onclick="showCustMRRTab(this)">Customer MRR</button>
   <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span><span id="sync-lbl">Sync CRM</span></button>
   <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
 </nav>
@@ -223,6 +243,32 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div class="aop-unit">Values in INR Crores</div>
     <div class="twrap" id="w-aop-plan"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
+    </div>
+  <div id="cust-mrr" class="pane">
+    <div class="cmrr-bar">
+      <div class="cmrr-combo-wrap">
+        <div class="flabel">Customer</div>
+        <div class="cust-combo">
+          <input type="text" id="cust-input" class="cust-input" disabled
+                 placeholder="Loading…" autocomplete="off"
+                 oninput="cmrrFilter(this.value)"
+                 onfocus="cmrrOpen()"
+                 onblur="cmrrClose()"
+                 onkeydown="cmrrKey(event)">
+          <div id="cust-dd" class="cust-dd"></div>
+        </div>
+      </div>
+      <div class="cmrr-status" id="cmrr-status"></div>
+    </div>
+    <div id="cust-detail" class="hidden">
+      <div class="cmrr-info" id="cmrr-info"></div>
+      <div class="cmrr-chart-box">
+        <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Mar 2025</div>
+        <div class="cmrr-chart-inner"><canvas id="cust-chart"></canvas></div>
+      </div>
+      <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
+      <div class="twrap" id="cmrr-table-wrap"></div>
+    </div>
   </div>
 </main>
 <div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
@@ -877,6 +923,276 @@ async function initAOPPlan() {
   } catch(e) {
     document.getElementById('w-aop-plan').innerHTML =
       `<div style="padding:2rem;text-align:center;color:#a32d2d">Failed to load AOP Plan: ${e.message}</div>`;
+  }
+}
+
+/* ─── CUSTOMER MRR TAB ──────────────────────────────────────
+   Tables: customer_mrr_lines (1052 rows) joined with
+   segment_master + bu_master; customer_mrr (29,176 rows)
+   aggregated by month for the selected customer.
+──────────────────────────────────────────────────────────── */
+let CUST_LINES   = [];   // all mrr_line rows with metadata
+let CUST_NAMES   = [];   // sorted distinct zoho_names
+let cmrrDdItems  = [];   // names currently visible in dropdown
+let cmrrDdIdx    = -1;   // keyboard-highlighted index
+let custChartObj = null; // Chart.js instance
+let _custInited  = false;
+
+function cmrrHdr() {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY };
+}
+
+async function initCustMRR() {
+  const fetchPage = async (offset) => {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
+      `?select=id,zoho_name,go_live_date,churn_date,segment_master(name),bu_master(name)` +
+      `&order=zoho_name.asc,id.asc&limit=1000&offset=${offset}`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  };
+  const [p1, p2] = await Promise.all([fetchPage(0), fetchPage(1000)]);
+  CUST_LINES = [...p1, ...p2];
+  const seen = new Set();
+  for (const row of CUST_LINES) {
+    if (row.zoho_name && !seen.has(row.zoho_name)) {
+      seen.add(row.zoho_name);
+      CUST_NAMES.push(row.zoho_name);
+    }
+  }
+  const inp = document.getElementById('cust-input');
+  inp.disabled = false;
+  inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
+  document.getElementById('cmrr-status').textContent = '';
+}
+
+function cmrrFilter(q) {
+  const dd = document.getElementById('cust-dd');
+  cmrrDdIdx = -1;
+  if (!q) { dd.classList.remove('open'); cmrrDdItems = []; return; }
+  const ql = q.toLowerCase();
+  cmrrDdItems = CUST_NAMES.filter(n => n.toLowerCase().includes(ql)).slice(0, 60);
+  if (!cmrrDdItems.length) { dd.classList.remove('open'); return; }
+  dd.innerHTML = cmrrDdItems.map((n, i) =>
+    `<div class="cust-opt" data-i="${i}" onmousedown="cmrrPick(${i})">${n}</div>`
+  ).join('');
+  dd.classList.add('open');
+}
+
+function cmrrOpen() { const q=document.getElementById('cust-input').value; if(q) cmrrFilter(q); }
+function cmrrClose() { setTimeout(()=>{ document.getElementById('cust-dd').classList.remove('open'); cmrrDdItems=[]; cmrrDdIdx=-1; },150); }
+
+function cmrrKey(e) {
+  const dd = document.getElementById('cust-dd');
+  const opts = dd.querySelectorAll('.cust-opt');
+  if (!opts.length && e.key !== 'Escape') return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmrrDdIdx = Math.min(cmrrDdIdx+1, opts.length-1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cmrrDdIdx = Math.max(cmrrDdIdx-1, 0); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (cmrrDdIdx >= 0) cmrrPick(cmrrDdIdx); return; }
+  else if (e.key === 'Escape') { dd.classList.remove('open'); return; }
+  opts.forEach((o,i) => o.classList.toggle('hl', i===cmrrDdIdx));
+}
+
+function cmrrPick(idx) {
+  const name = cmrrDdItems[idx];
+  if (!name) return;
+  document.getElementById('cust-input').value = name;
+  document.getElementById('cust-dd').classList.remove('open');
+  cmrrDdItems = []; cmrrDdIdx = -1;
+  loadCustMRR(name);
+}
+
+async function loadCustMRR(zohoName) {
+  const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
+  if (!lines.length) return;
+
+  // Info strip
+  const segs    = [...new Set(lines.map(l => l.segment_master?.name).filter(Boolean))];
+  const bus     = [...new Set(lines.map(l => l.bu_master?.name).filter(Boolean))];
+  const goLive  = lines.map(l => l.go_live_date).filter(Boolean).sort()[0];
+  const allChurned = lines.every(l => l.churn_date);
+  const latestChurn = allChurned ? lines.map(l=>l.churn_date).sort().pop() : null;
+
+  let html = '';
+  if (segs.length) html += `<span class="cmrr-pill"><b>Segment</b>${segs.join(', ')}</span>`;
+  if (bus.length)  html += `<span class="cmrr-pill"><b>BU</b>${bus.join(', ')}</span>`;
+  if (goLive)      html += `<span class="cmrr-pill"><b>Go Live</b>${cmrrFmtDate(goLive)}</span>`;
+  if (latestChurn) html += `<span class="cmrr-pill"><b>Churned</b>${cmrrFmtDate(latestChurn)}</span>`;
+  if (lines.length > 1) html += `<span class="cmrr-pill"><b>Lines</b>${lines.length}</span>`;
+  const stStyle = allChurned
+    ? 'background:#fee2e2;color:#991b1b;border-color:#fca5a5'
+    : 'background:#dcfce7;color:#166534;border-color:#86efac';
+  html += `<span class="cmrr-pill" style="${stStyle}"><b>${allChurned ? 'Churned' : 'Active'}</b></span>`;
+  document.getElementById('cmrr-info').innerHTML = html;
+  document.getElementById('cmrr-status').textContent = 'Loading MRR…';
+  document.getElementById('cust-detail').classList.remove('hidden');
+
+  const lineIds = lines.map(l => l.id);
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_mrr` +
+      `?select=month_date,mrr_amount&mrr_line_id=in.(${lineIds.join(',')})` +
+      `&order=month_date.asc&limit=5000`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+
+    const byMonth = {};
+    for (const row of rows) {
+      const m = row.month_date.slice(0, 7);
+      byMonth[m] = (byMonth[m] || 0) + parseFloat(row.mrr_amount);
+    }
+
+    cmrrRenderChart(byMonth);
+    cmrrRenderTable(byMonth);
+    const pts = rows.length;
+    document.getElementById('cmrr-status').textContent =
+      `${pts} month${pts!==1?'s':''} of data · ${lines.length} line${lines.length!==1?'s':''}`;
+  } catch(e) {
+    document.getElementById('cmrr-status').textContent = 'Error: ' + e.message;
+  }
+}
+
+function cmrrFmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00Z');
+  return dt.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+function cmrrFillMonths(byMonth) {
+  const keys = Object.keys(byMonth).sort();
+  if (!keys.length) return byMonth;
+  const out = {};
+  let [y, mo] = keys[0].split('-').map(Number);
+  const [ey, em] = keys[keys.length-1].split('-').map(Number);
+  while (y < ey || (y === ey && mo <= em)) {
+    const key = `${y}-${String(mo).padStart(2,'0')}`;
+    out[key] = byMonth[key] || 0;
+    mo++; if (mo > 12) { mo = 1; y++; }
+  }
+  return out;
+}
+
+function cmrrRenderChart(byMonth) {
+  const filled = cmrrFillMonths(byMonth);
+  const months = Object.keys(filled).sort();
+  if (!months.length) return;
+
+  const labels = months.map(m => {
+    const [y, mo] = m.split('-');
+    return new Date(+y, +mo-1, 1).toLocaleDateString('en-IN', { month:'short', year:'2-digit' });
+  });
+  const values = months.map(m => +(filled[m] / 1e5).toFixed(2));
+
+  if (custChartObj) { custChartObj.destroy(); custChartObj = null; }
+  const ctx = document.getElementById('cust-chart').getContext('2d');
+  custChartObj = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'MRR',
+        data: values,
+        backgroundColor: 'rgba(26,58,92,0.75)',
+        borderColor: '#0f2340',
+        borderWidth: 0,
+        borderRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '₹ ' + f(Math.round(ctx.parsed.y * 1e5))
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            font: { family: "'IBM Plex Mono',monospace", size: 9 },
+            maxRotation: 45,
+            autoSkip: true,
+            maxTicksLimit: 20
+          },
+          grid: { display: false }
+        },
+        y: {
+          ticks: {
+            font: { family: "'IBM Plex Mono',monospace", size: 9 },
+            callback: v => v + 'L'
+          },
+          grid: { color: '#f0f0f0' },
+          title: { display: true, text: '₹ Lakhs', font: { family: "'IBM Plex Mono',monospace", size: 9 }, color: '#8896a8' }
+        }
+      }
+    }
+  });
+}
+
+function cmrrRenderTable(byMonth) {
+  const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
+  const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+
+  function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
+
+  const keys = Object.keys(byMonth).sort();
+  if (!keys.length) { document.getElementById('cmrr-table-wrap').innerHTML=''; return; }
+  const minFY = getFY(keys[0]);
+  const maxFY = getFY(keys[keys.length-1]);
+
+  let thead = `<tr><th class="th-bu" style="min-width:68px">FY</th>`;
+  for (const lbl of M_LBL) thead += `<th class="th-mon" style="min-width:68px">${lbl}</th>`;
+  thead += `<th class="th-fy">Total</th></tr>`;
+
+  const colTots = M_MM.map(() => 0);
+  let grandTotal = 0, body = '<tbody>';
+
+  for (let fy = minFY; fy <= maxFY; fy++) {
+    let fyTotal = 0;
+    let row = `<tr><td class="bu">FY${fy}</td>`;
+    for (let mi = 0; mi < 12; mi++) {
+      const year = mi <= 8 ? fy - 1 : fy; // Apr–Dec use prior calendar year
+      const key = `${year}-${M_MM[mi]}`;
+      const val = byMonth[key];
+      if (val !== undefined && val !== 0) {
+        fyTotal += val; grandTotal += val; colTots[mi] += val;
+        row += `<td class="caop">${f(val)}</td>`;
+      } else if (val === 0) {
+        row += `<td class="caop" style="color:#bbb">0</td>`;
+      } else {
+        row += `<td class="caop" style="color:#ddd">—</td>`;
+      }
+    }
+    row += `<td class="fl cfyaop">${f(fyTotal)}</td></tr>`;
+    body += row;
+  }
+
+  let tr = `<tr class="tot"><td class="bu">Total</td>`;
+  for (let mi = 0; mi < 12; mi++)
+    tr += colTots[mi] ? `<td class="caop">${f(colTots[mi])}</td>` : `<td class="caop"></td>`;
+  tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
+  body += tr + '</tbody>';
+
+  document.getElementById('cmrr-table-wrap').innerHTML =
+    `<table><thead>${thead}</thead>${body}</table>`;
+}
+
+function showCustMRRTab(btn) {
+  showTab('cust-mrr', btn);
+  if (!_custInited) {
+    _custInited = true;
+    document.getElementById('cmrr-status').textContent = 'Loading customer list…';
+    initCustMRR().catch(e => {
+      document.getElementById('cust-input').placeholder = 'Error loading customers';
+      document.getElementById('cmrr-status').textContent = e.message;
+    });
   }
 }
 
