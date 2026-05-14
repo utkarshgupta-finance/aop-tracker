@@ -195,6 +195,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .nret-rowtot{text-align:right;padding:.38rem .65rem;white-space:nowrap;font-size:10.5px;font-weight:500;background:#f4f6f9;border-left:1px solid #dde2ea}
 .nret-coltot{text-align:right;padding:.42rem .5rem;white-space:nowrap;font-size:10.5px}
 .nret-grandtot{text-align:right;padding:.42rem .65rem;white-space:nowrap;font-size:10.5px;font-weight:700;background:#d8d8d8;border-left:1px solid #aaa}
+.nret-togwrap{display:flex;gap:.4rem;align-items:center}
+.nret-tog{padding:.28rem .7rem;font-size:11px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--txt2);transition:background .15s}
+.nret-tog:hover{background:#f0f4f9}
+.nret-tog.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.nret-tog2{padding:.28rem .7rem;font-size:11px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--txt2);transition:background .15s}
+.nret-tog2:hover{background:#f0f4f9}
+.nret-tog2.active{background:var(--navy3);color:#fff;border-color:var(--navy3)}
+.nret-divsep{color:#ccc;font-size:14px;padding:0 .2rem;align-self:center}
 </style>
 </head>
 <body>
@@ -298,6 +306,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <select id="nret-bu" class="nret-sel" onchange="nretApply()">
           <option value="">All BUs</option>
         </select>
+      </div>
+      <div class="nret-togwrap">
+        <button id="nret-tog-l" class="nret-tog active" onclick="nretSetView('L')">₹ Lakhs</button>
+        <button id="nret-tog-pct" class="nret-tog" onclick="nretSetView('%')">%</button>
+      </div>
+      <div class="nret-divsep">|</div>
+      <div class="nret-togwrap">
+        <button id="nret-tog-cohort" class="nret-tog2 active" onclick="nretSetTable('cohort')">Cohort</button>
+        <button id="nret-tog-rolling" class="nret-tog2" onclick="nretSetTable('rolling')">Rolling 12M NRR</button>
       </div>
       <div class="nret-status" id="nret-status"></div>
     </div>
@@ -1232,30 +1249,66 @@ function showCustMRRTab(btn) {
 }
 
 /* ─── NET RETENTION TAB ───────────────────────────────────── */
-let _nretInited = false;
+let _nretInited  = false;
 let _nretLoading = false;
+let _nretViewMode  = 'L';      // 'L' = Lakhs, '%' = % of go-live month
+let _nretTableMode = 'cohort'; // 'cohort' | 'rolling'
+let _nretMatrix    = null;
+let _nretMrrMonths = null;
+let _nretAllLines  = [];       // [{id, go_live_date, segment_master:{name}, bu_master:{name}}]
 
 async function showNretTab(btn) {
   showTab('nret', btn);
-  if (!_nretInited) {
-    _nretInited = true;
-    await nretInit();
-  }
+  if (!_nretInited) { _nretInited = true; await nretInit(); }
+}
+
+function nretSetView(mode) {
+  _nretViewMode = mode;
+  document.getElementById('nret-tog-l').classList.toggle('active', mode === 'L');
+  document.getElementById('nret-tog-pct').classList.toggle('active', mode === '%');
+  if (_nretMatrix) nretDispatch();
+}
+
+function nretSetTable(mode) {
+  _nretTableMode = mode;
+  document.getElementById('nret-tog-cohort').classList.toggle('active', mode === 'cohort');
+  document.getElementById('nret-tog-rolling').classList.toggle('active', mode === 'rolling');
+  if (_nretMatrix) nretDispatch();
+}
+
+function nretDispatch() {
+  if (_nretTableMode === 'rolling') nretRenderRolling(_nretMatrix, _nretMrrMonths);
+  else nretRenderTable(_nretMatrix, _nretMrrMonths);
 }
 
 async function nretInit() {
   const status = document.getElementById('nret-status');
-  if (!CUST_LINES.length) {
-    status.textContent = 'Loading customer data…';
-    _custInited = true;
-    try { await initCustMRR(); } catch(e) { status.textContent='Error: '+e.message; return; }
-  }
-  const segs = [...new Set(CUST_LINES.map(l => l.segment_master?.name).filter(Boolean))].sort();
-  const bus  = [...new Set(CUST_LINES.map(l => l.bu_master?.name).filter(Boolean))].sort();
+  status.textContent = 'Loading lines…';
+  const PAGE = 1000;
+  let offset = 0;
+  _nretAllLines = [];
+  try {
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
+        `?select=id,go_live_date,segment_master!left(name),bu_master!left(name)` +
+        `&go_live_date=not.is.null&order=id&limit=${PAGE}&offset=${offset}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const page = await r.json();
+      _nretAllLines = _nretAllLines.concat(page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+  } catch(e) { status.textContent = 'Error: '+e.message; return; }
+
+  const segs = [...new Set(_nretAllLines.map(l => l.segment_master?.name).filter(Boolean))].sort();
+  const bus  = [...new Set(_nretAllLines.map(l => l.bu_master?.name).filter(Boolean))].sort();
   const segSel = document.getElementById('nret-seg');
-  segs.forEach(s => { const o=document.createElement('option'); o.value=o.textContent=s; segSel.appendChild(o); });
+  segs.forEach(s => { const o = document.createElement('option'); o.value = o.textContent = s; segSel.appendChild(o); });
   const buSel = document.getElementById('nret-bu');
-  bus.forEach(b => { const o=document.createElement('option'); o.value=o.textContent=b; buSel.appendChild(o); });
+  bus.forEach(b => { const o = document.createElement('option'); o.value = o.textContent = b; buSel.appendChild(o); });
   status.textContent = '';
   await nretLoad();
 }
@@ -1269,25 +1322,28 @@ async function nretLoad() {
   const buFilter  = document.getElementById('nret-bu').value;
   const wrap   = document.getElementById('nret-wrap');
   const status = document.getElementById('nret-status');
-  const lines = CUST_LINES.filter(l =>
+
+  const lines = _nretAllLines.filter(l =>
     (!segFilter || l.segment_master?.name === segFilter) &&
-    (!buFilter  || l.bu_master?.name  === buFilter) &&
-    l.go_live_date
+    (!buFilter  || l.bu_master?.name      === buFilter)
   );
   if (!lines.length) {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data for selected filters.</div>';
     status.textContent = '0 lines';
     _nretLoading = false; return;
   }
+
   status.textContent = `Loading ${lines.length} lines…`;
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading MRR data…</div>';
-  const lineIds = lines.map(l => l.id);
+
+  const lineIds   = lines.map(l => l.id);
   const lineGoLive = {};
-  for (const l of lines) lineGoLive[l.id] = l.go_live_date.slice(0,7);
-  async function fetchAllPages(ids) {
-    const PAGE = 1000, base =
-      `${SUPABASE_URL}/rest/v1/customer_mrr?select=mrr_line_id,month_date,mrr_amount` +
-      `&mrr_line_id=in.(${ids.join(',')})&order=mrr_line_id`;
+  for (const l of lines) lineGoLive[l.id] = l.go_live_date.slice(0, 7);
+
+  async function fetchBatch(ids) {
+    const PAGE = 1000;
+    const base = `${SUPABASE_URL}/rest/v1/customer_mrr?select=mrr_line_id,month_date,mrr_amount` +
+      `&mrr_line_id=in.(${ids.join(',')})&order=mrr_line_id,month_date`;
     let offset = 0, all = [];
     while (true) {
       const r = await fetch(`${base}&offset=${offset}&limit=${PAGE}`, { headers: cmrrHdr() });
@@ -1299,26 +1355,31 @@ async function nretLoad() {
     }
     return all;
   }
+
   try {
-    const BATCH = 300;
-    const fetches = [];
+    const BATCH = 300, fetches = [];
     for (let i = 0; i < lineIds.length; i += BATCH)
-      fetches.push(fetchAllPages(lineIds.slice(i, i+BATCH)));
+      fetches.push(fetchBatch(lineIds.slice(i, i + BATCH)));
     const allRows = (await Promise.all(fetches)).flat();
+
     const matrix = {};
-    // seed every go-live month so rows without MRR still appear
-    for (const l of lines) matrix[l.go_live_date.slice(0,7)] = matrix[l.go_live_date.slice(0,7)] || {};
     const mrrMonthSet = new Set();
+    for (const l of lines) {
+      const gm = l.go_live_date.slice(0, 7);
+      if (!matrix[gm]) matrix[gm] = {};
+    }
     for (const row of allRows) {
       const gl = lineGoLive[row.mrr_line_id];
       if (!gl) continue;
-      const mm = row.month_date.slice(0,7);
+      const mm = row.month_date.slice(0, 7);
       mrrMonthSet.add(mm);
-      if (!matrix[gl]) matrix[gl] = {};
-      matrix[gl][mm] = (matrix[gl][mm]||0) + parseFloat(row.mrr_amount);
+      matrix[gl][mm] = (matrix[gl][mm] || 0) + parseFloat(row.mrr_amount);
     }
+
+    _nretMatrix    = matrix;
+    _nretMrrMonths = mrrMonthSet;
     status.textContent = `${allRows.length.toLocaleString()} records · ${lines.length} lines`;
-    nretRenderTable(matrix, mrrMonthSet);
+    nretDispatch();
   } catch(e) {
     status.textContent = 'Error: '+e.message;
     wrap.innerHTML = `<div style="padding:2rem;text-align:center;color:#a32d2d">${e.message}</div>`;
@@ -1327,36 +1388,52 @@ async function nretLoad() {
 }
 
 function nretFmtM(ym) {
-  const [y,m] = ym.split('-');
-  return new Date(+y,+m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'});
+  const [y, m] = ym.split('-');
+  return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
 }
 
 function nretRenderTable(matrix, mrrMonthSet) {
-  const wrap = document.getElementById('nret-wrap');
+  const wrap        = document.getElementById('nret-wrap');
   const goLiveMonths = Object.keys(matrix).sort();
   const mrrMonths    = [...mrrMonthSet].sort();
-  if (!goLiveMonths.length) {
-    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>'; return;
+  if (!goLiveMonths.length || !mrrMonths.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No MRR data.</div>'; return;
   }
-  let maxVal = 0;
-  for (const gm of goLiveMonths)
-    for (const mm of mrrMonths)
-      maxVal = Math.max(maxVal, matrix[gm]?.[mm]||0);
 
-  function heatBg(val) {
+  const isPct = _nretViewMode === '%';
+
+  // Lakhs heat-map (blue scale, sqrt-normalised)
+  let maxVal = 0;
+  if (!isPct) {
+    for (const gm of goLiveMonths)
+      for (const mm of mrrMonths)
+        maxVal = Math.max(maxVal, matrix[gm]?.[mm] || 0);
+  }
+  function heatBgL(val) {
     if (!val) return '';
-    const t = Math.sqrt(val/maxVal);
-    const a = 0.15 + t*0.75;
-    const r = Math.round(42  + (15  - 42) *t);
-    const g = Math.round(95  + (35  - 95) *t);
-    const b = Math.round(158 + (64  - 158)*t);
-    return `background:rgba(${r},${g},${b},${a.toFixed(2)});color:${t>0.55?'#fff':'#0f2340'}`;
+    const t = Math.sqrt(val / maxVal);
+    const a = 0.15 + t * 0.75;
+    return `background:rgba(${Math.round(42+(15-42)*t)},${Math.round(95+(35-95)*t)},${Math.round(158+(64-158)*t)},${a.toFixed(2)});color:${t > 0.55 ? '#fff' : '#0f2340'}`;
+  }
+
+  // % heat-map (red→green, base=go-live month MRR)
+  const rowBase = {};
+  if (isPct) {
+    for (const gm of goLiveMonths) {
+      for (const mm of mrrMonths) {
+        if (mm >= gm && matrix[gm]?.[mm]) { rowBase[gm] = matrix[gm][mm]; break; }
+      }
+    }
+  }
+  function heatBgPct(pct) {
+    const t = Math.min(1, Math.max(0, (pct - 50) / 80)); // 50%→0, 130%+→1
+    return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
   }
 
   let thead = `<tr><th class="nret-hgl">Go-Live</th>`;
   for (const mm of mrrMonths)
-    thead += `<th style="min-width:56px;text-align:right;font-size:10px;padding:.38rem .5rem">${nretFmtM(mm)}</th>`;
-  thead += `<th style="min-width:72px;text-align:right;background:#f4f6f9;padding:.38rem .65rem;font-size:10px">Total</th></tr>`;
+    thead += `<th style="min-width:54px;text-align:right;font-size:10px;padding:.38rem .4rem">${nretFmtM(mm)}</th>`;
+  thead += `<th style="min-width:64px;text-align:right;background:#f4f6f9;padding:.38rem .6rem;font-size:10px">${isPct ? 'Base' : 'Total'}</th></tr>`;
 
   const colTot = {}; let grandTotal = 0;
   let body = '<tbody>';
@@ -1367,26 +1444,101 @@ function nretRenderTable(matrix, mrrMonthSet) {
       if (mm < gm) {
         tr += `<td class="nret-empty">·</td>`;
       } else {
-        const val = matrix[gm]?.[mm]||0;
+        const val = matrix[gm]?.[mm] || 0;
         if (val) {
-          rowTot += val; colTot[mm]=(colTot[mm]||0)+val; grandTotal += val;
-          tr += `<td class="nret-cell" style="${heatBg(val)}">${(val/1e5).toFixed(1)}L</td>`;
+          rowTot += val;
+          colTot[mm] = (colTot[mm] || 0) + val;
+          grandTotal += val;
+          if (isPct) {
+            const base = rowBase[gm];
+            const pct  = base ? val / base * 100 : null;
+            tr += pct != null
+              ? `<td class="nret-cell" style="${heatBgPct(pct)}">${pct.toFixed(0)}%</td>`
+              : `<td class="nret-cell">—</td>`;
+          } else {
+            tr += `<td class="nret-cell" style="${heatBgL(val)}">${(val/1e5).toFixed(1)}L</td>`;
+          }
         } else {
           tr += `<td class="nret-empty">·</td>`;
         }
       }
     }
-    tr += `<td class="nret-rowtot">${rowTot?(rowTot/1e5).toFixed(1)+'L':''}</td></tr>`;
+    if (isPct) {
+      const base = rowBase[gm];
+      tr += `<td class="nret-rowtot">${base ? (base/1e5).toFixed(1)+'L' : ''}</td></tr>`;
+    } else {
+      tr += `<td class="nret-rowtot">${rowTot ? (rowTot/1e5).toFixed(1)+'L' : ''}</td></tr>`;
+    }
     body += tr;
   }
-  let totRow = `<tr><td class="nret-tot-gl">Total</td>`;
-  for (const mm of mrrMonths) {
-    const v = colTot[mm]||0;
-    totRow += v ? `<td class="nret-coltot">${(v/1e5).toFixed(1)}L</td>` : `<td></td>`;
+  if (!isPct) {
+    let totRow = `<tr><td class="nret-tot-gl">Total</td>`;
+    for (const mm of mrrMonths) {
+      const v = colTot[mm] || 0;
+      totRow += v ? `<td class="nret-coltot">${(v/1e5).toFixed(1)}L</td>` : `<td></td>`;
+    }
+    totRow += `<td class="nret-grandtot">${(grandTotal/1e5).toFixed(1)}L</td></tr>`;
+    body += totRow;
   }
-  totRow += `<td class="nret-grandtot">${(grandTotal/1e5).toFixed(1)}L</td></tr>`;
-  body += totRow + '</tbody>';
+  body += '</tbody>';
   wrap.innerHTML = `<table style="border-collapse:collapse;font-size:10.5px;font-family:var(--mono)"><thead>${thead}</thead>${body}</table>`;
+}
+
+function nretRenderRolling(matrix, mrrMonthSet) {
+  const wrap      = document.getElementById('nret-wrap');
+  const mrrMonths = [...mrrMonthSet].sort();
+
+  // Compute monthly MRR totals across all cohorts
+  const monthlyTotal = {};
+  for (const mm of mrrMonths) {
+    let tot = 0;
+    for (const gm of Object.keys(matrix)) tot += matrix[gm]?.[mm] || 0;
+    monthlyTotal[mm] = tot;
+  }
+
+  // 12-month rolling: current / 12-months-prior
+  const rows = [];
+  for (const mm of mrrMonths) {
+    const [y, m] = mm.split('-').map(Number);
+    const d12 = new Date(y, m - 1 - 12, 1);
+    const prior = `${d12.getFullYear()}-${String(d12.getMonth()+1).padStart(2,'0')}`;
+    if (monthlyTotal[prior]) {
+      rows.push({
+        month:   mm,
+        current: monthlyTotal[mm],
+        prior:   monthlyTotal[prior],
+        pct:     monthlyTotal[mm] / monthlyTotal[prior] * 100
+      });
+    }
+  }
+
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Need at least 12 months of data.</div>'; return;
+  }
+
+  function pctBg(pct) {
+    const t = Math.min(1, Math.max(0, (pct - 70) / 60));
+    return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
+  }
+
+  let html = `<table style="border-collapse:collapse;font-size:11.5px;font-family:var(--mono);min-width:380px">
+    <thead><tr>
+      <th style="padding:.45rem .9rem;text-align:left;background:#f0f0f0;border-bottom:2px solid #bbb;white-space:nowrap;font-family:var(--sans)">Month</th>
+      <th style="padding:.45rem .9rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;font-family:var(--sans)">MRR (₹L)</th>
+      <th style="padding:.45rem .9rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;font-family:var(--sans)">12M Prior (₹L)</th>
+      <th style="padding:.45rem .9rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;min-width:90px;font-family:var(--sans)">Net Retention</th>
+    </tr></thead><tbody>`;
+
+  for (const row of rows) {
+    html += `<tr>
+      <td style="padding:.38rem .9rem;white-space:nowrap">${nretFmtM(row.month)}</td>
+      <td style="padding:.38rem .9rem;text-align:right">${(row.current/1e5).toFixed(1)}L</td>
+      <td style="padding:.38rem .9rem;text-align:right;color:#888">${(row.prior/1e5).toFixed(1)}L</td>
+      <td style="padding:.38rem .9rem;text-align:right;${pctBg(row.pct)}">${row.pct.toFixed(1)}%</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 
 loadData();
