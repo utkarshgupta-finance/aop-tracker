@@ -36,3 +36,28 @@ LEFT JOIN customer_mrr_line_master lm
 WHERE lm.mrr_line_id IS NULL AND cml.zoho_name IS NOT NULL;
 
 -- Result: 1052/1052 mrr_lines linked, 1479 total linkages
+
+-- Restore trailing-dot names (were incorrectly stripped earlier)
+-- Names like "Pvt. Ltd.", "Inc.", "Co." are legitimate and treated as distinct customers
+UPDATE customer_mrr_lines
+SET zoho_name = zoho_name  -- restored via script from Excel source
+WHERE zoho_name LIKE '%.';  -- 73 rows restored
+
+UPDATE customer_master
+SET zoho_name = zoho_name  -- restored via script from Excel source
+WHERE zoho_name LIKE '%.';  -- 91 rows restored
+
+-- Rebuild junction for dot-name rows
+DELETE FROM customer_mrr_line_master
+WHERE mrr_line_id IN (
+  SELECT id FROM customer_mrr_lines WHERE zoho_name LIKE '%.'
+);
+
+INSERT INTO customer_mrr_line_master (mrr_line_id, customer_master_id)
+SELECT cml.id, cm.id
+FROM customer_mrr_lines cml
+JOIN customer_master cm ON LOWER(cm.zoho_name) = LOWER(cml.zoho_name)
+WHERE cml.zoho_name LIKE '%.'
+ON CONFLICT DO NOTHING;
+
+-- Final state: 1052/1052 linked, 1474 total linkages
