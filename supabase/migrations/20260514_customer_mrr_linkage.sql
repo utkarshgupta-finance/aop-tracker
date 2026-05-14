@@ -61,3 +61,14 @@ WHERE cml.zoho_name LIKE '%.'
 ON CONFLICT DO NOTHING;
 
 -- Final state: 1052/1052 linked, 1474 total linkages
+
+-- Fix: restore no-dot customer_master entries incorrectly overwritten by restore script
+-- 19 names exist in Nomenclature without dot but were changed to dot version
+-- Re-added as new rows from Nomenclature; junction entries created
+
+-- Fix: Health Care Medicines double-space typo in Customer Info → corrected to single space
+UPDATE customer_mrr_lines
+SET zoho_name = 'Health Care Medicines (Surinder Pal)'
+WHERE zoho_name = 'Health Care Medicines (Surinder  Pal)';
+
+-- Final state: 1052/1052 mrr_lines linked, 1449 total linkages, 0 unlinked
