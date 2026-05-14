@@ -181,6 +181,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
 .cmrr-chart-lbl{font-size:10px;font-family:var(--mono);font-weight:500;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
 .cmrr-chart-inner{height:220px;position:relative}
+/* ── Net Retention tab ─────────────────────────────────────── */
+.nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
+.nret-selwrap{display:flex;flex-direction:column;gap:.35rem}
+.nret-sel{padding:.4rem .75rem;font-size:12.5px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:5px;color:var(--txt);background:#fff;outline:none;cursor:pointer;min-width:170px}
+.nret-sel:focus{border-color:var(--navy3);box-shadow:0 0 0 2px rgba(42,95,158,.15)}
+.nret-status{font-size:11px;font-family:var(--mono);color:var(--txt3);padding-bottom:.5rem}
+.nret-gl{position:sticky;left:0;z-index:2;background:#f5f5f5;font-family:var(--sans);font-size:11px;font-weight:500;padding:.38rem .65rem;white-space:nowrap;border-right:2px solid #bbb;min-width:68px}
+.nret-tot-gl{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .65rem;white-space:nowrap;border-right:2px solid #aaa}
+.nret-hgl{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:68px}
+.nret-cell{text-align:right;padding:.38rem .5rem;white-space:nowrap;font-size:10.5px}
+.nret-empty{text-align:right;padding:.38rem .5rem;color:#e4e8ee}
+.nret-rowtot{text-align:right;padding:.38rem .65rem;white-space:nowrap;font-size:10.5px;font-weight:500;background:#f4f6f9;border-left:1px solid #dde2ea}
+.nret-coltot{text-align:right;padding:.42rem .5rem;white-space:nowrap;font-size:10.5px}
+.nret-grandtot{text-align:right;padding:.42rem .65rem;white-space:nowrap;font-size:10.5px;font-weight:700;background:#d8d8d8;border-left:1px solid #aaa}
 </style>
 </head>
 <body>
@@ -209,6 +223,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
   <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
   <button class="tbtn" onclick="showCustMRRTab(this)">Customer MRR</button>
+  <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
   <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span><span id="sync-lbl">Sync CRM</span></button>
   <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
 </nav>
@@ -268,6 +283,26 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
       <div class="twrap" id="cmrr-table-wrap"></div>
+    </div>
+  </div>
+  <div id="nret" class="pane">
+    <div class="nret-bar">
+      <div class="nret-selwrap">
+        <div class="flabel">Segment</div>
+        <select id="nret-seg" class="nret-sel" onchange="nretApply()">
+          <option value="">All Segments</option>
+        </select>
+      </div>
+      <div class="nret-selwrap">
+        <div class="flabel">BU</div>
+        <select id="nret-bu" class="nret-sel" onchange="nretApply()">
+          <option value="">All BUs</option>
+        </select>
+      </div>
+      <div class="nret-status" id="nret-status"></div>
+    </div>
+    <div class="twrap" id="nret-wrap">
+      <div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>
     </div>
   </div>
 </main>
@@ -1194,6 +1229,153 @@ function showCustMRRTab(btn) {
       document.getElementById('cmrr-status').textContent = e.message;
     });
   }
+}
+
+/* ─── NET RETENTION TAB ───────────────────────────────────── */
+let _nretInited = false;
+let _nretLoading = false;
+
+async function showNretTab(btn) {
+  showTab('nret', btn);
+  if (!_nretInited) {
+    _nretInited = true;
+    await nretInit();
+  }
+}
+
+async function nretInit() {
+  const status = document.getElementById('nret-status');
+  if (!CUST_LINES.length) {
+    status.textContent = 'Loading customer data…';
+    _custInited = true;
+    try { await initCustMRR(); } catch(e) { status.textContent='Error: '+e.message; return; }
+  }
+  const segs = [...new Set(CUST_LINES.map(l => l.segment_master?.name).filter(Boolean))].sort();
+  const bus  = [...new Set(CUST_LINES.map(l => l.bu_master?.name).filter(Boolean))].sort();
+  const segSel = document.getElementById('nret-seg');
+  segs.forEach(s => { const o=document.createElement('option'); o.value=o.textContent=s; segSel.appendChild(o); });
+  const buSel = document.getElementById('nret-bu');
+  bus.forEach(b => { const o=document.createElement('option'); o.value=o.textContent=b; buSel.appendChild(o); });
+  status.textContent = '';
+  await nretLoad();
+}
+
+async function nretApply() { if (!_nretLoading) await nretLoad(); }
+
+async function nretLoad() {
+  if (_nretLoading) return;
+  _nretLoading = true;
+  const segFilter = document.getElementById('nret-seg').value;
+  const buFilter  = document.getElementById('nret-bu').value;
+  const wrap   = document.getElementById('nret-wrap');
+  const status = document.getElementById('nret-status');
+  const lines = CUST_LINES.filter(l =>
+    (!segFilter || l.segment_master?.name === segFilter) &&
+    (!buFilter  || l.bu_master?.name  === buFilter) &&
+    l.go_live_date
+  );
+  if (!lines.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data for selected filters.</div>';
+    status.textContent = '0 lines';
+    _nretLoading = false; return;
+  }
+  status.textContent = `Loading ${lines.length} lines…`;
+  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading MRR data…</div>';
+  const lineIds = lines.map(l => l.id);
+  const lineGoLive = {};
+  for (const l of lines) lineGoLive[l.id] = l.go_live_date.slice(0,7);
+  try {
+    const BATCH = 300;
+    const fetches = [];
+    for (let i = 0; i < lineIds.length; i += BATCH) {
+      const ids = lineIds.slice(i, i+BATCH);
+      fetches.push(fetch(
+        `${SUPABASE_URL}/rest/v1/customer_mrr?select=mrr_line_id,month_date,mrr_amount` +
+        `&mrr_line_id=in.(${ids.join(',')})&limit=50000`,
+        { headers: cmrrHdr() }
+      ).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP '+r.status))));
+    }
+    const allRows = (await Promise.all(fetches)).flat();
+    const matrix = {};
+    const mrrMonthSet = new Set();
+    for (const row of allRows) {
+      const gl = lineGoLive[row.mrr_line_id];
+      if (!gl) continue;
+      const mm = row.month_date.slice(0,7);
+      mrrMonthSet.add(mm);
+      if (!matrix[gl]) matrix[gl] = {};
+      matrix[gl][mm] = (matrix[gl][mm]||0) + parseFloat(row.mrr_amount);
+    }
+    status.textContent = `${allRows.length.toLocaleString()} records · ${lines.length} lines`;
+    nretRenderTable(matrix, mrrMonthSet);
+  } catch(e) {
+    status.textContent = 'Error: '+e.message;
+    wrap.innerHTML = `<div style="padding:2rem;text-align:center;color:#a32d2d">${e.message}</div>`;
+  }
+  _nretLoading = false;
+}
+
+function nretFmtM(ym) {
+  const [y,m] = ym.split('-');
+  return new Date(+y,+m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'});
+}
+
+function nretRenderTable(matrix, mrrMonthSet) {
+  const wrap = document.getElementById('nret-wrap');
+  const goLiveMonths = Object.keys(matrix).sort();
+  const mrrMonths    = [...mrrMonthSet].sort();
+  if (!goLiveMonths.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>'; return;
+  }
+  let maxVal = 0;
+  for (const gm of goLiveMonths)
+    for (const mm of mrrMonths)
+      maxVal = Math.max(maxVal, matrix[gm]?.[mm]||0);
+
+  function heatBg(val) {
+    if (!val) return '';
+    const t = Math.sqrt(val/maxVal);
+    const a = 0.15 + t*0.75;
+    const r = Math.round(42  + (15  - 42) *t);
+    const g = Math.round(95  + (35  - 95) *t);
+    const b = Math.round(158 + (64  - 158)*t);
+    return `background:rgba(${r},${g},${b},${a.toFixed(2)});color:${t>0.55?'#fff':'#0f2340'}`;
+  }
+
+  let thead = `<tr><th class="nret-hgl">Go-Live</th>`;
+  for (const mm of mrrMonths)
+    thead += `<th style="min-width:56px;text-align:right;font-size:10px;padding:.38rem .5rem">${nretFmtM(mm)}</th>`;
+  thead += `<th style="min-width:72px;text-align:right;background:#f4f6f9;padding:.38rem .65rem;font-size:10px">Total</th></tr>`;
+
+  const colTot = {}; let grandTotal = 0;
+  let body = '<tbody>';
+  for (const gm of goLiveMonths) {
+    let rowTot = 0;
+    let tr = `<tr><td class="nret-gl">${nretFmtM(gm)}</td>`;
+    for (const mm of mrrMonths) {
+      if (mm < gm) {
+        tr += `<td class="nret-empty">·</td>`;
+      } else {
+        const val = matrix[gm]?.[mm]||0;
+        if (val) {
+          rowTot += val; colTot[mm]=(colTot[mm]||0)+val; grandTotal += val;
+          tr += `<td class="nret-cell" style="${heatBg(val)}">${(val/1e5).toFixed(1)}L</td>`;
+        } else {
+          tr += `<td class="nret-empty">·</td>`;
+        }
+      }
+    }
+    tr += `<td class="nret-rowtot">${rowTot?(rowTot/1e5).toFixed(1)+'L':''}</td></tr>`;
+    body += tr;
+  }
+  let totRow = `<tr><td class="nret-tot-gl">Total</td>`;
+  for (const mm of mrrMonths) {
+    const v = colTot[mm]||0;
+    totRow += v ? `<td class="nret-coltot">${(v/1e5).toFixed(1)}L</td>` : `<td></td>`;
+  }
+  totRow += `<td class="nret-grandtot">${(grandTotal/1e5).toFixed(1)}L</td></tr>`;
+  body += totRow + '</tbody>';
+  wrap.innerHTML = `<table style="border-collapse:collapse;font-size:10.5px;font-family:var(--mono)"><thead>${thead}</thead>${body}</table>`;
 }
 
 loadData();
