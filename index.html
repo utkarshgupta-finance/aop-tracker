@@ -185,6 +185,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-wf-btn{padding:.28rem .75rem;font-size:11px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--navy2);transition:background .15s}
 .cmrr-wf-btn:hover{background:#f0f4f9}
 .cmrr-wf-note{font-size:10px;font-family:var(--mono);color:var(--txt3);letter-spacing:.06em}
+.cmrr-fy-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.75rem}
 /* ── Net Retention tab ─────────────────────────────────────── */
 .nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .nret-selwrap{display:flex;flex-direction:column;gap:.35rem}
@@ -1215,29 +1216,41 @@ function cmrrRenderTable(byMonth) {
   const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 
   function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
+  function prevKey(ym) {
+    let [y,m]=ym.split('-').map(Number); m--; if(m===0){m=12;y--;}
+    return `${y}-${String(m).padStart(2,'0')}`;
+  }
+  function momCls(val, prev) {
+    if (prev==null||prev===undefined) return '';
+    return val>prev ? 'background:#dcfce7;color:#166534' : val<prev ? 'background:#fee2e2;color:#991b1b' : '';
+  }
 
   const keys = Object.keys(byMonth).sort();
   if (!keys.length) { document.getElementById('cmrr-table-wrap').innerHTML=''; return; }
-  const minFY = getFY(keys[0]);
-  const maxFY = getFY(keys[keys.length-1]);
+  const minFY = getFY(keys[0]), maxFY = getFY(keys[keys.length-1]);
+  const fys = [];
+  for (let fy = maxFY; fy >= minFY; fy--) fys.push(fy);
 
-  let thead = `<tr><th class="th-bu" style="min-width:68px">FY</th>`;
-  for (const lbl of M_LBL) thead += `<th class="th-mon" style="min-width:68px">${lbl}</th>`;
-  thead += `<th class="th-fy">Total</th></tr>`;
+  let html = `<div class="cmrr-fy-tabs">`;
+  fys.forEach((fy, i) =>
+    html += `<button class="nret-tog${i===0?' active':''}" onclick="cmrrShowFY('mrr',${fy},this)">FY${fy}</button>`
+  );
+  html += `</div>`;
 
-  const colTots = M_MM.map(() => 0);
-  let grandTotal = 0, body = '<tbody>';
+  fys.forEach((fy, i) => {
+    let thead = `<tr><th class="th-bu" style="min-width:68px">FY</th>`;
+    for (const lbl of M_LBL) thead += `<th class="th-mon" style="min-width:68px">${lbl}</th>`;
+    thead += `<th class="th-fy">Total</th></tr>`;
 
-  for (let fy = minFY; fy <= maxFY; fy++) {
-    let fyTotal = 0;
-    let row = `<tr><td class="bu">FY${fy}</td>`;
+    let fyTotal = 0, row = `<tr><td class="bu">FY${fy}</td>`;
     for (let mi = 0; mi < 12; mi++) {
-      const year = mi <= 8 ? fy - 1 : fy; // Apr–Dec use prior calendar year
-      const key = `${year}-${M_MM[mi]}`;
-      const val = byMonth[key];
-      if (val !== undefined && val !== 0) {
-        fyTotal += val; grandTotal += val; colTots[mi] += val;
-        row += `<td class="caop">${f(val)}</td>`;
+      const year = mi <= 8 ? fy-1 : fy;
+      const key  = `${year}-${M_MM[mi]}`;
+      const val  = byMonth[key];
+      const prev = byMonth[prevKey(key)];
+      if (val != null && val !== 0) {
+        fyTotal += val;
+        row += `<td class="caop" style="${momCls(val,prev)}">${f(val)}</td>`;
       } else if (val === 0) {
         row += `<td class="caop" style="color:#bbb">0</td>`;
       } else {
@@ -1245,17 +1258,19 @@ function cmrrRenderTable(byMonth) {
       }
     }
     row += `<td class="fl cfyaop">${f(fyTotal)}</td></tr>`;
-    body += row;
-  }
+    html += `<div class="cmrr-fy-section" id="cmrr-mrr-fy-${fy}" style="display:${i===0?'block':'none'}">`;
+    html += `<div class="twrap"><table><thead>${thead}</thead><tbody>${row}</tbody></table></div></div>`;
+  });
 
-  let tr = `<tr class="tot"><td class="bu">Total</td>`;
-  for (let mi = 0; mi < 12; mi++)
-    tr += colTots[mi] ? `<td class="caop">${f(colTots[mi])}</td>` : `<td class="caop"></td>`;
-  tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
-  body += tr + '</tbody>';
+  document.getElementById('cmrr-table-wrap').innerHTML = html;
+}
 
-  document.getElementById('cmrr-table-wrap').innerHTML =
-    `<table><thead>${thead}</thead>${body}</table>`;
+function cmrrShowFY(prefix, fy, btn) {
+  btn.closest('.cmrr-fy-tabs').querySelectorAll('.nret-tog').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const container = btn.closest('.cmrr-fy-tabs').parentElement;
+  container.querySelectorAll('.cmrr-fy-section').forEach(s => s.style.display = 'none');
+  document.getElementById(`cmrr-${prefix}-fy-${fy}`).style.display = 'block';
 }
 
 /* ── Workflow Breakup ──────────────────────────────────────── */
@@ -1319,10 +1334,20 @@ async function cmrrLoadWf() {
 }
 
 function cmrrRenderWf(matrix, months) {
+  function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
   function mLbl(ym) {
-    const [y, m] = ym.split('-');
-    return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month:'short', year:'2-digit', timeZone:'UTC' });
+    const [y,m]=ym.split('-');
+    return new Date(+y,+m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit',timeZone:'UTC'});
   }
+  function prevKey(ym) {
+    let [y,m]=ym.split('-').map(Number); m--; if(m===0){m=12;y--;}
+    return `${y}-${String(m).padStart(2,'0')}`;
+  }
+  function momCls(val, prev) {
+    if (prev==null) return '';
+    return val>prev ? 'background:#dcfce7;color:#166534' : val<prev ? 'background:#fee2e2;color:#991b1b' : '';
+  }
+
   const workflows = Object.keys(matrix).sort()
     .filter(wf => months.some(m => (matrix[wf][m] || 0) !== 0));
   if (!workflows.length) {
@@ -1330,31 +1355,56 @@ function cmrrRenderWf(matrix, months) {
       '<div style="padding:1rem;color:var(--txt3);font-size:12px">No non-zero data.</div>';
     return;
   }
-  let thead = `<tr><th class="th-bu" style="min-width:220px;max-width:300px">Workflow / Service</th>`;
-  for (const m of months) thead += `<th class="th-mon" style="min-width:72px">${mLbl(m)}</th>`;
-  thead += `<th class="th-fy">Total</th></tr>`;
-  const colTots = months.map(() => 0);
-  let grandTotal = 0, body = '<tbody>';
-  for (const wf of workflows) {
-    let rowTotal = 0;
-    let row = `<tr><td class="bu" style="white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.35;min-width:220px;max-width:300px" title="${wf.replace(/"/g,'&quot;')}">${wf}</td>`;
-    months.forEach((m, mi) => {
-      const val = matrix[wf][m] || 0;
-      rowTotal += val; colTots[mi] += val;
-      row += val ? `<td class="caop">${f(val)}</td>` : `<td class="caop" style="color:#ddd">—</td>`;
-    });
-    grandTotal += rowTotal;
-    row += `<td class="fl cfyaop">${f(rowTotal)}</td></tr>`;
-    body += row;
-  }
-  let tr = `<tr class="tot"><td class="bu">Total</td>`;
-  months.forEach((m, mi) => {
-    tr += colTots[mi] ? `<td class="caop">${f(colTots[mi])}</td>` : `<td class="caop"></td>`;
+
+  // Group months by FY, newest first
+  const fyMap = {};
+  for (const m of months) { const fy=getFY(m); if(!fyMap[fy])fyMap[fy]=[]; fyMap[fy].push(m); }
+  const fys = Object.keys(fyMap).map(Number).sort((a,b)=>b-a);
+
+  let html = `<div class="cmrr-fy-tabs">`;
+  fys.forEach((fy,i) =>
+    html += `<button class="nret-tog${i===0?' active':''}" onclick="cmrrShowFY('wf',${fy},this)">FY${fy}</button>`
+  );
+  html += `</div>`;
+
+  fys.forEach((fy, i) => {
+    const fyMonths = fyMap[fy];
+    const colTots  = fyMonths.map(() => 0);
+    let grandTotal = 0, body = '<tbody>';
+
+    let thead = `<tr><th class="th-bu" style="min-width:220px;max-width:300px">Workflow / Service</th>`;
+    for (const m of fyMonths) thead += `<th class="th-mon" style="min-width:72px">${mLbl(m)}</th>`;
+    thead += `<th class="th-fy">Total</th></tr>`;
+
+    for (const wf of workflows) {
+      if (!fyMonths.some(m => (matrix[wf][m] || 0) !== 0)) continue;
+      let rowTotal = 0;
+      let row = `<tr><td class="bu" style="white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.35;min-width:220px;max-width:300px" title="${wf.replace(/"/g,'&quot;')}">${wf}</td>`;
+      fyMonths.forEach((m, mi) => {
+        const val  = matrix[wf][m] || 0;
+        const prev = matrix[wf]?.[prevKey(m)] ?? null;
+        rowTotal += val; colTots[mi] += val;
+        row += val
+          ? `<td class="caop" style="${momCls(val,prev)}">${f(val)}</td>`
+          : `<td class="caop" style="color:#ddd">—</td>`;
+      });
+      grandTotal += rowTotal;
+      row += `<td class="fl cfyaop">${f(rowTotal)}</td></tr>`;
+      body += row;
+    }
+
+    let tr = `<tr class="tot"><td class="bu">Total</td>`;
+    fyMonths.forEach((m, mi) =>
+      tr += colTots[mi] ? `<td class="caop">${f(colTots[mi])}</td>` : `<td class="caop"></td>`
+    );
+    tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
+    body += tr + '</tbody>';
+
+    html += `<div class="cmrr-fy-section" id="cmrr-wf-fy-${fy}" style="display:${i===0?'block':'none'}">`;
+    html += `<div class="twrap"><table><thead>${thead}</thead>${body}</table></div></div>`;
   });
-  tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
-  body += tr + '</tbody>';
-  document.getElementById('cmrr-wf-table').innerHTML =
-    `<table><thead>${thead}</thead>${body}</table>`;
+
+  document.getElementById('cmrr-wf-table').innerHTML = html;
 }
 
 function showCustMRRTab(btn) {
@@ -1477,11 +1527,40 @@ async function nretLoad() {
     return all;
   }
 
+  // Build zoho_name → earliest go_live_month for new-period attribution
+  const zohoGoLive = {};
+  for (const l of lines) {
+    const gl = l.go_live_date.slice(0, 7);
+    if (!zohoGoLive[l.zoho_name] || gl < zohoGoLive[l.zoho_name]) zohoGoLive[l.zoho_name] = gl;
+  }
+
+  // Fetch post-Mar-2025 data from customer_mrr_unified (customer_module_mrr only, no overlap)
+  async function fetchNewPeriod() {
+    const rows = [];
+    let off = 0;
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_mrr_unified?select=zoho_name,month_date,mrr_amount` +
+        `&month_date=gte.2025-04-01&order=zoho_name,month_date&limit=1000&offset=${off}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) break;
+      const pg = await r.json();
+      rows.push(...pg);
+      if (pg.length < 1000) break;
+      off += 1000;
+    }
+    return rows;
+  }
+
   try {
     const BATCH = 300, fetches = [];
     for (let i = 0; i < lineIds.length; i += BATCH)
       fetches.push(fetchBatch(lineIds.slice(i, i + BATCH)));
-    const allRows = (await Promise.all(fetches)).flat();
+    const [allRows, newRows] = await Promise.all([
+      Promise.all(fetches).then(r => r.flat()),
+      fetchNewPeriod()
+    ]);
 
     const matrix = {};
     const mrrMonthSet = new Set();
@@ -1496,10 +1575,17 @@ async function nretLoad() {
       mrrMonthSet.add(mm);
       matrix[gl][mm] = (matrix[gl][mm] || 0) + parseFloat(row.mrr_amount);
     }
+    for (const row of newRows) {
+      const gl = zohoGoLive[row.zoho_name];
+      if (!gl || !matrix[gl]) continue; // skip customers not in current filter
+      const mm = row.month_date.slice(0, 7);
+      mrrMonthSet.add(mm);
+      matrix[gl][mm] = (matrix[gl][mm] || 0) + parseFloat(row.mrr_amount);
+    }
 
     _nretMatrix    = matrix;
     _nretMrrMonths = mrrMonthSet;
-    status.textContent = `${allRows.length.toLocaleString()} records · ${lines.length} lines`;
+    status.textContent = `${(allRows.length+newRows.length).toLocaleString()} records · ${lines.length} lines`;
     nretDispatch();
   } catch(e) {
     status.textContent = 'Error: '+e.message;
