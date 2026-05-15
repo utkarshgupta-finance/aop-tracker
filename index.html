@@ -586,7 +586,7 @@ async function exportMRR() {
 
     function mLbl(ym) {
       const [y, m] = ym.split('-');
-      return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+      return new Date(Date.UTC(+y, +m - 1, 1)).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
     }
 
     // Build worksheet as array-of-arrays
@@ -1417,7 +1417,7 @@ function cmrrRenderWf(matrix, months) {
   function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
   function mLbl(ym) {
     const [y,m]=ym.split('-');
-    return new Date(+y,+m-1,1).toLocaleDateString('en-IN',{month:'short',year:'2-digit',timeZone:'UTC'});
+    return new Date(Date.UTC(+y,+m-1,1)).toLocaleDateString('en-IN',{month:'short',year:'2-digit',timeZone:'UTC'});
   }
   function prevKey(ym) {
     let [y,m]=ym.split('-').map(Number); m--; if(m===0){m=12;y--;}
