@@ -181,6 +181,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
 .cmrr-chart-lbl{font-size:10px;font-family:var(--mono);font-weight:500;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
 .cmrr-chart-inner{height:220px;position:relative}
+.cmrr-wf-hdr{display:flex;align-items:center;gap:.75rem;margin-top:1.1rem;margin-bottom:.6rem}
+.cmrr-wf-btn{padding:.28rem .75rem;font-size:11px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--navy2);transition:background .15s}
+.cmrr-wf-btn:hover{background:#f0f4f9}
+.cmrr-wf-note{font-size:10px;font-family:var(--mono);color:var(--txt3);letter-spacing:.06em}
 /* ── Net Retention tab ─────────────────────────────────────── */
 .nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .nret-selwrap{display:flex;flex-direction:column;gap:.35rem}
@@ -291,6 +295,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
       <div class="twrap" id="cmrr-table-wrap"></div>
+      <div class="cmrr-wf-hdr">
+        <button class="cmrr-wf-btn" id="cmrr-wf-btn" onclick="cmrrToggleWf()">▶ Workflow Breakup</button>
+        <span class="cmrr-wf-note">Module-level detail · Apr 2025 – Apr 2026</span>
+      </div>
+      <div id="cmrr-wf-wrap" style="display:none">
+        <div class="cmrr-status" id="cmrr-wf-status" style="padding:.3rem 0 .6rem"></div>
+        <div class="twrap" id="cmrr-wf-table"></div>
+      </div>
     </div>
   </div>
   <div id="nret" class="pane">
@@ -989,6 +1001,8 @@ let cmrrDdItems  = [];   // names currently visible in dropdown
 let cmrrDdIdx    = -1;   // keyboard-highlighted index
 let custChartObj = null; // Chart.js instance
 let _custInited  = false;
+let _cmrrCurName = null;   // customer currently loaded
+let _cmrrWfLoaded = false; // whether workflow data is fetched for _cmrrCurName
 
 function cmrrHdr() {
   return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY };
@@ -1057,6 +1071,15 @@ function cmrrPick(idx) {
 }
 
 async function loadCustMRR(zohoName) {
+  // Reset workflow section when switching customers
+  _cmrrCurName = zohoName;
+  _cmrrWfLoaded = false;
+  const wfWrap = document.getElementById('cmrr-wf-wrap');
+  const wfBtn  = document.getElementById('cmrr-wf-btn');
+  if (wfWrap) { wfWrap.style.display = 'none'; wfBtn.textContent = '▶ Workflow Breakup'; }
+  document.getElementById('cmrr-wf-status').textContent = '';
+  document.getElementById('cmrr-wf-table').innerHTML = '';
+
   const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
   if (!lines.length) return;
 
@@ -1232,6 +1255,105 @@ function cmrrRenderTable(byMonth) {
   body += tr + '</tbody>';
 
   document.getElementById('cmrr-table-wrap').innerHTML =
+    `<table><thead>${thead}</thead>${body}</table>`;
+}
+
+/* ── Workflow Breakup ──────────────────────────────────────── */
+function cmrrToggleWf() {
+  const wrap = document.getElementById('cmrr-wf-wrap');
+  const btn  = document.getElementById('cmrr-wf-btn');
+  const open = wrap.style.display !== 'none';
+  if (open) {
+    wrap.style.display = 'none';
+    btn.textContent = '▶ Workflow Breakup';
+  } else {
+    wrap.style.display = 'block';
+    btn.textContent = '▼ Workflow Breakup';
+    if (!_cmrrWfLoaded) cmrrLoadWf();
+  }
+}
+
+async function cmrrLoadWf() {
+  if (!_cmrrCurName) return;
+  const status = document.getElementById('cmrr-wf-status');
+  const tbl    = document.getElementById('cmrr-wf-table');
+  status.textContent = 'Loading…';
+  tbl.innerHTML = '';
+  try {
+    const lR = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_module_lines?select=id,workflow,services` +
+      `&zoho_name=eq.${encodeURIComponent(_cmrrCurName)}&order=id`,
+      { headers: cmrrHdr() }
+    );
+    if (!lR.ok) throw new Error('HTTP ' + lR.status);
+    const lines = await lR.json();
+    if (!lines.length) {
+      status.textContent = 'No module-level data available for this customer (pre-Apr 2025 only).';
+      return;
+    }
+    const lineMap = {};
+    for (const l of lines) lineMap[l.id] = l.workflow || l.services || '(unset)';
+    const ids = lines.map(l => l.id);
+    const mR = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_module_mrr?select=module_line_id,month_date,mrr_amount` +
+      `&module_line_id=in.(${ids.join(',')})&order=month_date.asc&limit=5000`,
+      { headers: cmrrHdr() }
+    );
+    if (!mR.ok) throw new Error('HTTP ' + mR.status);
+    const rows = await mR.json();
+    const matrix = {}, mSet = new Set();
+    for (const row of rows) {
+      const wf = lineMap[row.module_line_id] || '(unset)';
+      const m  = row.month_date.slice(0, 7);
+      mSet.add(m);
+      if (!matrix[wf]) matrix[wf] = {};
+      matrix[wf][m] = (matrix[wf][m] || 0) + parseFloat(row.mrr_amount);
+    }
+    _cmrrWfLoaded = true;
+    const months = [...mSet].sort();
+    cmrrRenderWf(matrix, months);
+    status.textContent = `${lines.length} line${lines.length !== 1 ? 's' : ''} · ${months.length} months`;
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+function cmrrRenderWf(matrix, months) {
+  function mLbl(ym) {
+    const [y, m] = ym.split('-');
+    return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month:'short', year:'2-digit', timeZone:'UTC' });
+  }
+  const workflows = Object.keys(matrix).sort()
+    .filter(wf => months.some(m => (matrix[wf][m] || 0) !== 0));
+  if (!workflows.length) {
+    document.getElementById('cmrr-wf-table').innerHTML =
+      '<div style="padding:1rem;color:var(--txt3);font-size:12px">No non-zero data.</div>';
+    return;
+  }
+  let thead = `<tr><th class="th-bu" style="min-width:220px;max-width:300px">Workflow / Service</th>`;
+  for (const m of months) thead += `<th class="th-mon" style="min-width:72px">${mLbl(m)}</th>`;
+  thead += `<th class="th-fy">Total</th></tr>`;
+  const colTots = months.map(() => 0);
+  let grandTotal = 0, body = '<tbody>';
+  for (const wf of workflows) {
+    let rowTotal = 0;
+    let row = `<tr><td class="bu" style="white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.35;min-width:220px;max-width:300px" title="${wf.replace(/"/g,'&quot;')}">${wf}</td>`;
+    months.forEach((m, mi) => {
+      const val = matrix[wf][m] || 0;
+      rowTotal += val; colTots[mi] += val;
+      row += val ? `<td class="caop">${f(val)}</td>` : `<td class="caop" style="color:#ddd">—</td>`;
+    });
+    grandTotal += rowTotal;
+    row += `<td class="fl cfyaop">${f(rowTotal)}</td></tr>`;
+    body += row;
+  }
+  let tr = `<tr class="tot"><td class="bu">Total</td>`;
+  months.forEach((m, mi) => {
+    tr += colTots[mi] ? `<td class="caop">${f(colTots[mi])}</td>` : `<td class="caop"></td>`;
+  });
+  tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
+  body += tr + '</tbody>';
+  document.getElementById('cmrr-wf-table').innerHTML =
     `<table><thead>${thead}</thead>${body}</table>`;
 }
 
