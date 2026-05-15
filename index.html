@@ -181,7 +181,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-pill b{color:var(--txt);font-weight:500;margin-right:.3rem}
 .cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
 .cmrr-chart-lbl{font-size:10px;font-family:var(--mono);font-weight:500;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
-.cmrr-chart-inner{height:220px;position:relative}
+.cmrr-chart-inner{height:260px;position:relative}
 .cmrr-wf-hdr{display:flex;align-items:center;gap:.75rem;margin-top:1.1rem;margin-bottom:.6rem}
 .cmrr-wf-btn{padding:.28rem .75rem;font-size:11px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--navy2);transition:background .15s}
 .cmrr-wf-btn:hover{background:#f0f4f9}
@@ -1256,7 +1256,15 @@ function cmrrRenderChart(byMonth) {
   const values = months.map(m => +(filled[m] / 1e5).toFixed(2));
 
   if (custChartObj) { custChartObj.destroy(); custChartObj = null; }
-  const ctx = document.getElementById('cust-chart').getContext('2d');
+  const canvas = document.getElementById('cust-chart');
+  const ctx = canvas.getContext('2d');
+
+  // Build vertical gradient: deep navy at top → steel blue at bottom
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 260);
+  grad.addColorStop(0,   'rgba(15,35,64,0.92)');
+  grad.addColorStop(0.5, 'rgba(26,73,130,0.80)');
+  grad.addColorStop(1,   'rgba(56,120,190,0.55)');
+
   custChartObj = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -1264,20 +1272,27 @@ function cmrrRenderChart(byMonth) {
       datasets: [{
         label: 'MRR',
         data: values,
-        backgroundColor: 'rgba(26,58,92,0.75)',
-        borderColor: '#0f2340',
+        backgroundColor: grad,
+        borderColor: 'rgba(15,35,64,0.3)',
         borderWidth: 0,
-        borderRadius: 2,
+        borderRadius: 4,
+        borderSkipped: false,
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 400 },
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: 'rgba(15,35,64,0.92)',
+          titleFont: { family: "'IBM Plex Mono',monospace", size: 10 },
+          bodyFont:  { family: "'IBM Plex Mono',monospace", size: 11 },
+          padding: 10,
           callbacks: {
-            label: ctx => '₹ ' + f(Math.round(ctx.parsed.y * 1e5))
+            label: c => '  ₹ ' + f(Math.round(c.parsed.y * 1e5)),
+            title: t => t[0].label
           }
         }
       },
@@ -1285,18 +1300,22 @@ function cmrrRenderChart(byMonth) {
         x: {
           ticks: {
             font: { family: "'IBM Plex Mono',monospace", size: 9 },
+            color: '#6b7a8d',
             maxRotation: 45,
             autoSkip: true,
-            maxTicksLimit: 20
+            maxTicksLimit: 24
           },
-          grid: { display: false }
+          grid: { display: false },
+          border: { color: '#dde3ec' }
         },
         y: {
           ticks: {
             font: { family: "'IBM Plex Mono',monospace", size: 9 },
+            color: '#6b7a8d',
             callback: v => v + 'L'
           },
-          grid: { color: '#f0f0f0' },
+          grid: { color: '#eef0f5', lineWidth: 1 },
+          border: { dash: [4,4], color: 'transparent' },
           title: { display: true, text: '₹ Lakhs', font: { family: "'IBM Plex Mono',monospace", size: 9 }, color: '#8896a8' }
         }
       }
@@ -1548,7 +1567,7 @@ async function loadOverallMRR() {
       buMap[row.bu_name][m] = (buMap[row.bu_name][m] || 0) + parseFloat(row.mrr_amount);
     }
     const months = [...monthSet].sort();
-    const bus    = [...buSet].sort();
+    const bus    = [...buSet].filter(b => b !== 'Unknown BU').sort();
     status.textContent = `${rows.length} rows · ${bus.length} BUs · ${months.length} months`;
     omrrRender(buMap, months, bus);
   } catch(e) {
@@ -1578,6 +1597,14 @@ function omrrRender(buMap, months, bus) {
   const fys = [];
   for (let fy = maxFY; fy >= minFY; fy--) fys.push(fy);
 
+  // Precompute all-month totals for cross-FY Delta/CMGR lookup
+  const allMonthTotals = {};
+  for (const m of months) {
+    let t = 0;
+    for (const bu of bus) t += (buMap[bu]||{})[m] || 0;
+    allMonthTotals[m] = t;
+  }
+
   let html = `<div class="cmrr-fy-tabs">`;
   fys.forEach((fy, i) =>
     html += `<button class="nret-tog${i===0?' active':''}" onclick="omrrShowFY(${fy},this)">FY${fy}</button>`
@@ -1585,13 +1612,14 @@ function omrrRender(buMap, months, bus) {
   html += `</div>`;
 
   fys.forEach((fy, i) => {
+    // Always include all 12 months; mark which have data
     const fyMonths = [];
     for (let mi = 0; mi < 12; mi++) {
       const year = mi <= 8 ? fy - 1 : fy;
       const key  = `${year}-${M_MM[mi]}`;
-      if (months.includes(key)) fyMonths.push({ key, lbl: M_LBL[mi] });
+      fyMonths.push({ key, lbl: M_LBL[mi], hasData: months.includes(key) });
     }
-    if (!fyMonths.length) return;
+    if (!fyMonths.some(m => m.hasData)) return;
 
     let thead = `<tr><th class="omrr-hbu">BU</th>`;
     for (const { lbl } of fyMonths) thead += `<th class="th-mon" style="min-width:76px">${lbl}</th>`;
@@ -1604,7 +1632,8 @@ function omrrRender(buMap, months, bus) {
     for (const bu of bus) {
       const rowData = buMap[bu] || {};
       let rowTotal = 0, row = `<tr><td class="omrr-bu">${bu}</td>`;
-      for (const { key } of fyMonths) {
+      for (const { key, hasData } of fyMonths) {
+        if (!hasData) { row += `<td class="caop"></td>`; continue; }
         const val  = rowData[key];
         const prev = rowData[prevKey(key)];
         if (val != null && val > 0) {
@@ -1621,14 +1650,42 @@ function omrrRender(buMap, months, bus) {
     }
 
     let totRow = `<tr><td class="omrr-tot-bu">Total</td>`;
-    for (const { key } of fyMonths) {
+    for (const { key, hasData } of fyMonths) {
+      if (!hasData) { totRow += `<td class="caop" style="background:#e8ecf4"></td>`; continue; }
       const v = colTotals[key] || 0;
       totRow += `<td class="caop" style="background:#e8ecf4;font-weight:600">${v ? fL(v) : '—'}</td>`;
     }
     totRow += `<td class="fl cfyaop" style="font-weight:700">${fL(grandTotal)}</td></tr>`;
 
+    let deltaRow = `<tr><td class="omrr-tot-bu" style="font-size:10px;font-style:italic">Δ MoM</td>`;
+    let cmgrRow  = `<tr><td class="omrr-tot-bu" style="font-size:10px;font-style:italic">CMGR %</td>`;
+    for (const { key, hasData } of fyMonths) {
+      const bg = 'background:#f0f2f8';
+      if (!hasData) {
+        deltaRow += `<td class="caop" style="${bg}"></td>`;
+        cmgrRow  += `<td class="caop" style="${bg}"></td>`;
+        continue;
+      }
+      const curr = allMonthTotals[key] || 0;
+      const prev = allMonthTotals[prevKey(key)] || 0;
+      if (!prev) {
+        deltaRow += `<td class="caop" style="${bg};color:#aaa">—</td>`;
+        cmgrRow  += `<td class="caop" style="${bg};color:#aaa">—</td>`;
+        continue;
+      }
+      const delta = curr - prev;
+      const cmgr  = (delta / prev) * 100;
+      const pos = 'color:#166534;font-weight:600', neg = 'color:#991b1b;font-weight:600', neu = 'color:#666';
+      const dClr = delta > 0 ? pos : delta < 0 ? neg : neu;
+      const cClr = cmgr  > 0 ? pos : cmgr  < 0 ? neg : neu;
+      deltaRow += `<td class="caop" style="${bg};${dClr}">${delta>=0?'+':''}${fL(delta)}</td>`;
+      cmgrRow  += `<td class="caop" style="${bg};${cClr}">${cmgr>=0?'+':''}${cmgr.toFixed(1)}%</td>`;
+    }
+    deltaRow += `<td class="fl cfyaop" style="background:#f0f2f8"></td></tr>`;
+    cmgrRow  += `<td class="fl cfyaop" style="background:#f0f2f8"></td></tr>`;
+
     html += `<div class="omrr-fy-section" id="omrr-fy-${fy}" style="display:${i===0?'block':'none'}">`;
-    html += `<div class="twrap"><table><thead>${thead}</thead><tbody>${tbody}${totRow}</tbody></table></div></div>`;
+    html += `<div class="twrap"><table><thead>${thead}</thead><tbody>${tbody}${totRow}${deltaRow}${cmgrRow}</tbody></table></div></div>`;
   });
 
   wrap.innerHTML = html;
