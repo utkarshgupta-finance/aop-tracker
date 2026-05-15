@@ -1542,7 +1542,7 @@ async function nretInit() {
     while (true) {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-        `?select=id,go_live_date,segment_master!left(name),bu_master!left(name)` +
+        `?select=id,zoho_name,go_live_date,segment_master!left(name),bu_master!left(name)` +
         `&go_live_date=not.is.null&order=id&limit=${PAGE}&offset=${offset}`,
         { headers: cmrrHdr() }
       );
