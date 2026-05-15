@@ -209,6 +209,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .nret-tog2:hover{background:#f0f4f9}
 .nret-tog2.active{background:var(--navy3);color:#fff;border-color:var(--navy3)}
 .nret-divsep{color:#ccc;font-size:14px;padding:0 .2rem;align-self:center}
+/* ── Overall MRR tab ───────────────────────────────────────── */
+.omrr-bar{padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
+.omrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3)}
+.omrr-bu{position:sticky;left:0;z-index:2;background:#f5f5f5;font-family:var(--sans);font-size:11px;font-weight:500;padding:.38rem .75rem;white-space:nowrap;border-right:2px solid #bbb;min-width:100px}
+.omrr-tot-bu{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .75rem;white-space:nowrap;border-right:2px solid #aaa}
+.omrr-hbu{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:100px;padding:.38rem .75rem;font-size:11px;font-weight:600}
 </style>
 </head>
 <body>
@@ -237,6 +243,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
   <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
   <button class="tbtn" onclick="showCustMRRTab(this)">Customer MRR</button>
+  <button class="tbtn" onclick="showOverallMRRTab(this)">Overall MRR</button>
   <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
   <button class="rbtn" id="export-btn" onclick="exportMRR()">⬇ Export MRR</button>
   <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span><span id="sync-lbl">Sync CRM</span></button>
@@ -307,6 +314,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="twrap" id="cmrr-wf-table"></div>
       </div>
     </div>
+  </div>
+  <div id="overall-mrr" class="pane">
+    <div class="omrr-bar">
+      <div class="omrr-status" id="omrr-status"></div>
+    </div>
+    <div id="omrr-wrap"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
   </div>
   <div id="nret" class="pane">
     <div class="nret-bar">
@@ -1497,6 +1510,136 @@ function showCustMRRTab(btn) {
       document.getElementById('cmrr-status').textContent = e.message;
     });
   }
+}
+
+/* ─── OVERALL MRR TAB ────────────────────────────────────── */
+let _omrrInited = false;
+
+function showOverallMRRTab(btn) {
+  showTab('overall-mrr', btn);
+  if (!_omrrInited) { _omrrInited = true; loadOverallMRR(); }
+}
+
+async function loadOverallMRR() {
+  const status = document.getElementById('omrr-status');
+  const wrap   = document.getElementById('omrr-wrap');
+  status.textContent = 'Loading…';
+  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
+  try {
+    const PAGE = 1000;
+    let offset = 0, rows = [];
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/bu_mrr_monthly?select=bu_name,month_date,mrr_amount` +
+        `&order=month_date,bu_name&limit=${PAGE}&offset=${offset}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const pg = await r.json();
+      rows = rows.concat(pg);
+      if (pg.length < PAGE) break;
+      offset += PAGE;
+    }
+    const buMap = {}, monthSet = new Set(), buSet = new Set();
+    for (const row of rows) {
+      const m = row.month_date.slice(0, 7);
+      monthSet.add(m); buSet.add(row.bu_name);
+      if (!buMap[row.bu_name]) buMap[row.bu_name] = {};
+      buMap[row.bu_name][m] = (buMap[row.bu_name][m] || 0) + parseFloat(row.mrr_amount);
+    }
+    const months = [...monthSet].sort();
+    const bus    = [...buSet].sort();
+    status.textContent = `${rows.length} rows · ${bus.length} BUs · ${months.length} months`;
+    omrrRender(buMap, months, bus);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    wrap.innerHTML = `<div style="padding:2rem;color:#a32d2d">${e.message}</div>`;
+  }
+}
+
+function omrrRender(buMap, months, bus) {
+  const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
+  const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
+  function prevKey(ym) {
+    let [y,m]=ym.split('-').map(Number); m--; if(m===0){m=12;y--;}
+    return `${y}-${String(m).padStart(2,'0')}`;
+  }
+  function momCls(val, prev) {
+    if (prev==null||prev===undefined) return '';
+    return val>prev ? 'background:#dcfce7;color:#166534' : val<prev ? 'background:#fee2e2;color:#991b1b' : '';
+  }
+  function fL(v) { return v ? (v/1e5).toFixed(2) : ''; }
+
+  const wrap = document.getElementById('omrr-wrap');
+  if (!months.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>'; return; }
+
+  const minFY = getFY(months[0]), maxFY = getFY(months[months.length-1]);
+  const fys = [];
+  for (let fy = maxFY; fy >= minFY; fy--) fys.push(fy);
+
+  let html = `<div class="cmrr-fy-tabs">`;
+  fys.forEach((fy, i) =>
+    html += `<button class="nret-tog${i===0?' active':''}" onclick="omrrShowFY(${fy},this)">FY${fy}</button>`
+  );
+  html += `</div>`;
+
+  fys.forEach((fy, i) => {
+    const fyMonths = [];
+    for (let mi = 0; mi < 12; mi++) {
+      const year = mi <= 8 ? fy - 1 : fy;
+      const key  = `${year}-${M_MM[mi]}`;
+      if (months.includes(key)) fyMonths.push({ key, lbl: M_LBL[mi] });
+    }
+    if (!fyMonths.length) return;
+
+    let thead = `<tr><th class="omrr-hbu">BU</th>`;
+    for (const { lbl } of fyMonths) thead += `<th class="th-mon" style="min-width:76px">${lbl}</th>`;
+    thead += `<th class="th-fy">Total</th></tr>`;
+
+    let tbody = '';
+    const colTotals = {};
+    let grandTotal = 0;
+
+    for (const bu of bus) {
+      const rowData = buMap[bu] || {};
+      let rowTotal = 0, row = `<tr><td class="omrr-bu">${bu}</td>`;
+      for (const { key } of fyMonths) {
+        const val  = rowData[key];
+        const prev = rowData[prevKey(key)];
+        if (val != null && val > 0) {
+          rowTotal += val;
+          colTotals[key] = (colTotals[key] || 0) + val;
+          row += `<td class="caop" style="${momCls(val,prev)}">${fL(val)}</td>`;
+        } else {
+          row += `<td class="caop" style="color:#ddd">—</td>`;
+        }
+      }
+      grandTotal += rowTotal;
+      row += `<td class="fl cfyaop">${fL(rowTotal)}</td></tr>`;
+      tbody += row;
+    }
+
+    let totRow = `<tr><td class="omrr-tot-bu">Total</td>`;
+    for (const { key } of fyMonths) {
+      const v = colTotals[key] || 0;
+      totRow += `<td class="caop" style="background:#e8ecf4;font-weight:600">${v ? fL(v) : '—'}</td>`;
+    }
+    totRow += `<td class="fl cfyaop" style="font-weight:700">${fL(grandTotal)}</td></tr>`;
+
+    html += `<div class="omrr-fy-section" id="omrr-fy-${fy}" style="display:${i===0?'block':'none'}">`;
+    html += `<div class="twrap"><table><thead>${thead}</thead><tbody>${tbody}${totRow}</tbody></table></div></div>`;
+  });
+
+  wrap.innerHTML = html;
+}
+
+function omrrShowFY(fy, btn) {
+  btn.closest('.cmrr-fy-tabs').querySelectorAll('.nret-tog').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const container = btn.closest('.cmrr-fy-tabs').parentElement;
+  container.querySelectorAll('.omrr-fy-section').forEach(s => s.style.display = 'none');
+  document.getElementById(`omrr-fy-${fy}`).style.display = 'block';
 }
 
 /* ─── NET RETENTION TAB ───────────────────────────────────── */
