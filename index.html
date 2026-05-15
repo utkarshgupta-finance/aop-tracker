@@ -286,7 +286,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div id="cust-detail" class="hidden">
       <div class="cmrr-info" id="cmrr-info"></div>
       <div class="cmrr-chart-box">
-        <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Mar 2025</div>
+        <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Apr 2026</div>
         <div class="cmrr-chart-inner"><canvas id="cust-chart"></canvas></div>
       </div>
       <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
@@ -1081,11 +1081,10 @@ async function loadCustMRR(zohoName) {
   document.getElementById('cmrr-status').textContent = 'Loading MRR…';
   document.getElementById('cust-detail').classList.remove('hidden');
 
-  const lineIds = lines.map(l => l.id);
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/customer_mrr` +
-      `?select=month_date,mrr_amount&mrr_line_id=in.(${lineIds.join(',')})` +
+      `${SUPABASE_URL}/rest/v1/customer_mrr_unified` +
+      `?select=month_date,mrr_amount&zoho_name=eq.${encodeURIComponent(zohoName)}` +
       `&order=month_date.asc&limit=5000`,
       { headers: cmrrHdr() }
     );
