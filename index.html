@@ -6,6 +6,7 @@
 <title>AOP Tracker FY 2026–27</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -237,6 +238,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
   <button class="tbtn" onclick="showCustMRRTab(this)">Customer MRR</button>
   <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
+  <button class="rbtn" id="export-btn" onclick="exportMRR()">⬇ Export MRR</button>
   <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span><span id="sync-lbl">Sync CRM</span></button>
   <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
 </nav>
@@ -536,6 +538,84 @@ function td(v,cls=''){const ng=typeof v==='number'&&v<0?' neg':'';return `<td cl
 function te(cls=''){return `<td class="${cls}"></td>`;}
 function tots(D){return ML.map((_,i)=>BUS.reduce((s,bu)=>s+(D[bu]?D[bu][i]:0),0));}
 
+
+/* ─── EXPORT MRR ────────────────────────────────────────── */
+async function exportMRR() {
+  const btn = document.getElementById('export-btn');
+  btn.textContent = 'Exporting…';
+  btn.disabled = true;
+  try {
+    const hdrs = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'Prefer': 'count=exact' };
+    const PAGE = 1000;
+
+    // First page also gives us the total count
+    const r0 = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_mrr_unified?select=zoho_name,month_date,mrr_amount` +
+      `&order=zoho_name,month_date&limit=${PAGE}&offset=0`,
+      { headers: hdrs }
+    );
+    if (!r0.ok) throw new Error('HTTP ' + r0.status);
+    const total = parseInt(r0.headers.get('content-range').split('/')[1], 10);
+    const first = await r0.json();
+
+    // Fire all remaining pages in parallel
+    const pages = Math.ceil(total / PAGE);
+    const rest  = await Promise.all(
+      Array.from({ length: pages - 1 }, (_, i) =>
+        fetch(
+          `${SUPABASE_URL}/rest/v1/customer_mrr_unified?select=zoho_name,month_date,mrr_amount` +
+          `&order=zoho_name,month_date&limit=${PAGE}&offset=${(i + 1) * PAGE}`,
+          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY } }
+        ).then(r => r.json())
+      )
+    );
+    const allRows = [...first, ...rest.flat()];
+
+    // Build customer → month → amount map
+    const custMap  = {};
+    const monthSet = new Set();
+    for (const row of allRows) {
+      const m = row.month_date.slice(0, 7);
+      monthSet.add(m);
+      if (!custMap[row.zoho_name]) custMap[row.zoho_name] = {};
+      custMap[row.zoho_name][m] = (custMap[row.zoho_name][m] || 0) + parseFloat(row.mrr_amount);
+    }
+
+    const months    = [...monthSet].sort();
+    const customers = Object.keys(custMap).sort();
+
+    function mLbl(ym) {
+      const [y, m] = ym.split('-');
+      return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+    }
+
+    // Build worksheet as array-of-arrays
+    const wsData = [['Customer', ...months.map(mLbl), 'Total']];
+    for (const cust of customers) {
+      let total = 0;
+      const row = [cust];
+      for (const m of months) {
+        const v = custMap[cust][m] || null;
+        if (v) total += v;
+        row.push(v ?? null);
+      }
+      row.push(total || null);
+      wsData.push(row);
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!views'] = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+    ws['!cols']  = [{ wch: 38 }, ...months.map(() => ({ wch: 9 })), { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'MRR');
+    XLSX.writeFile(wb, `customer_mrr_${months[0]}_to_${months[months.length-1]}.xlsx`);
+
+  } catch(e) {
+    alert('Export failed: ' + e.message);
+  }
+  btn.textContent = '⬇ Export MRR';
+  btn.disabled = false;
+}
 
 /* ─── LOAD ──────────────────────────────────────────────── */
 async function loadData(){
