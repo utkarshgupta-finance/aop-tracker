@@ -2198,6 +2198,7 @@ initCustMRR().catch(e => {
 /* ── Ask AI — conversational interface ───────────────────────── */
 const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
 let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
+let AI_CHARTS = []; // Chart.js instances to destroy on clear
 
 const AI_SYSTEM = `You are a friendly revenue analytics assistant for Bizom. You have access to a customer MRR database and can answer questions conversationally.
 
@@ -2218,39 +2219,64 @@ A) If you need clarification: reply with ONLY {"q":"Your question here?"}
    {"q":"I found multiple matches for 'VST' — did you mean VST Industries Limited or VST Tillers Tractors?"}
 
 B) If you can answer: reply with ONLY raw JavaScript async function body (no function keyword, no markdown, no prose).
-   The code runs in the browser and must return: { columns:[...], rows:[[...]], summary:'...' }
+   For tabular data return: { columns:[...], rows:[[...]], summary:'...' }
+   For charts return:       { type:'chart', chartType:'line'|'bar', title:'...', labels:[...], datasets:[{label:'...',data:[...]}], summary:'...' }
+
+WHEN TO USE CHART vs TABLE:
+- Chart (line): time-series trends, total/single-customer MRR over multiple months, growth over time
+- Chart (bar): monthly comparisons where visual magnitude matters
+- Table: rankings of customers, multi-column comparisons, lists with several attributes
 
 CODE RULES:
-  SUPABASE_URL, cmrrHdr(), f(n) are available in scope
+  SUPABASE_URL, cmrrHdr(), f(n) are available in scope (f formats numbers as ₹ currency)
   ALWAYS use ilike + encodeURIComponent for customer name filters (never eq — names have spaces)
   Dates: YYYY-MM-01 (Jan 2026 = 2026-01-01)
   For multi-month queries use month_date=gte.X&month_date=lte.Y, then filter in JS
   All Januaries = fetch full history with limit=5000, then filter rows where month_date includes '-01-'
   Fetch limit: max 5000 rows per request
+  Chart data values must be plain numbers (not formatted strings)
+
+COLUMN NAMING — make columns self-explanatory so the table makes sense without reading the question:
+  Include the period in month/MRR columns: "MRR – Jan 2026" not "MRR"
+  For growth: "MoM Growth (%)" not "Δ%"; for rank: "Rank" not "#"
+  Full customer name in customer column: "Customer Name" not "Customer"
+  When comparing two months: "MRR – Jan 2026 (₹)" and "MRR – Feb 2026 (₹)"
 
 EXAMPLES:
 
-Single customer all months:
+Single customer all months (table):
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('VST Industries Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
 const d=await r.json();
-return {columns:['Month','MRR'],rows:d.map(x=>[x.month_date.slice(0,7),f(+x.mrr_amount)]),summary:'MRR history for VST Industries Limited.'};
+return {columns:['Month','MRR – VST Industries Ltd (₹)'],rows:d.map(x=>[x.month_date.slice(0,7),f(+x.mrr_amount)]),summary:'Monthly MRR history for VST Industries Limited.'};
 
-All Januaries for a customer:
+All Januaries for a customer (table):
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('Glaxosmithkline Asia Private Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
 const d=await r.json();
 const jan=d.filter(x=>x.month_date.slice(5,7)==='01');
-return {columns:['Year','MRR'],rows:jan.map(x=>[x.month_date.slice(0,4),f(+x.mrr_amount)]),summary:'January MRR for Glaxo across all years.'};
+return {columns:['Year','MRR – January (₹)'],rows:jan.map(x=>[x.month_date.slice(0,4),f(+x.mrr_amount)]),summary:'January MRR for GlaxoSmithKline across all years.'};
 
-Top 10 by MRR:
+Top 10 by MRR (table):
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-03-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
 const d=await r.json();
-return {columns:['Customer','MRR'],rows:d.map(x=>[x.zoho_name,f(+x.mrr_amount)]),summary:'Top 10 customers by MRR in Mar 2026.'};
+return {columns:['Rank','Customer Name','MRR – Mar 2026 (₹)'],rows:d.map((x,i)=>[i+1,x.zoho_name,f(+x.mrr_amount)]),summary:'Top 10 customers by MRR in March 2026.'};
 
-MoM growth (fetch both months in parallel, join in JS):
+MoM growth (table):
 const [feb,jan]=await Promise.all(['2026-02-01','2026-01-01'].map(m=>fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+m+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())));
 const jm=Object.fromEntries(jan.map(x=>[x.zoho_name,+x.mrr_amount]));
 const res=feb.filter(x=>jm[x.zoho_name]>0).map(x=>({n:x.zoho_name,f:+x.mrr_amount,j:jm[x.zoho_name],c:(+x.mrr_amount/jm[x.zoho_name]-1)*100})).filter(x=>x.c>=3).sort((a,b)=>b.c-a.c);
-return {columns:['Customer','Jan','Feb','Δ%'],rows:res.map(x=>[x.n,f(x.j),f(x.f),x.c.toFixed(1)+'%']),summary:res.length+' customers grew ≥3% MoM.'};`;
+return {columns:['Customer Name','MRR – Jan 2026 (₹)','MRR – Feb 2026 (₹)','MoM Growth (%)'],rows:res.map(x=>[x.n,f(x.j),f(x.f),x.c.toFixed(1)+'%']),summary:res.length+' customers grew ≥3% MoM from Jan to Feb 2026.'};
+
+Total MRR by month — line chart:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&month_date=gte.2025-10-01&month_date=lte.2026-03-01&limit=5000',{headers:cmrrHdr()});
+const d=await r.json();
+const byM={};d.forEach(x=>{byM[x.month_date.slice(0,7)]=(byM[x.month_date.slice(0,7)]||0)+ +x.mrr_amount});
+const months=Object.keys(byM).sort();
+return {type:'chart',chartType:'line',title:'Total MRR – Oct 2025 to Mar 2026',labels:months,datasets:[{label:'Total MRR (₹)',data:months.map(m=>Math.round(byM[m]))}],summary:'Total MRR across all active customers from Oct 2025 to Mar 2026.'};
+
+Single customer MRR trend — line chart:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('VST Industries Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
+const d=await r.json();
+return {type:'chart',chartType:'line',title:'MRR Trend – VST Industries Limited',labels:d.map(x=>x.month_date.slice(0,7)),datasets:[{label:'MRR (₹)',data:d.map(x=>Math.round(+x.mrr_amount))}],summary:'Monthly MRR trend for VST Industries Limited.'};`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
@@ -2262,7 +2288,11 @@ const AI_NAME_STOP = new Set([
   'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
   'oct','nov','dec','2024','2025','2026','2027','quarterly','annual','fy26','fy27',
   'its','not','but','are','has','was','had','did','can','may','use','get','set',
-  'put','run','see','one','two','out','off','fy2','fy3','every','give'
+  'put','run','see','one','two','out','off','fy2','fy3','every','give',
+  // chart / visualisation words
+  'line','bar','chart','plot','graph','trend','total','generate','create','draw',
+  'between','over','time','past','next','avg','average','sum','count','compare',
+  'comparison','versus','vs','against','across','monthly','weekly','daily'
 ]);
 
 function aiResolveNames(question) {
@@ -2288,6 +2318,8 @@ function aiSetQ(q) {
 
 function aiClearChat() {
   AI_HISTORY = [];
+  AI_CHARTS.forEach(c => { try { c.destroy(); } catch {} });
+  AI_CHARTS = [];
   document.getElementById('ai-chat').innerHTML = '';
 }
 
@@ -2416,7 +2448,78 @@ async function runAIQuery(skipDisambig) {
       return;
     }
 
-    if (!result || !result.columns || !result.rows) {
+    if (!result) {
+      const msg = 'Unexpected result format. Try rephrasing.';
+      AI_HISTORY.push({ role: 'assistant', content: msg });
+      aiAddBubble('assistant', escHtml(msg));
+      return;
+    }
+
+    // ── Chart result ──
+    if (result.type === 'chart') {
+      const isLine = result.chartType === 'line';
+      const palette = ['#2563eb','#16a34a','#9333ea','#ea580c'];
+      const bubble = aiAddBubble('assistant', '');
+
+      if (result.title) {
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size:12px;font-weight:600;color:var(--navy2);margin-bottom:.45rem';
+        titleEl.textContent = result.title;
+        bubble.appendChild(titleEl);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'max-height:240px;width:100%';
+      bubble.appendChild(canvas);
+
+      const chartInstance = new Chart(canvas, {
+        type: result.chartType || 'bar',
+        data: {
+          labels: result.labels,
+          datasets: (result.datasets || []).map((ds, dsIdx) => {
+            const color = palette[dsIdx % palette.length];
+            const barColors = ds.data.map((v, i, arr) =>
+              v >= (arr[i - 1] ?? v) ? '#16a34a' : '#dc2626');
+            return {
+              label: ds.label,
+              data: ds.data,
+              borderColor: isLine ? color : barColors,
+              backgroundColor: isLine ? color + '22' : barColors,
+              fill: isLine,
+              tension: 0.35,
+              pointRadius: isLine ? 4 : 0,
+              pointHoverRadius: 6,
+              borderWidth: isLine ? 2 : 0,
+            };
+          })
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: (result.datasets || []).length > 1, labels: { font: { size: 10 } } },
+            tooltip: { callbacks: { label: ctx => ' ' + f(ctx.parsed.y) } }
+          },
+          scales: {
+            y: { ticks: { callback: v => f(v), font: { size: 9.5 } }, grid: { color: 'rgba(0,0,0,.05)' } },
+            x: { ticks: { font: { size: 9.5 } } }
+          }
+        }
+      });
+      AI_CHARTS.push(chartInstance);
+
+      if (result.summary) {
+        const sumEl = document.createElement('div');
+        sumEl.className = 'ai-summary';
+        sumEl.textContent = result.summary;
+        bubble.appendChild(sumEl);
+      }
+
+      AI_HISTORY.push({ role: 'assistant', content: result.summary || `Chart: ${result.title}` });
+      return;
+    }
+
+    // ── Table result ──
+    if (!result.columns || !result.rows) {
       const msg = 'Unexpected result format. Try rephrasing.';
       AI_HISTORY.push({ role: 'assistant', content: msg });
       aiAddBubble('assistant', escHtml(msg));
