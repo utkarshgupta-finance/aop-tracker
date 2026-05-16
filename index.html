@@ -2411,7 +2411,10 @@ const AI_NAME_STOP = new Set([
   // retention / pipeline / analytics words
   'nrr','grr','arr','mrr','retention','churn','churned','pipeline','deals','deal',
   'stage','target','budget','forecast','actuals','segment','cohort','aop','fy26',
-  'fy27','net','gross','expansion','contraction','active','inactive','live'
+  'fy27','net','gross','expansion','contraction','active','inactive','live',
+  // BU codes and names — never treat as customer name tokens
+  'sme','bat','mea','sea','kam','ertm','ent','ind','mid','market','market',
+  'enterprise','international','global','asia','apac','emea','latam','nam'
 ]);
 
 function aiResolveNames(question) {
