@@ -2411,24 +2411,42 @@ const AI_NAME_STOP = new Set([
   // retention / pipeline / analytics words
   'nrr','grr','arr','mrr','retention','churn','churned','pipeline','deals','deal',
   'stage','target','budget','forecast','actuals','segment','cohort','aop','fy26',
-  'fy27','net','gross','expansion','contraction','active','inactive','live',
-  // BU codes and names — never treat as customer name tokens
-  'sme','bat','mea','sea','kam','ertm','ent','ind','mid','market','market',
-  'enterprise','international','global','asia','apac','emea','latam','nam'
+  'fy27','net','gross','expansion','contraction','active','inactive','live'
+]);
+
+// Words that, when they follow a token, mark that token as a BU/segment identifier
+// rather than a customer name. Extend this list as the business adds new entity types.
+const AI_ENTITY_QUALIFIERS = new Set([
+  'bu','bus','unit','units','business','segment','segments','region','regions',
+  'vertical','verticals','team','teams','division','divisions','market','markets'
 ]);
 
 function aiResolveNames(question) {
   if (!CUST_NAMES.length) return new Map();
-  const tokens = question.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/)
-    .filter(t => t.length >= 3 && !AI_NAME_STOP.has(t));
+
+  const q = question.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const tokens = q.split(/\s+/);
+
+  // Mark indices that are BU/segment identifiers based on neighbouring context.
+  // "SME BU" → token before "bu" is a BU code, not a customer name.
+  // This generalises automatically to any new BU code without touching the stopword list.
+  const skipIdx = new Set();
+  tokens.forEach((t, i) => {
+    if (AI_ENTITY_QUALIFIERS.has(t)) {
+      if (i > 0) skipIdx.add(i - 1); // word immediately before the qualifier
+      skipIdx.add(i);                 // the qualifier itself
+    }
+  });
+
   const result = new Map();
-  for (const tok of tokens) {
+  tokens.forEach((tok, idx) => {
+    if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
     const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
       if (!exact) result.set(tok, hits);
     }
-  }
+  });
   return result;
 }
 
