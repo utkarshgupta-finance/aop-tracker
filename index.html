@@ -2221,6 +2221,8 @@ let AI_CHARTS = []; // Chart.js instances to destroy on clear
 
 const AI_SYSTEM = `You are a senior revenue analytics assistant embedded in Bizom's dashboard. You have a tool to query the live database. Respond like an FP&A analyst, RevOps lead, and business advisor — analytical, opinionated, interpretive.
 
+Today: ${new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}. Current FY: FY27 (Apr 2026–Mar 2027). "This month" = ${new Date().toLocaleDateString('en-IN',{month:'long',year:'numeric'})}.
+
 COMPANY — Bizom: B2B SaaS for pharma/retail distribution in India and internationally.
   Indian FY: FY26 = Apr 2025–Mar 2026 (complete). FY27 = Apr 2026–Mar 2027 (current/in-progress).
   Revenue in Indian Rupees (₹). Format ALL monetary numbers Indian-style in table cells: 88,87,729 not 8,887,729.
@@ -2410,6 +2412,11 @@ const AI_NAME_STOP = new Set([
   // common English words that match customer names starting with them
   'new','old','best','first','last','high','low','big','top','key','max','min',
   'bridge','logo','logos','trend','rate','mix','gap','run','base','core','plus',
+  // geography / direction words that match customer names ("east" → East West Seed)
+  'east','west','north','south','orient','central',
+  // finance/analytics words that match customer names ("capital" → Capital Maharaja,
+  // "grand" → Grand Oak, "excel" → Excel Energy, "union" → Milk Union)
+  'excel','grand','capital','union','mother','filter','split','segment',
   // BU / segment alias terms — users say these to mean segments, never specific customers
   'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam',
   'small','medium','market','national','international','global','regional'
@@ -2518,6 +2525,11 @@ function aiDlUrl(url, name) {
 }
 function aiSafeFilename(s) {
   return (s || 'export').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'export';
+}
+function aiUseAsTyped(q) {
+  // Disambiguation "Use as typed": inp was already cleared, restore q then send
+  document.getElementById('ai-q-input').value = q;
+  runAIQuery(true);
 }
 function aiExportCSV(cols, rows, title) {
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
@@ -2647,7 +2659,7 @@ async function runAIQuery(skipDisambig) {
         `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;white-space:normal;height:auto;padding:.3rem .65rem;text-align:left;max-width:300px;font-size:11.5px"
           onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
       ).join('') +
-        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="runAIQuery(true)">Use as typed</button>`;
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(question)})">Use as typed</button>`;
       aiAddBubble('user', escHtml(question));
       inp.value = '';
       aiAddBubble('assistant', qText + '<div style="margin-top:.45rem">' + chips + '</div>', 'question');
@@ -2659,6 +2671,8 @@ async function runAIQuery(skipDisambig) {
   aiAddBubble('user', escHtml(question));
   inp.value = '';
   AI_HISTORY.push({ role: 'user', content: question });
+  // Cap history at 20 messages (10 turns) to control context size
+  if (AI_HISTORY.length > 20) AI_HISTORY = AI_HISTORY.slice(-20);
 
   btn.disabled = true;
   btn.textContent = '…';
@@ -2709,20 +2723,35 @@ async function runAIQuery(skipDisambig) {
       if (s !== -1 && e > s) { try { blocks.push(JSON.parse(rawText.slice(s, e + 1))); textPart = ''; } catch {} }
     }
 
+    function inlineMd(l) {
+      return escHtml(l)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code style="font-family:var(--mono);font-size:.88em;background:#f0f2f5;padding:.1em .35em;border-radius:3px">$1</code>');
+    }
     function mdToHtml(t) {
-      return t
-        .split(/\n{2,}/).map(para => {
-          const lines = para.split('\n');
-          if (lines.every(l => /^[-•]\s/.test(l))) {
-            return '<ul style="margin:.3rem 0 .3rem 1.1rem;padding:0">' +
-              lines.map(l => `<li>${escHtml(l.replace(/^[-•]\s/, ''))}</li>`).join('') + '</ul>';
-          }
-          return '<p style="margin:.25rem 0">' + lines.map(l =>
-            escHtml(l)
-              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-              .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          ).join('<br>') + '</p>';
+      if (!t.trim()) return '';
+      return t.trim().split(/\n{2,}/).map(para => {
+        const lines = para.split('\n').filter(l => l !== undefined);
+        // Horizontal rule
+        if (lines.length === 1 && /^[-*_]{3,}$/.test(lines[0].trim()))
+          return '<hr style="border:none;border-top:1px solid #e5e7eb;margin:.5rem 0">';
+        // Bullet list
+        if (lines.every(l => /^[-•*]\s/.test(l)))
+          return '<ul style="margin:.3rem 0 .3rem 1.1rem;padding:0">' +
+            lines.map(l => `<li>${inlineMd(l.replace(/^[-•*]\s/, ''))}</li>`).join('') + '</ul>';
+        // Numbered list
+        if (lines.every(l => /^\d+[.)]\s/.test(l)))
+          return '<ol style="margin:.3rem 0 .3rem 1.2rem;padding:0">' +
+            lines.map(l => `<li>${inlineMd(l.replace(/^\d+[.)]\s/, ''))}</li>`).join('') + '</ol>';
+        // Mixed lines (headings, text)
+        return lines.map(l => {
+          if (/^### /.test(l)) return `<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b7280;margin:.6rem 0 .15rem">${inlineMd(l.slice(4))}</div>`;
+          if (/^## /.test(l))  return `<div style="font-size:13px;font-weight:700;color:#1f2937;margin:.5rem 0 .15rem">${inlineMd(l.slice(3))}</div>`;
+          if (/^# /.test(l))   return `<div style="font-size:14px;font-weight:700;color:#111827;margin:.5rem 0 .15rem">${inlineMd(l.slice(2))}</div>`;
+          return `<p style="margin:.2rem 0">${inlineMd(l)}</p>`;
         }).join('');
+      }).join('');
     }
 
     function renderChartInto(container, result) {
