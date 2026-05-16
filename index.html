@@ -2215,17 +2215,21 @@ PostgREST REST API rules:
   Select specific columns: ?select=col1,col2
   Order: &order=col.asc or .desc
   Limit: &limit=N
-  Headers: always include {  "apikey": ANON_KEY, "Authorization": "Bearer " + ANON_KEY }
+  Headers: always pass  cmrrHdr()  — it returns the correct apikey + Authorization headers
   Date format in filters: YYYY-MM-01  (e.g. 2026-02-01 for Feb 2026)
 
 You must return ONLY a raw JavaScript async function body (no "async function" declaration, no markdown fences).
 The function body has access to:
-  SUPABASE_URL  — string, the PostgREST base
-  SUPABASE_ANON — string, the anon key
-  f(n)          — formats a number as Indian currency string
+  SUPABASE_URL  — string, the PostgREST base URL
+  cmrrHdr()     — function that returns { apikey, Authorization } headers object
+  f(n)          — formats a number as Indian rupee string
+
+Example fetch pattern:
+  const r = await fetch(SUPABASE_URL + '/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=200', { headers: cmrrHdr() });
+  const rows = await r.json();
 
 The function must:
-1. Fetch data from Supabase REST API using fetch() with proper headers
+1. Fetch data from Supabase REST API using fetch() with cmrrHdr() headers
 2. Process the data to answer the user question
 3. Return an object:
    {
@@ -2234,7 +2238,7 @@ The function must:
      summary: 'Short text summary'         // one sentence describing the result
    }
 
-For MoM change queries, fetch two months and join on zoho_name in JavaScript.
+For MoM change queries, fetch two months separately and join on zoho_name in JavaScript.
 Always sort results meaningfully (e.g. largest change first).
 Limit to top 200 rows max.`;
 
