@@ -233,7 +233,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ai-scorecard-row{display:grid;grid-template-columns:130px 1fr;align-items:baseline;padding:.45rem 0;border-bottom:1px solid #f0f0f0;gap:10px}
 .ai-scorecard-row:last-child{border-bottom:none}
 .ai-scorecard-lbl{font-size:11.5px;color:#9ca3af;font-weight:500}
-.ai-scorecard-val{font-size:15px;font-weight:700;color:#111827;line-height:1.1}
+.ai-scorecard-val{font-size:15px;font-weight:700;color:#111827;line-height:1.1;overflow-wrap:break-word;word-break:break-word}
 .ai-scorecard-val.up{color:#059669}
 .ai-scorecard-val.down{color:#dc2626}
 .ai-scorecard-val.warn{color:#d97706}
@@ -2507,7 +2507,7 @@ function aiAddFollowups(bubble, followups) {
     btn.className = 'nret-tog2';
     btn.style.cssText = 'font-size:11px;opacity:.7;padding:.22rem .6rem;white-space:normal;height:auto;text-align:left;max-width:280px';
     btn.textContent = q;
-    btn.onclick = () => { aiSetQ(q); };
+    btn.onclick = () => { aiSetQ(q); runAIQuery(false); };
     wrap.appendChild(btn);
   });
   bubble.appendChild(wrap);
@@ -2675,21 +2675,30 @@ async function runAIQuery(skipDisambig) {
   if (AI_HISTORY.length > 20) AI_HISTORY = AI_HISTORY.slice(-20);
 
   btn.disabled = true;
+  inp.disabled = true;
   btn.textContent = '…';
   aiAddThinking();
 
   try {
     // Tool-use agentic call — edge function fetches data and returns structured JSON
-    const resp = await fetch(AI_PROXY_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...cmrrHdr() },
-      body: JSON.stringify({
-        system: AI_SYSTEM,
-        messages: AI_HISTORY,
-        supabaseUrl: SUPABASE_URL,
-        supabaseKey: SUPABASE_ANON_KEY,
-      })
-    });
+    const ac = new AbortController();
+    const abortTimer = setTimeout(() => ac.abort(), 120000);
+    let resp;
+    try {
+      resp = await fetch(AI_PROXY_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...cmrrHdr() },
+        body: JSON.stringify({
+          system: AI_SYSTEM,
+          messages: AI_HISTORY,
+          supabaseUrl: SUPABASE_URL,
+          supabaseKey: SUPABASE_ANON_KEY,
+        }),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(abortTimer);
+    }
 
     aiRemoveThinking();
 
@@ -2832,7 +2841,9 @@ async function runAIQuery(skipDisambig) {
         lbl.textContent = metric.label; row.appendChild(lbl);
         const rhs = document.createElement('div');
         const val = document.createElement('div');
-        val.className = 'ai-scorecard-val' + (metric.status ? ' ' + metric.status : '');
+        const STATUS_NORM = { positive:'up',good:'up',green:'up',negative:'down',bad:'down',red:'down',warning:'warn',yellow:'warn',amber:'warn',neutral:'' };
+        const st = metric.status ? (STATUS_NORM[metric.status.toLowerCase()] ?? metric.status) : '';
+        val.className = 'ai-scorecard-val' + (st ? ' ' + st : '');
         val.textContent = metric.value; rhs.appendChild(val);
         if (metric.sub) {
           const sub = document.createElement('div'); sub.className = 'ai-scorecard-sub';
@@ -2850,6 +2861,7 @@ async function runAIQuery(skipDisambig) {
         btn.onclick = () => {
           const open = content.classList.toggle('open');
           btn.innerHTML = open ? 'Deep Dive ▴' : 'Deep Dive ▾';
+          if (open) content.querySelectorAll('canvas').forEach(c => { const ch = Chart.getChart(c); if (ch) ch.resize(); });
         };
         bubble.appendChild(btn); bubble.appendChild(content);
         if (detailBlock.type === 'chart') renderChartInto(content, detailBlock);
@@ -2875,12 +2887,14 @@ async function runAIQuery(skipDisambig) {
 
   } catch(e) {
     aiRemoveThinking();
-    AI_HISTORY.push({ role: 'assistant', content: '(error: ' + e.message + ')' });
+    const msg = e.name === 'AbortError' ? 'Request timed out after 2 minutes. Please try again.' : e.message;
+    AI_HISTORY.push({ role: 'assistant', content: '(error: ' + msg + ')' });
     aiAddBubble('assistant',
-      `<div style="color:#9a3412">${escHtml(e.message)}</div>`
+      `<div style="color:#9a3412">${escHtml(msg)}</div>`
     );
   } finally {
     btn.disabled = false;
+    inp.disabled = false;
     btn.textContent = 'Send';
   }
 }
