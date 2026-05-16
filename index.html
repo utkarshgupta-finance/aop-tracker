@@ -1246,7 +1246,11 @@ async function loadCustMRR(zohoName) {
     cmrrRenderChart(byMonth);
     cmrrRenderTable(byMonth);
     cmrrRenderMetrics(byMonth);
-    document.getElementById('cmrr-status').textContent = '';
+    if (!Object.keys(byMonth).length) {
+      document.getElementById('cmrr-status').textContent = 'No MRR data found for this customer.';
+    } else {
+      document.getElementById('cmrr-status').textContent = '';
+    }
   } catch(e) {
     document.getElementById('cmrr-status').textContent = 'Error: ' + e.message;
   }
@@ -1383,9 +1387,13 @@ function cmrrFillMonths(byMonth) {
 }
 
 function cmrrRenderChart(byMonth) {
+  if (custChartObj) { custChartObj.destroy(); custChartObj = null; }
   const filled = cmrrFillMonths(byMonth);
   const months = Object.keys(filled).sort();
-  if (!months.length) return;
+  if (!months.length) {
+    document.getElementById('cust-chart').getContext('2d').clearRect(0, 0, 9999, 9999);
+    return;
+  }
 
   const labels = months.map(m => {
     const [y, mo] = m.split('-');
@@ -1393,7 +1401,6 @@ function cmrrRenderChart(byMonth) {
   });
   const values = months.map(m => +(filled[m] / 1e5).toFixed(2));
 
-  if (custChartObj) { custChartObj.destroy(); custChartObj = null; }
   const canvas = document.getElementById('cust-chart');
   const ctx = canvas.getContext('2d');
 
