@@ -85,10 +85,10 @@ Deno.serve(async (req) => {
 
   const msgs: { role: string; content: unknown }[] = [...messages];
 
-  // Agentic tool-use loop — up to 5 tool-call rounds, then force conclusion
-  const MAX_TOOL_ROUNDS = 5;
+  // Agentic tool-use loop — up to 4 tool-call rounds, then force conclusion by stripping tools
+  const MAX_TOOL_ROUNDS = 4;
   for (let iter = 0; iter <= MAX_TOOL_ROUNDS; iter++) {
-    // On the final iteration, switch to text-only to force an end_turn
+    // On the final iteration, strip tools so Claude MUST write a text response
     const isLastChance = iter === MAX_TOOL_ROUNDS;
     const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -103,17 +103,15 @@ Deno.serve(async (req) => {
         max_tokens: 4096,
         ...(systemBlocks ? { system: systemBlocks } : {}),
         ...(isLastChance ? {} : { tools: TOOLS }),
-        messages: isLastChance
-          ? [...msgs, { role: 'user', content: 'Please now write your final response with the analysis you have gathered so far.' }]
-          : msgs,
+        messages: msgs,  // never append an extra user turn — would create consecutive user roles (400)
       }),
     });
 
     const apiData = await apiResp.json();
     if (!apiResp.ok) return new Response(JSON.stringify(apiData), { status: apiResp.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-    // Final answer — return to browser
-    if (apiData.stop_reason === 'end_turn') {
+    // Final answer — end_turn or max_tokens both carry usable content
+    if (apiData.stop_reason === 'end_turn' || apiData.stop_reason === 'max_tokens') {
       return json(apiData);
     }
 
