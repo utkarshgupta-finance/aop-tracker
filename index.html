@@ -27,6 +27,7 @@ header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px soli
 .hsub{font-size:12px;color:rgba(255,255,255,.35);margin-top:.3rem;font-family:var(--mono)}
 #banner{background:#1a3a5c;padding:.9rem 2rem;display:flex;align-items:flex-start;gap:1rem;border-bottom:1px solid #2a5f9e}
 #banner.hidden{display:none}
+.hidden{display:none!important}
 .btext{color:#c8ddf0;font-size:12.5px;line-height:1.7;flex:1}
 .btext strong{color:#fff}
 .btext code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:11px}
@@ -1676,14 +1677,6 @@ function cmrrRenderWf(matrix, months) {
 
 function showCustMRRTab(btn) {
   showTab('cust-mrr', btn);
-  if (!_custInited) {
-    _custInited = true;
-    document.getElementById('cmrr-status').textContent = '';
-    initCustMRR().catch(e => {
-      document.getElementById('cust-input').placeholder = 'Error loading customers';
-      document.getElementById('cmrr-status').textContent = e.message;
-    });
-  }
 }
 
 /* ─── OVERALL MRR TAB ────────────────────────────────────── */
@@ -2185,6 +2178,10 @@ function nretRenderRolling(matrix, mrrMonthSet) {
 
 loadData();
 initAOPPlan();
+_custInited = true;
+initCustMRR().catch(e => {
+  document.getElementById('cust-input').placeholder = 'Error – ' + e.message;
+});
 </script>
 </body>
 </html>
