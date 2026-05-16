@@ -2277,14 +2277,14 @@ HOW TO RESPOND — write like a senior analyst talking to a CEO. Natural text fi
 
   TEXT + DATA (most analytical responses):
     Write your analysis, then embed the data block, then optionally add more commentary.
-    ```json
+    \`\`\`json
     {"type":"table","title":"Enterprise NRR: Mar 2025 vs Mar 2026","columns":["Metric","Value","Notes"],"rows":[...],"summary":"...","followups":["Q1?","Q2?","Q3?"]}
-    ```
+    \`\`\`
 
   CHART:
-    ```json
+    \`\`\`json
     {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"...","followups":["...","...","..."]}
-    ```
+    \`\`\`
 
   CLARIFICATION (only when genuinely ambiguous):
     Just ask naturally in text: "Do you mean FY26 or the calendar year 2026?"
