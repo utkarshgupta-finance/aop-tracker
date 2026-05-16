@@ -2264,10 +2264,14 @@ HOW TO COMPUTE METRICS FROM RAW DATA:
   Segment breakdown — fetch customer_mrr_lines with joins to get segment/BU, build a lookup map,
     then join to MRR data by zoho_name in your reasoning.
 
-RESPONSE FORMAT — your final message must be ONLY a valid JSON object, nothing else before or after:
+RESPONSE FORMAT — CRITICAL: your ENTIRE final message must be ONE valid JSON object. No text before it, no text after it, no explanation, no markdown wrapper.
+
   Table: {"type":"table","title":"Descriptive title","columns":["Col (₹)","Col2"],"rows":[["v1","v2"]],"summary":"Analyst insight...","followups":["Q1?","Q2?","Q3?"]}
   Chart: {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"...","followups":["...","...","..."]}
   Clarify: {"q":"One clarifying question?"}
+
+  WRONG: "Here is the analysis: {..." — do NOT add any text before the JSON.
+  RIGHT: Start your reply with { and end with }. Nothing outside the braces.
 
   Chart datasets: raw numbers only — do NOT format them. Browser formats tooltips/axes.
   Table cells: format monetary values Indian-style (88,87,729 not 8887729).
@@ -2588,21 +2592,28 @@ async function runAIQuery(skipDisambig) {
     }
 
     const data = await resp.json();
-    // Claude returns a JSON object directly (tool-use approach — no code execution needed)
-    let raw = (data.content?.find?.(b => b.type === 'text')?.text || '').trim();
-    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    // Claude may add preamble text before the JSON — extract robustly
+    const rawText = (data.content?.find?.(b => b.type === 'text')?.text || '').trim();
 
-    let result;
-    try {
-      result = JSON.parse(raw);
-    } catch {
-      throw new Error('AI returned an unreadable response. Try rephrasing your question.');
+    function extractJSON(text) {
+      // 1. JSON fenced code block
+      const block = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (block) { try { return JSON.parse(block[1].trim()); } catch {} }
+      // 2. First { ... last }
+      const s = text.indexOf('{'), e = text.lastIndexOf('}');
+      if (s !== -1 && e > s) { try { return JSON.parse(text.slice(s, e + 1)); } catch {} }
+      // 3. Raw
+      try { return JSON.parse(text.trim()); } catch {}
+      return null;
     }
 
+    const result = extractJSON(rawText);
+
     if (!result || typeof result !== 'object') {
-      const msg = 'Unexpected response format. Try rephrasing.';
-      AI_HISTORY.push({ role: 'assistant', content: msg });
-      aiAddBubble('assistant', escHtml(msg));
+      // Claude returned plain text — show it (e.g. explanation of why it can't answer)
+      const displayText = rawText || 'No response. Try rephrasing.';
+      AI_HISTORY.push({ role: 'assistant', content: displayText });
+      aiAddBubble('assistant', escHtml(displayText));
       return;
     }
 
