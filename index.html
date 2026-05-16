@@ -2231,6 +2231,18 @@ DATABASE SCHEMA:
     Best for per-customer MRR. Normalises names, merges contract + module MRR.
   bu_mrr_monthly (VIEW)       — bu_name TEXT, month_date DATE, mrr_amount NUMERIC
     BU-level totals. Use for BU comparisons and AOP vs actual.
+    EXACT bu_name values (always use these strings literally in filters, never guess):
+      "BAT BU", "India ENT BU", "India MM BU", "KAM BU", "MEA BU", "SEA BU", "SME BU", "ERTM BU"
+    User alias → exact name mapping:
+      Enterprise / ENT / India ENT → "India ENT BU"
+      Mid Market / MM / India MM   → "India MM BU"
+      SME                          → "SME BU"
+      BAT                          → "BAT BU"
+      MEA / Middle East            → "MEA BU"
+      SEA / South East Asia        → "SEA BU"
+      KAM                          → "KAM BU"
+      ERTM                         → "ERTM BU"
+    Filter with eq (exact): bu_name=eq.India ENT BU  (NOT ilike — names are fixed)
   customer_mrr_lines          — id INT, zoho_name TEXT, go_live_date DATE, churn_date DATE (null=active), segment_id INT, bu_id INT
     Customer lifecycle metadata. PostgREST join syntax: segment_master!left(name), bu_master!left(name)
   customer_mrr                — id, mrr_line_id INT, month_date DATE, mrr_amount NUMERIC (raw rows)
@@ -2238,7 +2250,7 @@ DATABASE SCHEMA:
     Per-customer product/module info. Use for cross-sell, billing analysis.
   customer_module_mrr         — id, module_line_id INT, month_date DATE, mrr_amount NUMERIC
   aop_targets                 — bu_id INT, fy_id INT, month_date DATE, mrr_aop NUMERIC, nrr_aop NUMERIC
-    Plan targets per BU. Join: bu_master!left(name)
+    Plan targets per BU. Join: bu_master!left(name). Filter joined name using same BU alias mapping above.
   deal_snapshots              — snapshot_date DATE, deal_name TEXT, account_name TEXT, closing_month DATE, stage TEXT, probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id INT
     CRM pipeline. Always fetch latest snapshot_date first. Join: bu_master!left(name)
   segment_master              — id INT, name TEXT
@@ -2494,7 +2506,10 @@ const AI_NAME_STOP = new Set([
   // retention / pipeline / analytics words
   'nrr','grr','arr','mrr','retention','churn','churned','pipeline','deals','deal',
   'stage','target','budget','forecast','actuals','segment','cohort','aop','fy26',
-  'fy27','net','gross','expansion','contraction','active','inactive','live'
+  'fy27','net','gross','expansion','contraction','active','inactive','live',
+  // common English words that match customer names starting with them
+  'new','old','best','first','last','high','low','big','top','key','max','min',
+  'bridge','logo','logos','trend','rate','mix','gap','run','base','core','plus'
 ]);
 
 // Words that, when they follow a token, mark that token as a BU/segment identifier
