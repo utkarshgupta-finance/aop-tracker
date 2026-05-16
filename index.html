@@ -355,16 +355,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <button class="rbtn" id="ai-q-btn" onclick="runAIQuery()" style="padding:.6rem 1.2rem;font-size:12.5px">Ask</button>
           </div>
         </div>
-        <div style="min-width:200px">
-          <div class="flabel" style="margin-bottom:.35rem">Anthropic API Key</div>
-          <div style="display:flex;gap:.4rem">
-            <input type="password" id="ai-api-key" class="cust-input"
-              style="flex:1;padding:.5rem .7rem;font-size:12px;font-family:var(--mono)"
-              placeholder="sk-ant-…"
-              value=""
-              oninput="localStorage.setItem('ai_api_key',this.value)">
-          </div>
-        </div>
       </div>
       <div id="ai-q-examples" style="display:flex;gap:.5rem;flex-wrap:wrap">
         <span class="flabel" style="align-self:center">Try:</span>
@@ -1706,8 +1696,6 @@ function showCustMRRTab(btn) {
 
 function showAIQueryTab(btn) {
   showTab('ai-query', btn);
-  const stored = localStorage.getItem('ai_api_key') || '';
-  document.getElementById('ai-api-key').value = stored;
 }
 
 /* ─── OVERALL MRR TAB ────────────────────────────────────── */
@@ -2227,17 +2215,21 @@ PostgREST REST API rules:
   Select specific columns: ?select=col1,col2
   Order: &order=col.asc or .desc
   Limit: &limit=N
-  Headers: always include {  "apikey": ANON_KEY, "Authorization": "Bearer " + ANON_KEY }
+  Headers: always pass  cmrrHdr()  — it returns the correct apikey + Authorization headers
   Date format in filters: YYYY-MM-01  (e.g. 2026-02-01 for Feb 2026)
 
 You must return ONLY a raw JavaScript async function body (no "async function" declaration, no markdown fences).
 The function body has access to:
-  SUPABASE_URL  — string, the PostgREST base
-  SUPABASE_ANON — string, the anon key
-  f(n)          — formats a number as Indian currency string
+  SUPABASE_URL  — string, the PostgREST base URL
+  cmrrHdr()     — function that returns { apikey, Authorization } headers object
+  f(n)          — formats a number as Indian rupee string
+
+Example fetch pattern:
+  const r = await fetch(SUPABASE_URL + '/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=200', { headers: cmrrHdr() });
+  const rows = await r.json();
 
 The function must:
-1. Fetch data from Supabase REST API using fetch() with proper headers
+1. Fetch data from Supabase REST API using fetch() with cmrrHdr() headers
 2. Process the data to answer the user question
 3. Return an object:
    {
@@ -2246,7 +2238,7 @@ The function must:
      summary: 'Short text summary'         // one sentence describing the result
    }
 
-For MoM change queries, fetch two months and join on zoho_name in JavaScript.
+For MoM change queries, fetch two months separately and join on zoho_name in JavaScript.
 Always sort results meaningfully (e.g. largest change first).
 Limit to top 200 rows max.`;
 
@@ -2255,16 +2247,11 @@ function aiSetQ(q) {
   document.getElementById('ai-q-input').focus();
 }
 
+const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
+
 async function runAIQuery() {
   const question = document.getElementById('ai-q-input').value.trim();
   if (!question) return;
-
-  const apiKey = localStorage.getItem('ai_api_key') || document.getElementById('ai-api-key').value.trim();
-  if (!apiKey) {
-    document.getElementById('ai-q-status').textContent = 'Enter your Anthropic API key first.';
-    return;
-  }
-  localStorage.setItem('ai_api_key', apiKey);
 
   const status = document.getElementById('ai-q-status');
   const resultEl = document.getElementById('ai-q-result');
@@ -2275,25 +2262,19 @@ async function runAIQuery() {
   resultEl.innerHTML = '';
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch(AI_PROXY_URL, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1200,
-        system: AI_SYSTEM,
-        messages: [{ role: 'user', content: question }]
-      })
+      headers: { 'content-type': 'application/json', ...cmrrHdr() },
+      body: JSON.stringify({ system: AI_SYSTEM, question })
     });
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'API error ' + resp.status);
+      const msg = err.error?.message || err.error || 'Edge function error ' + resp.status;
+      if (resp.status === 500 && String(msg).includes('ANTHROPIC_API_KEY')) {
+        throw new Error('ANTHROPIC_API_KEY not set — add it in Supabase → Project Settings → Edge Functions → Secrets');
+      }
+      throw new Error(msg);
     }
 
     const data = await resp.json();
@@ -2303,18 +2284,9 @@ async function runAIQuery() {
 
     status.textContent = 'Running query…';
 
-    const SUPABASE_ANON = SUPABASE_URL
-      ? document.cookie // not used — pass via closure
-      : '';
-
     const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
-    const fn = new AsyncFn('SUPABASE_URL', 'SUPABASE_ANON', 'f', 'cmrrHdr', code);
-    const anonKey = (() => {
-      // Extract anon key from existing cmrrHdr call
-      const h = cmrrHdr();
-      return h['apikey'] || '';
-    })();
-    const result = await fn(SUPABASE_URL, anonKey, f, cmrrHdr);
+    const fn = new AsyncFn('SUPABASE_URL', 'f', 'cmrrHdr', code);
+    const result = await fn(SUPABASE_URL, f, cmrrHdr);
 
     if (!result || !result.columns || !result.rows) {
       throw new Error('Claude returned an unexpected format. Try rephrasing your question.');
