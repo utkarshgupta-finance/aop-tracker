@@ -7,6 +7,9 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2262,7 +2265,7 @@ WHEN TO ASK:
 RESPONSE FORMAT — one of:
   A) {"q":"..."}  — clarification
   B) Raw JS async body only. No function keyword, no markdown, no explanatory text.
-     Tables: return { columns:[...], rows:[[...]], summary:'...', followups:['...','...','...'] }
+     Tables: return { title:'Short descriptive title', columns:[...], rows:[[...]], summary:'...', followups:['...','...','...'] }
      Charts: return { type:'chart', chartType:'line'|'bar', title:'...', labels:[...], datasets:[{label:'...',data:[...]}], summary:'...', followups:['...','...','...'] }
   Always include followups: 3 smart next questions a CEO/CFO/CRO would naturally ask next.
 
@@ -2282,6 +2285,14 @@ CODE RULES:
 COLUMN NAMING — readable without the question:
   "MRR – Jan 2026 (₹)" not "MRR"; "MoM Growth (%)" not "Δ%"; "Customer Name" not "Name"
   Bridge: "Opening (₹)", "New Logo (₹)", "Expansion (₹)", "Contraction (₹)", "Churn (₹)", "Closing (₹)"
+
+COLUMN ENRICHMENT — always include Segment and BU in customer-level tables:
+  Any table that lists individual customers must include their Segment and BU as columns.
+  (Exception: when the question is about a specific named customer and segment/BU is not the focus.)
+  Use segMap (see Critical Pattern ②) to join this data.
+  Default column order: Customer Name, Segment, BU, [data columns...]
+  This makes every table independently readable without re-reading the question.
+  Also include Go-Live Date when tenure or churn context is relevant.
 
 SUMMARY — write like a senior analyst, not a script. Interpret the numbers:
   Good: "NRR is 94% — below par. 3 SME churns cost ₹6.2L; Enterprise expansion of ₹4.1L partially offset this."
@@ -2635,6 +2646,112 @@ function aiAddFollowups(bubble, followups) {
   bubble.appendChild(wrap);
 }
 
+/* ── AI Export helpers ───────────────────────────────────────── */
+function aiDlBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function aiDlUrl(url, name) {
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+}
+function aiSafeFilename(s) {
+  return (s || 'export').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'export';
+}
+function aiExportCSV(cols, rows, title) {
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const lines = [cols.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))];
+  aiDlBlob(new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), aiSafeFilename(title) + '.csv');
+}
+function aiExportXLSX(cols, rows, title) {
+  const ws = XLSX.utils.aoa_to_sheet([cols, ...rows]);
+  ws['!cols'] = cols.map((c, i) => ({ wch: Math.min(Math.max(c.length, ...rows.map(r => String(r[i] ?? '').length)) + 2, 40) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  XLSX.writeFile(wb, aiSafeFilename(title) + '.xlsx');
+}
+function aiExportTablePDF(cols, rows, title) {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: cols.length > 5 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    if (title) { doc.setFontSize(12); doc.text(title, 36, 32); }
+    doc.autoTable({
+      head: [cols], body: rows.map(r => r.map(v => v ?? '—')),
+      startY: title ? 46 : 28,
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [15, 35, 64], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [244, 246, 249] },
+      tableWidth: pw - 72, margin: { left: 36, right: 36 },
+    });
+    doc.save(aiSafeFilename(title) + '.pdf');
+  } catch(e) { alert('PDF library not ready — please wait a moment and try again.'); }
+}
+function aiExportTableDOC(cols, rows, title) {
+  const th = cols.map(c => `<th style="border:1px solid #b0b8c9;padding:6px 10px;background:#0f2340;color:#fff;font-size:12px;font-weight:600">${c}</th>`).join('');
+  const tb = rows.map((r, i) => `<tr style="background:${i % 2 ? '#f4f6f9' : '#fff'}">${r.map(v => `<td style="border:1px solid #dde2ea;padding:5px 10px;font-size:12px">${v ?? '—'}</td>`).join('')}</tr>`).join('');
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${title || 'Export'}</title></head><body><h2 style="font-family:Arial;color:#0f2340;margin-bottom:12px">${title || 'Export'}</h2><table style="border-collapse:collapse;font-family:Arial"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table></body></html>`;
+  aiDlBlob(new Blob(['﻿' + html], { type: 'application/msword;charset=utf-8' }), aiSafeFilename(title) + '.doc');
+}
+async function aiExportTablePNG(element, title) {
+  try {
+    const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    aiDlUrl(canvas.toDataURL('image/png'), aiSafeFilename(title) + '.png');
+  } catch(e) { alert('PNG library not ready — please wait a moment and try again.'); }
+}
+function aiExportChartPNG(canvas, title) {
+  aiDlUrl(canvas.toDataURL('image/png'), aiSafeFilename(title) + '.png');
+}
+function aiExportChartJPG(canvas, title) {
+  const off = document.createElement('canvas');
+  off.width = canvas.width; off.height = canvas.height;
+  const ctx = off.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, off.width, off.height);
+  ctx.drawImage(canvas, 0, 0);
+  aiDlUrl(off.toDataURL('image/jpeg', 0.92), aiSafeFilename(title) + '.jpg');
+}
+function aiExportChartPDF(canvas, title) {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+    if (title) { doc.setFontSize(13); doc.text(title, 36, 32); }
+    const imgH = Math.round((canvas.height / canvas.width) * (pw - 72));
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 36, title ? 46 : 28, pw - 72, Math.min(imgH, ph - 72));
+    doc.save(aiSafeFilename(title) + '.pdf');
+  } catch(e) { alert('PDF library not ready — please wait a moment and try again.'); }
+}
+function aiAddExportBar(bubble, { type, cols, rows, chartCanvas, title }) {
+  const bar = document.createElement('div');
+  bar.style.cssText = 'margin-top:.5rem;display:flex;gap:.28rem;flex-wrap:wrap;align-items:center;border-top:1px solid var(--brd);padding-top:.42rem';
+  const lbl = document.createElement('span');
+  lbl.style.cssText = 'font-size:10px;color:var(--txt3);margin-right:.1rem';
+  lbl.textContent = 'Export:';
+  bar.appendChild(lbl);
+  const btn = (label, fn) => {
+    const b = document.createElement('button');
+    b.className = 'nret-tog2';
+    b.style.cssText = 'font-size:10px;padding:.16rem .5rem;opacity:.72;letter-spacing:.02em';
+    b.textContent = label;
+    b.onclick = fn;
+    bar.appendChild(b);
+  };
+  if (type === 'table') {
+    btn('CSV',  () => aiExportCSV(cols, rows, title));
+    btn('XLSX', () => aiExportXLSX(cols, rows, title));
+    btn('PDF',  () => aiExportTablePDF(cols, rows, title));
+    btn('DOC',  () => aiExportTableDOC(cols, rows, title));
+    btn('PNG',  () => aiExportTablePNG(bubble, title));
+  } else {
+    btn('PNG',  () => aiExportChartPNG(chartCanvas, title));
+    btn('JPG',  () => aiExportChartJPG(chartCanvas, title));
+    btn('PDF',  () => aiExportChartPDF(chartCanvas, title));
+    if (cols && rows) btn('XLSX', () => aiExportXLSX(cols, rows, title));
+  }
+  bubble.appendChild(bar);
+}
+
 function aiRenderTable(cols, rows) {
   if (!rows.length) return '<em style="color:var(--txt3);font-size:12px">No results found.</em>';
   let h = `<div class="ai-tbl-wrap"><table style="font-size:11.5px"><thead><tr>`;
@@ -2803,6 +2920,9 @@ async function runAIQuery(skipDisambig) {
       }
 
       aiAddFollowups(bubble, result.followups);
+      const chartCols = ['Label', ...(result.datasets || []).map(ds => ds.label)];
+      const chartRows = (result.labels || []).map((lbl, i) => [lbl, ...(result.datasets || []).map(ds => ds.data[i] ?? '')]);
+      aiAddExportBar(bubble, { type: 'chart', chartCanvas: canvas, title: result.title, cols: chartCols, rows: chartRows });
       AI_HISTORY.push({ role: 'assistant', content: result.summary || `Chart: ${result.title}` });
       return;
     }
@@ -2822,6 +2942,7 @@ async function runAIQuery(skipDisambig) {
     AI_HISTORY.push({ role: 'assistant', content: result.summary || `Returned ${rowCount} rows.` });
     const tblBubble = aiAddBubble('assistant', tableHtml + summaryHtml);
     aiAddFollowups(tblBubble, result.followups);
+    aiAddExportBar(tblBubble, { type: 'table', cols: result.columns, rows: result.rows, title: result.title || result.summary?.slice(0, 60) });
 
   } catch(e) {
     aiRemoveThinking();
