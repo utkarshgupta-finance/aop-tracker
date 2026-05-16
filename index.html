@@ -2394,7 +2394,8 @@ const AI_NAME_STOP = new Set([
   'month','year','mrr','top','all','any','those','some','much','many','each',
   'private','limited','india','pvt','ltd','group','company','corp','inc','data',
   'revenue','growth','churn','churned','active','increase','decrease','change',
-  'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
+  'drop','drops','rise','rises','fell','fall','falls','wise','percent','percentage',
+  'feb','jan','mar','apr','may','jun','jul','aug','sep',
   'oct','nov','dec','2024','2025','2026','2027','quarterly','annual','fy26','fy27',
   'its','not','but','are','has','was','had','did','can','may','use','get','set',
   'put','run','see','one','two','out','off','fy2','fy3','every','give',
@@ -2441,9 +2442,9 @@ function aiResolveNames(question) {
   const result = new Map();
   tokens.forEach((tok, idx) => {
     if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
-    // Word-boundary match: token must appear at start of a word in the customer name,
-    // not buried mid-word. Prevents "sme" matching "Cosmetics" (co·sme·tics).
-    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    // Word-boundary match: token must be a complete word in the customer name (bounded
+    // on both sides). Prevents "drops" matching "Dropshop" or "top" matching "Topline".
+    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-zA-Z0-9]|$)', 'i');
     const hits = CUST_NAMES.filter(n => re.test(n));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
