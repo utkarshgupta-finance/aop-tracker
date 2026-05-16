@@ -2203,62 +2203,119 @@ initCustMRR().catch(e => {
 });
 
 /* ─── AI QUERY ───────────────────────────────────────────── */
+const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
+
 const AI_SYSTEM = `You are a Supabase PostgREST query generator for Bizom's customer revenue database.
 
+CRITICAL RULES — violating any of these will break the system:
+1. Return ONLY raw JavaScript code — zero prose, zero explanation, zero markdown fences.
+2. The code is injected directly into an async function body and eval'd. Any non-JS text = SyntaxError.
+3. If you cannot answer with a DB query, write: throw new Error("Cannot answer: <one short reason>");
+
 Schema:
-  customer_mrr_unified  — zoho_name TEXT, month_date DATE (stored as YYYY-MM-01), mrr_amount NUMERIC
+  customer_mrr_unified  — zoho_name TEXT, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
   customer_mrr_lines    — id INT, zoho_name TEXT, go_live_date DATE, churn_date DATE
 
-PostgREST REST API rules:
-  Base URL: SUPABASE_URL + '/rest/v1/' + table
-  Filters appended as query params: ?col=eq.value, gt.value, gte.value, lt.value, lte.value, like.pat, is.null, not.is.null
-  Select specific columns: ?select=col1,col2
-  Order: &order=col.asc or .desc
-  Limit: &limit=N
-  Headers: always pass  cmrrHdr()  — it returns the correct apikey + Authorization headers
-  Date format in filters: YYYY-MM-01  (e.g. 2026-02-01 for Feb 2026)
+PostgREST rules:
+  URL = SUPABASE_URL + '/rest/v1/' + table + '?select=col1,col2&col=op.value&order=col.desc&limit=N'
+  Filter ops: eq  neq  lt  lte  gt  gte  like  ilike  is.null  not.is.null
+  Always use { headers: cmrrHdr() } in every fetch call
+  Dates: YYYY-MM-01 format (e.g. 2026-02-01 for Feb 2026)
 
-You must return ONLY a raw JavaScript async function body (no "async function" declaration, no markdown fences).
-The function body has access to:
-  SUPABASE_URL  — string, the PostgREST base URL
-  cmrrHdr()     — function that returns { apikey, Authorization } headers object
-  f(n)          — formats a number as Indian rupee string
+Available in scope:
+  SUPABASE_URL  — string
+  cmrrHdr()     — returns correct auth headers
+  f(n)          — formats number as ₹ Indian string
 
-Example fetch pattern:
-  const r = await fetch(SUPABASE_URL + '/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=200', { headers: cmrrHdr() });
-  const rows = await r.json();
+Return format (last expression or explicit return):
+  return { columns: ['Col A', ...], rows: [[val, ...], ...], summary: 'One sentence.' };
 
-The function must:
-1. Fetch data from Supabase REST API using fetch() with cmrrHdr() headers
-2. Process the data to answer the user question
-3. Return an object:
-   {
-     columns: ['Col A', 'Col B', ...],   // table header labels
-     rows: [[val, val, ...], ...],         // data rows (values as strings/numbers)
-     summary: 'Short text summary'         // one sentence describing the result
-   }
+Example — top 10 by MRR Feb 2026:
+const r = await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
+const d = await r.json();
+return { columns:['Customer','MRR'], rows:d.map(x=>[x.zoho_name, f(x.mrr_amount)]), summary:\`Top 10 customers by MRR in Feb 2026.\` };
 
-For MoM change queries, fetch two months separately and join on zoho_name in JavaScript.
-Always sort results meaningfully (e.g. largest change first).
-Limit to top 200 rows max.`;
+Example — MoM change Feb vs Jan 2026:
+const [rFeb,rJan] = await Promise.all([
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-01-01&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+]);
+const janMap = Object.fromEntries(rJan.map(x=>[x.zoho_name,+x.mrr_amount]));
+const results = rFeb.filter(x=>janMap[x.zoho_name]>0).map(x=>({name:x.zoho_name,feb:+x.mrr_amount,jan:janMap[x.zoho_name],chg:(+x.mrr_amount/janMap[x.zoho_name]-1)*100})).filter(x=>x.chg>=3).sort((a,b)=>b.chg-a.chg);
+return { columns:['Customer','Jan MRR','Feb MRR','MoM %'], rows:results.map(x=>[x.name,f(x.jan),f(x.feb),x.chg.toFixed(1)+'%']), summary:\`\${results.length} customers grew MRR ≥3% in Feb 2026.\` };`;
+
+/* ── Customer name resolver ─────────────────────────────────── */
+const AI_NAME_STOP = new Set([
+  'the','and','for','with','that','this','from','have','more','than','show','list',
+  'customers','whose','their','last','which','give','find','what','when','where',
+  'month','year','mrr','top','all','any','those','some','much','many','each',
+  'private','limited','india','pvt','ltd','group','company','corp','inc','data',
+  'revenue','growth','churn','churned','active','increase','decrease','change',
+  'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
+  'oct','nov','dec','2025','2026','2027','quarterly','annual','fy26','fy27'
+]);
+
+function aiResolveNames(question) {
+  if (!CUST_NAMES.length) return new Map();
+  const tokens = question.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= 4 && !AI_NAME_STOP.has(t));
+  const result = new Map();
+  for (const tok of tokens) {
+    const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
+    // Only flag if ambiguous (no exact full-name match but partial hits exist)
+    if (hits.length >= 1 && hits.length <= 10) {
+      const exact = hits.find(n => n.toLowerCase() === tok);
+      if (!exact) result.set(tok, hits);
+    }
+  }
+  return result; // Map<partialToken, matchingCustomerNames[]>
+}
 
 function aiSetQ(q) {
   document.getElementById('ai-q-input').value = q;
   document.getElementById('ai-q-input').focus();
 }
 
-const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
+function aiPickName(resolvedName, originalToken, originalQ) {
+  const newQ = originalQ.replace(new RegExp(originalToken, 'gi'), resolvedName);
+  document.getElementById('ai-q-input').value = newQ;
+  runAIQuery(true);
+}
 
-async function runAIQuery() {
+/* ── Main query runner ──────────────────────────────────────── */
+async function runAIQuery(skipDisambig) {
   const question = document.getElementById('ai-q-input').value.trim();
   if (!question) return;
 
-  const status = document.getElementById('ai-q-status');
+  const status  = document.getElementById('ai-q-status');
   const resultEl = document.getElementById('ai-q-result');
-  const btn = document.getElementById('ai-q-btn');
+  const btn     = document.getElementById('ai-q-btn');
+
+  // ── Step 1: resolve ambiguous customer names ──
+  if (!skipDisambig) {
+    const nameMap = aiResolveNames(question);
+    if (nameMap.size > 0) {
+      const [tok, names] = [...nameMap.entries()][0];
+      status.textContent = names.length === 1
+        ? `Did you mean "${names[0]}"?`
+        : `Found ${names.length} customers matching "${tok}" — select one:`;
+      resultEl.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.6rem 0">` +
+        names.map(n =>
+          `<button class="nret-tog2" style="white-space:normal;height:auto;padding:.35rem .75rem;text-align:left;max-width:320px"
+            onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
+        ).join('') +
+        `<button class="nret-tog2" onclick="runAIQuery(true)" style="opacity:.6">Use as typed</button>` +
+        `</div>`;
+      return;
+    }
+  }
+
+  // ── Step 2: call Claude via edge function ──
   btn.disabled = true;
   btn.textContent = 'Thinking…';
-  status.textContent = 'Asking Claude to generate a query…';
+  status.textContent = 'Asking Claude…';
   resultEl.innerHTML = '';
 
   try {
@@ -2278,29 +2335,55 @@ async function runAIQuery() {
     }
 
     const data = await resp.json();
-    let code = data.content[0]?.text || '';
-    // Strip any accidental markdown fences
-    code = code.replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
+    let code = (data.content?.[0]?.text || '').trim();
+    // Strip accidental markdown fences
+    code = code.replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
 
+    // ── Step 3: execute generated code ──
     status.textContent = 'Running query…';
-
-    const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
-    const fn = new AsyncFn('SUPABASE_URL', 'f', 'cmrrHdr', code);
-    const result = await fn(SUPABASE_URL, f, cmrrHdr);
+    let result;
+    try {
+      const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+      const fn = new AsyncFn('SUPABASE_URL', 'f', 'cmrrHdr', code);
+      result = await fn(SUPABASE_URL, f, cmrrHdr);
+    } catch(execErr) {
+      // Syntax or runtime error in generated code → ask Claude to fix
+      aiShowRetry(
+        execErr instanceof SyntaxError
+          ? 'Claude generated invalid code. Try rephrasing your question more specifically.'
+          : 'Query failed: ' + execErr.message,
+        question
+      );
+      return;
+    }
 
     if (!result || !result.columns || !result.rows) {
-      throw new Error('Claude returned an unexpected format. Try rephrasing your question.');
+      aiShowRetry('Claude returned an unexpected format. Try rephrasing.', question);
+      return;
     }
 
     status.textContent = result.summary || '';
     resultEl.innerHTML = aiRenderTable(result.columns, result.rows);
 
   } catch(e) {
-    status.textContent = 'Error: ' + e.message;
+    aiShowRetry(e.message, question);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Ask';
   }
+}
+
+function aiShowRetry(msg, originalQ) {
+  const status  = document.getElementById('ai-q-status');
+  const resultEl = document.getElementById('ai-q-result');
+  status.textContent = '';
+  resultEl.innerHTML =
+    `<div style="padding:.9rem 1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;font-size:12.5px;font-family:var(--mono);display:flex;flex-direction:column;gap:.65rem">` +
+    `<div>${msg}</div>` +
+    `<div style="display:flex;gap:.5rem;flex-wrap:wrap">` +
+    `<button class="nret-tog2" onclick="runAIQuery(true)">Retry same question</button>` +
+    `<button class="nret-tog2" onclick="document.getElementById('ai-q-input').focus()">Rephrase</button>` +
+    `</div></div>`;
 }
 
 function aiRenderTable(cols, rows) {
