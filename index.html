@@ -366,6 +366,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           placeholder="Ask anything — e.g. VST MRR in Jan, or top 10 customers last month"
           onkeydown="if(event.key==='Enter')runAIQuery()">
         <button class="rbtn" id="ai-q-btn" onclick="runAIQuery()" style="padding:.6rem 1.2rem;font-size:12.5px">Send</button>
+        <button class="rbtn" onclick="aiDownloadChat()" style="padding:.6rem .9rem;font-size:12px;opacity:.6" title="Download conversation as .txt">⬇</button>
         <button class="rbtn" onclick="aiClearChat()" style="padding:.6rem .9rem;font-size:12px;opacity:.6" title="Clear chat">✕</button>
       </div>
       <div style="display:flex;gap:.45rem;flex-wrap:wrap">
@@ -2218,6 +2219,7 @@ initCustMRR().catch(e => {
 const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
 let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
 let AI_CHARTS = []; // Chart.js instances to destroy on clear
+let AI_ACTIVE_AC = null; // AbortController for in-flight request — allows X to cancel it
 
 const AI_SYSTEM = `You are a senior revenue analytics assistant embedded in Bizom's dashboard. You have a tool to query the live database. Respond like an FP&A analyst, RevOps lead, and business advisor — analytical, opinionated, interpretive.
 
@@ -2986,10 +2988,43 @@ function aiSetQ(q) {
 }
 
 function aiClearChat() {
+  // Abort any in-flight request so the input doesn't stay frozen
+  if (AI_ACTIVE_AC) { AI_ACTIVE_AC.abort(); AI_ACTIVE_AC = null; }
   AI_HISTORY = [];
   AI_CHARTS.forEach(c => { try { c.destroy(); } catch {} });
   AI_CHARTS = [];
   document.getElementById('ai-chat').innerHTML = '';
+  // Re-enable input regardless of what state the async runner left it in
+  const btn = document.getElementById('ai-q-btn');
+  const inp = document.getElementById('ai-q-input');
+  btn.disabled = false; btn.textContent = 'Send';
+  inp.disabled = false; inp.focus();
+}
+
+function aiDownloadChat() {
+  const bubbles = document.getElementById('ai-chat').querySelectorAll('.ai-bubble');
+  if (!bubbles.length) return;
+  const lines = [
+    'Bizom AI — Conversation Export',
+    `Exported: ${new Date().toLocaleString('en-IN')}`,
+    '─'.repeat(60), ''
+  ];
+  bubbles.forEach(b => {
+    if (b.classList.contains('ai-thinking')) return;
+    const isUser = b.classList.contains('user');
+    const text = (b.innerText || b.textContent || '').trim();
+    if (!text) return;
+    lines.push(isUser ? 'YOU:' : 'AI:');
+    lines.push(text);
+    lines.push('');
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bizom-ai-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function aiAddBubble(role, html, extraClass) {
@@ -3209,6 +3244,7 @@ async function runAIQuery(skipDisambig) {
   try {
     // Tool-use agentic call — edge function fetches data and returns structured JSON
     const ac = new AbortController();
+    AI_ACTIVE_AC = ac;
     const abortTimer = setTimeout(() => ac.abort(), 120000);
     let resp;
     try {
@@ -3420,6 +3456,7 @@ async function runAIQuery(skipDisambig) {
       `<div style="color:#9a3412">${escHtml(msg)}</div>`
     );
   } finally {
+    AI_ACTIVE_AC = null;
     btn.disabled = false;
     inp.disabled = false;
     btn.textContent = 'Send';
