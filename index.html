@@ -1112,42 +1112,39 @@ function cmrrHdr() {
 
 async function initCustMRR() {
   const inp = document.getElementById('cust-input');
-  const fetchPage = async (offset) => {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-      `?select=id,zoho_name,go_live_date,churn_date,segment_master!left(name),bu_master!left(name)` +
-      `&order=zoho_name.asc,id.asc&limit=1000&offset=${offset}`,
-      { headers: cmrrHdr() }
-    );
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' – ' + await r.text());
-    return r.json();
-  };
-  // Load page 0 first so the input enables immediately; page 1 in background
-  const p1 = await fetchPage(0);
-  CUST_LINES = p1;
+  const PAGE = 1000;
+  let offset = 0;
+  CUST_LINES = [];
+  try {
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
+        `?select=id,zoho_name,go_live_date,churn_date,segment_master!left(name),bu_master!left(name)` +
+        `&order=id&limit=${PAGE}&offset=${offset}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const page = await r.json();
+      CUST_LINES = CUST_LINES.concat(page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
+  } catch(e) {
+    inp.placeholder = 'Error – ' + e.message;
+    return;
+  }
   const seen = new Set();
-  for (const row of p1) {
+  for (const row of CUST_LINES) {
     if (row.zoho_name && !seen.has(row.zoho_name)) {
-      seen.add(row.zoho_name); CUST_NAMES.push(row.zoho_name);
+      seen.add(row.zoho_name);
+      CUST_NAMES.push(row.zoho_name);
     }
   }
   inp.disabled = false;
   inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
-
-  // Page 2 + global end month in background
-  Promise.all([
-    fetchPage(1000),
-    fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() }).then(r => r.json()).catch(() => [])
-  ]).then(([p2, maxR]) => {
-    for (const row of p2) {
-      if (row.zoho_name && !seen.has(row.zoho_name)) {
-        seen.add(row.zoho_name); CUST_NAMES.push(row.zoho_name);
-        CUST_LINES.push(row);
-      }
-    }
-    inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
-    if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7);
-  }).catch(() => {});
+  // Fetch global end month in background
+  fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() })
+    .then(r => r.json()).then(d => { if (d && d[0]) CMRR_GLOBAL_END = d[0].month_date.slice(0, 7); }).catch(() => {});
 }
 
 function cmrrFilter(q) {
