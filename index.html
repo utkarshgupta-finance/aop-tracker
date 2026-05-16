@@ -2247,22 +2247,40 @@ METRIC DEFINITIONS — compute these precisely from raw data you fetch:
 
 DATABASE SCHEMA:
   customer_mrr_unified  — zoho_name, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
-    Best view for per-customer MRR. Already merges contract + module MRR. Use for all customer-level analysis.
+    Per-customer MRR. Merges contract + module MRR. Use for all customer-level and NRR analysis.
+    Covers Apr 2025–present with 617 customers; pre-Apr 2025 has ~458 customers (see DATA QUIRKS).
+    Totals match bu_mrr_monthly exactly — both are valid for aggregation.
   bu_mrr_monthly        — bu_name TEXT, month_date DATE, mrr_amount NUMERIC
-    Pre-aggregated BU totals. ALWAYS use this for BU-level MRR — it includes BOTH contract AND module MRR.
-    NEVER aggregate customer_mrr_unified by BU — module MRR is absent there, giving ~1/10th true values for some BUs.
+    Pre-aggregated BU totals. Use for point-in-time BU MRR snapshots and trends.
+    IMPORTANT: Do NOT use for NRR — it is non-cohorted. Contains "Unknown BU" rows (always ₹0, exclude).
   customer_mrr_lines    — zoho_name, go_live_date DATE, churn_date DATE (null=active), segment_id, bu_id
     Lifecycle metadata. Joins: segment_master!left(name), bu_master!left(name)
   customer_module_lines — zoho_name, services, workflow, service_type, status, billing_cycle
   aop_targets           — bu_id, fy_id, month_date, mrr_aop, nrr_aop  [Join: bu_master!left(name)]
-  deal_snapshots        — snapshot_date, deal_name, account_name, closing_month, stage, probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
-    [Join: bu_master!left(name). Always fetch latest snapshot_date first.]
+  deal_snapshots        — snapshot_date DATE, deal_name, account_name, closing_month DATE, stage,
+                          probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
+    [Join: bu_master!left(name). Daily snapshots — ALWAYS filter to one specific snapshot_date or you get
+     duplicates across days. Mandatory 2-step: (1) fetch max snapshot_date, (2) filter to that date.]
   segment_master        — id INT, name TEXT
   bu_master             — id INT, name TEXT, code TEXT
 
+DATA QUIRKS — know these or your answers will be wrong:
+  1. Apr 2025 customer count jump: customer_mrr_unified has ~458 customers pre-Apr-2025, then 617 from
+     Apr 2025 onwards. The extra 159 are module-line customers newly added to the unified view. This is
+     a data migration event, not real new business. Consequence: FY26 NRR (Apr 2025 → Mar 2026) uses a
+     clean 617-customer cohort. Cross-year NRR (e.g. Mar 2025 → Mar 2026) uses 458-customer base —
+     valid but note the methodology difference.
+  2. ERTM BU anomaly: bu_mrr_monthly shows ERTM BU dropped from ₹1.4L (Mar 2025) to ₹1,194 (Apr 2025).
+     This is a reclassification artifact, not a business event. ERTM BU NRR calculations are unreliable —
+     flag this clearly if asked. Do not present 4956% "NRR" as meaningful.
+  3. Naive BU NRR using bu_mrr_monthly gives WRONG answers: e.g. SME BU naive = 95.1% vs correct
+     cohort NRR = 80.5% (a 14.6 pp error). Always use the cohort method with customer_mrr_unified.
+  4. Reference NRR benchmarks (validated against DB): Company FY26 NRR (Apr25→Mar26) ≈ 117%.
+     Mar25→Mar26 NRR ≈ 111.9% (458-customer cohort, base ₹6.38Cr, end ₹7.15Cr).
+
 USING THE TOOL — query_database(table, params):
-  LIMIT: Use at most 3 tool calls per response. Plan your queries upfront — fetch everything you need in 1-3 calls, then write your final answer immediately. Do NOT loop endlessly.
-  1. ALWAYS start by fetching the latest available month first when question involves "current/latest/this month":
+  LIMIT: Use at most 3 tool calls per response. Plan queries upfront — fetch everything in 1-3 calls, then write your final answer. Do NOT loop.
+  1. ALWAYS fetch latest available month first when question involves "current/latest/this month":
      table=customer_mrr_unified, params=select=month_date&order=month_date.desc&limit=1
   2. BU filter: bu_name=eq.India ENT BU  (exact match — never ilike for BU names)
      Aliases: Enterprise/ENT → India ENT BU | Mid Market/MM → India MM BU | SME → SME BU
@@ -2272,18 +2290,26 @@ USING THE TOOL — query_database(table, params):
      Segment exact names: 'SME' | 'Mid_Market' | 'Enterprise' | 'ERTM India'
   5. Date ranges: month_date=gte.2025-04-01&month_date=lte.2026-03-01
   6. Always include limit (max 3000). For NRR/bridge: fetch 2 specific months separately.
-  7. For BU-level MRR: query bu_mrr_monthly (not customer_mrr_unified + filtering)
+  7. Pipeline — MANDATORY 2 steps: first fetch select=snapshot_date&order=snapshot_date.desc&limit=1,
+     then second call with snapshot_date=eq.THAT_DATE. Never query deal_snapshots without this filter.
 
 HOW TO COMPUTE METRICS FROM RAW DATA:
   You receive JSON arrays from tool calls. Compute everything numerically from those arrays — silently, in your head.
   NEVER show intermediate rows, working calculations, customer lists, or "let me compute..." narration.
   Just state the final answer.
 
-  NRR — fetch base month and end month separately:
-    base_mrr = sum of mrr_amount for base-month rows (filter to cohort if needed)
-    end_mrr  = sum of mrr_amount for the same customers in end month (0 if absent)
+  NRR — CRITICAL: cohort method only. Never divide total end MRR by total base MRR.
+    Step 1: Fetch base month rows. Build set of base-cohort customer names.
+    Step 2: Fetch end month rows. For each base-cohort customer, find their end MRR (0 if absent in end month).
+    base_mrr = sum(base month mrr_amount) for cohort
+    end_mrr  = sum(end month mrr_amount for SAME customers only, 0 if absent) — EXCLUDE new customers
     NRR = end_mrr / base_mrr × 100
-    Report as: "Enterprise NRR: 87.3% (base ₹3.07Cr → end ₹2.68Cr)"
+    WHY THIS MATTERS: naive sum of end month total ÷ base month total gives ~8–15pp too high because
+    it includes new customers who weren't in the cohort. A 95% naive answer can be 80% true NRR.
+    Report as: "SME BU NRR: 80.5% (cohort: 267 customers, base ₹88.9L → end ₹71.6L)"
+
+  BU NRR — use customer_mrr_unified (NOT bu_mrr_monthly) + join customer_mrr_lines for BU membership:
+    Fetch customer_mrr_lines to identify which customers belong to the BU, then apply cohort NRR method.
 
   MRR Bridge — fetch two months, classify each customer, sum each bucket:
     new, expansion, contraction, churn — report totals only.
@@ -2387,7 +2413,9 @@ ANALYST QUALITY — verdict first, opinionated, short:
 DATA LIMITS — be honest:
   No CAC, P&L, margins, headcount, NPS, or product usage data in this database.
   Pipeline: only latest snapshot. No stage-transition history or win rates.
-  customer_mrr_unified: ~1000 active customers/month. Full 13-month history may hit 3000-row limit — use 2-query approach for rolling NRR.`;
+  customer_mrr_unified: 617 customers from Apr 2025 (458 pre-Apr 2025). A 13-month all-customer query
+  = ~8,000 rows — will be truncated at 3000. Always use single-month queries for NRR, or filter by BU/segment.
+  ERTM BU: near-zero data from Apr 2025 (data reclassification artifact). Do not present ERTM NRR as real.`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
@@ -2419,7 +2447,12 @@ const AI_NAME_STOP = new Set([
   'excel','grand','capital','union','mother','filter','split','segment',
   // BU / segment alias terms — users say these to mean segments, never specific customers
   'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam',
-  'small','medium','market','national','international','global','regional'
+  'small','medium','market','national','international','global','regional',
+  // Generic industry nouns — "pharma" / "agro" / "foods" etc. match many companies
+  'pharma','agro','foods','food','chemicals','chemical','organic','digital','tech',
+  'solutions','services','industries','healthcare','logistics','retail','trading',
+  'consumer','energy','dairy','seeds','seed','beverages','beverage','textile',
+  'textiles','packaging','media','exports','imports','distributors','distribution'
 ]);
 
 // Words that, when they follow a token, mark that token as a BU/segment identifier
@@ -2902,7 +2935,7 @@ async function runAIQuery(skipDisambig) {
 function aiPickName(resolvedName, tok, origQ) {
   const newQ = origQ.replace(new RegExp(tok, 'gi'), resolvedName);
   document.getElementById('ai-q-input').value = newQ;
-  runAIQuery(true);
+  runAIQuery(false); // re-run disambiguation in case other tokens in the query also need resolution
 }
 
 function escHtml(s) {
