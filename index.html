@@ -2524,7 +2524,10 @@ function aiResolveNames(question) {
   const result = new Map();
   tokens.forEach((tok, idx) => {
     if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
-    const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
+    // Word-boundary match: token must appear at start of a word in the customer name,
+    // not buried mid-word. Prevents "sme" matching "Cosmetics" (co·sme·tics).
+    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const hits = CUST_NAMES.filter(n => re.test(n));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
       if (!exact) result.set(tok, hits);
