@@ -238,7 +238,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 <header>
   <div class="eyebrow">Revenue Intelligence · FY 2026–27</div>
   <div class="htitle">Bizom Revenue</div>
-  <div class="hsub" id="sub">Loading…</div>
+  <div class="hsub" id="sub"></div>
 </header>
 
 <nav>
@@ -2200,83 +2200,117 @@ const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-p
 let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
 let AI_CHARTS = []; // Chart.js instances to destroy on clear
 
-const AI_SYSTEM = `You are a friendly revenue analytics assistant for Bizom. You have access to a customer MRR database and can answer questions conversationally.
+const AI_SYSTEM = `You are a friendly revenue analytics assistant for Bizom. You can answer questions about MRR, retention, churn, pipeline, AOP targets, and customer metadata.
 
-DATABASE:
-  customer_mrr_unified  — zoho_name TEXT, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
-  customer_mrr_lines    — id INT, zoho_name TEXT, go_live_date DATE, churn_date DATE
+DATABASE SCHEMA:
+  customer_mrr_unified (VIEW) — zoho_name TEXT, month_date DATE, mrr_amount NUMERIC
+    → Best for per-customer MRR queries. Aggregates both module and contract MRR.
+  bu_mrr_monthly (VIEW)      — bu_name TEXT, month_date DATE, mrr_amount NUMERIC
+    → BU-level MRR totals by month. BUs: "BAT BU","India ENT BU","India MM BU","KAM BU","MEA BU","SEA BU","SME BU","ERTM BU"
+  customer_mrr_lines         — id, zoho_name, go_live_date DATE, churn_date DATE (null=active), segment_id, bu_id
+    → Customer lifecycle. Join: segment_master!left(name), bu_master!left(name)
+  segment_master             — id, name. Values: "SME","Mid_Market","Enterprise","ERTM India"
+  bu_master                  — id, name, code
+  aop_targets                — bu_id, fy_id, month_date, mrr_aop NUMERIC, nrr_aop NUMERIC
+    → AOP plan targets. Join: bu_master!left(name)
+  deal_snapshots             — snapshot_date DATE, deal_name, account_name, closing_month DATE, stage, probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
+    → CRM pipeline. Always filter by latest snapshot_date. Join: bu_master!left(name)
+  customer_module_lines      — id, zoho_name, services, workflow, service_type, status, billing_cycle
 
 WHEN TO ASK A CLARIFYING QUESTION:
-- Year is missing or ambiguous: "January" without a year → ask "Which January? 2024, 2025, or 2026?"
+- Year is missing or ambiguous: "January" without a year → ask "Which January?"
 - Customer name is vague and could match multiple → ask which one they mean
-- "recent" / "last month" / "this year" → ask which period specifically
-- Multiple interpretations exist → ask before guessing
+- "recent"/"last month"/"this year" → ask which period
+- Multiple interpretations → ask before guessing
 
 RESPONSE FORMAT — choose ONE:
-A) If you need clarification: reply with ONLY {"q":"Your question here?"}
-   Examples:
-   {"q":"Which January — 2024, 2025, or 2026?"}
-   {"q":"I found multiple matches for 'VST' — did you mean VST Industries Limited or VST Tillers Tractors?"}
-
-B) If you can answer: reply with ONLY raw JavaScript async function body (no function keyword, no markdown, no prose).
-   For tabular data return: { columns:[...], rows:[[...]], summary:'...' }
-   For charts return:       { type:'chart', chartType:'line'|'bar', title:'...', labels:[...], datasets:[{label:'...',data:[...]}], summary:'...' }
+A) Clarification: reply with ONLY {"q":"Your question here?"}
+B) Answer: reply with ONLY raw JavaScript async function body (no function keyword, no markdown, no prose).
+   For tables: return { columns:[...], rows:[[...]], summary:'...' }
+   For charts: return { type:'chart', chartType:'line'|'bar', title:'...', labels:[...], datasets:[{label:'...',data:[...]}], summary:'...' }
 
 WHEN TO USE CHART vs TABLE:
-- Chart (line): time-series trends, total/single-customer MRR over multiple months, growth over time
-- Chart (bar): monthly comparisons where visual magnitude matters
-- Table: rankings of customers, multi-column comparisons, lists with several attributes
+- Chart (line): MRR trends over time, NRR trend, growth over months
+- Chart (bar): BU comparisons by month, side-by-side metrics
+- Table: customer rankings, churn lists, multi-column comparisons, pipeline deals
 
 CODE RULES:
-  SUPABASE_URL, cmrrHdr(), f(n) are available in scope (f formats numbers as ₹ currency)
-  ALWAYS use ilike + encodeURIComponent for customer name filters (never eq — names have spaces)
-  Dates: YYYY-MM-01 (Jan 2026 = 2026-01-01)
-  For multi-month queries use month_date=gte.X&month_date=lte.Y, then filter in JS
-  All Januaries = fetch full history with limit=5000, then filter rows where month_date includes '-01-'
-  Fetch limit: max 5000 rows per request
-  Chart data values must be plain numbers (not formatted strings)
+  SUPABASE_URL, cmrrHdr(), f(n) in scope. f() formats numbers as ₹ (use only in table rows, not chart data)
+  Customer name filters: ALWAYS ilike.*encodeURIComponent(name)* — never eq
+  Dates: YYYY-MM-01. PostgREST joins use !left(col) syntax e.g. bu_master!left(name)
+  Fetch limit: max 5000 rows. Chart data values must be plain numbers.
 
-COLUMN NAMING — make columns self-explanatory so the table makes sense without reading the question:
-  Include the period in month/MRR columns: "MRR – Jan 2026" not "MRR"
-  For growth: "MoM Growth (%)" not "Δ%"; for rank: "Rank" not "#"
-  Full customer name in customer column: "Customer Name" not "Customer"
-  When comparing two months: "MRR – Jan 2026 (₹)" and "MRR – Feb 2026 (₹)"
+COLUMN NAMING — self-explanatory without reading the question:
+  Include period: "MRR – Jan 2026 (₹)" not "MRR"; "MoM Growth (%)" not "Δ%"
+  "Customer Name" not "Customer"; "Go-Live Date" not "go_live"
 
 EXAMPLES:
 
-Single customer all months (table):
-const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('VST Industries Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
-const d=await r.json();
-return {columns:['Month','MRR – VST Industries Ltd (₹)'],rows:d.map(x=>[x.month_date.slice(0,7),f(+x.mrr_amount)]),summary:'Monthly MRR history for VST Industries Limited.'};
-
-All Januaries for a customer (table):
-const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('Glaxosmithkline Asia Private Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
-const d=await r.json();
-const jan=d.filter(x=>x.month_date.slice(5,7)==='01');
-return {columns:['Year','MRR – January (₹)'],rows:jan.map(x=>[x.month_date.slice(0,4),f(+x.mrr_amount)]),summary:'January MRR for GlaxoSmithKline across all years.'};
-
-Top 10 by MRR (table):
+Top 10 customers by MRR (table):
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-03-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
 const d=await r.json();
 return {columns:['Rank','Customer Name','MRR – Mar 2026 (₹)'],rows:d.map((x,i)=>[i+1,x.zoho_name,f(+x.mrr_amount)]),summary:'Top 10 customers by MRR in March 2026.'};
 
-MoM growth (table):
+MoM growth ≥3% (table):
 const [feb,jan]=await Promise.all(['2026-02-01','2026-01-01'].map(m=>fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+m+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())));
 const jm=Object.fromEntries(jan.map(x=>[x.zoho_name,+x.mrr_amount]));
 const res=feb.filter(x=>jm[x.zoho_name]>0).map(x=>({n:x.zoho_name,f:+x.mrr_amount,j:jm[x.zoho_name],c:(+x.mrr_amount/jm[x.zoho_name]-1)*100})).filter(x=>x.c>=3).sort((a,b)=>b.c-a.c);
 return {columns:['Customer Name','MRR – Jan 2026 (₹)','MRR – Feb 2026 (₹)','MoM Growth (%)'],rows:res.map(x=>[x.n,f(x.j),f(x.f),x.c.toFixed(1)+'%']),summary:res.length+' customers grew ≥3% MoM from Jan to Feb 2026.'};
 
-Total MRR by month — line chart:
+Net Revenue Retention (NRR) between two months (table):
+const [curr,base]=await Promise.all(['2026-03-01','2025-03-01'].map(m=>fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+m+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())));
+const bm=Object.fromEntries(base.map(x=>[x.zoho_name,+x.mrr_amount]));
+const cm=Object.fromEntries(curr.map(x=>[x.zoho_name,+x.mrr_amount]));
+const cohort=base.filter(x=>bm[x.zoho_name]>0);
+const startMRR=cohort.reduce((s,x)=>s+bm[x.zoho_name],0);
+const endMRR=cohort.reduce((s,x)=>s+(cm[x.zoho_name]||0),0);
+const nrr=(endMRR/startMRR*100).toFixed(1);
+const churned=cohort.filter(x=>!cm[x.zoho_name]).map(x=>[x.zoho_name,f(bm[x.zoho_name]),'Churned']);
+const expanded=cohort.filter(x=>cm[x.zoho_name]>bm[x.zoho_name]).map(x=>[x.zoho_name,f(bm[x.zoho_name]),f(cm[x.zoho_name])]);
+return {columns:['Metric','Value'],rows:[['NRR (Mar 2025 → Mar 2026)',nrr+'%'],['Starting MRR (Mar 2025)',f(startMRR)],['Ending MRR (Mar 2026)',f(endMRR)],['Customers in cohort',cohort.length],['Churned customers',churned.length],['Expanded customers',expanded.length]],summary:'Net Revenue Retention from Mar 2025 to Mar 2026: '+nrr+'%'};
+
+Churned customers in a date range (table):
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,go_live_date,churn_date,segment_master!left(name),bu_master!left(name)&churn_date=gte.2026-01-01&churn_date=lte.2026-03-31&order=churn_date',{headers:cmrrHdr()});
+const d=await r.json();
+return {columns:['Customer Name','Segment','BU','Go-Live Date','Churn Date'],rows:d.map(x=>[x.zoho_name,x.segment_master?.name||'—',x.bu_master?.name||'—',x.go_live_date,x.churn_date]),summary:d.length+' customers churned in Q4 FY2026 (Jan–Mar 2026).'};
+
+BU-wise MRR for a month (table):
+const r=await fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=bu_name,mrr_amount&month_date=eq.2026-03-01&order=mrr_amount.desc',{headers:cmrrHdr()});
+const d=await r.json();
+return {columns:['Business Unit','MRR – Mar 2026 (₹)'],rows:d.map(x=>[x.bu_name,f(+x.mrr_amount)]),summary:'MRR by Business Unit for March 2026.'};
+
+BU MRR trend — line chart:
+const r=await fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=bu_name,month_date,mrr_amount&month_date=gte.2025-10-01&month_date=lte.2026-03-01&order=month_date&limit=2000',{headers:cmrrHdr()});
+const d=await r.json();
+const months=[...new Set(d.map(x=>x.month_date.slice(0,7)))].sort();
+const bus=[...new Set(d.map(x=>x.bu_name))];
+const byBU={};d.forEach(x=>{if(!byBU[x.bu_name])byBU[x.bu_name]={};byBU[x.bu_name][x.month_date.slice(0,7)]=+x.mrr_amount});
+const palette=['#2563eb','#16a34a','#9333ea','#ea580c','#0891b2','#d97706','#db2777','#65a30d'];
+return {type:'chart',chartType:'line',title:'BU-wise MRR Trend Oct 2025 – Mar 2026',labels:months,datasets:bus.map((b,i)=>({label:b,data:months.map(m=>Math.round(byBU[b]?.[m]||0))})),summary:'Monthly MRR trend by Business Unit from Oct 2025 to Mar 2026.'};
+
+AOP target vs actual for a BU (table):
+const [tgt,act]=await Promise.all([
+  fetch(SUPABASE_URL+'/rest/v1/aop_targets?select=month_date,mrr_aop,bu_master!left(name)&month_date=gte.2025-04-01&month_date=lte.2026-03-01&order=month_date',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=bu_name,month_date,mrr_amount&month_date=gte.2025-04-01&month_date=lte.2026-03-01&order=month_date',{headers:cmrrHdr()}).then(r=>r.json())
+]);
+const buName='SME BU';
+const tm=Object.fromEntries(tgt.filter(x=>x.bu_master?.name===buName).map(x=>[x.month_date.slice(0,7),+x.mrr_aop]));
+const am=Object.fromEntries(act.filter(x=>x.bu_name===buName).map(x=>[x.month_date.slice(0,7),+x.mrr_amount]));
+const months=Object.keys(tm).sort();
+return {columns:['Month','AOP Target (₹)','Actual MRR (₹)','Achievement (%)'],rows:months.map(m=>[m,f(tm[m]),f(am[m]||0),tm[m]?((am[m]||0)/tm[m]*100).toFixed(1)+'%':'—']),summary:'AOP vs actual MRR for '+buName+' FY2026.'};
+
+Total MRR trend — line chart:
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&month_date=gte.2025-10-01&month_date=lte.2026-03-01&limit=5000',{headers:cmrrHdr()});
 const d=await r.json();
 const byM={};d.forEach(x=>{byM[x.month_date.slice(0,7)]=(byM[x.month_date.slice(0,7)]||0)+ +x.mrr_amount});
 const months=Object.keys(byM).sort();
 return {type:'chart',chartType:'line',title:'Total MRR – Oct 2025 to Mar 2026',labels:months,datasets:[{label:'Total MRR (₹)',data:months.map(m=>Math.round(byM[m]))}],summary:'Total MRR across all active customers from Oct 2025 to Mar 2026.'};
 
-Single customer MRR trend — line chart:
-const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('VST Industries Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
+Deal pipeline (table):
+const sd=await fetch(SUPABASE_URL+'/rest/v1/deal_snapshots?select=snapshot_date&order=snapshot_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const r=await fetch(SUPABASE_URL+'/rest/v1/deal_snapshots?select=deal_name,account_name,closing_month,stage,probability,expected_mrr,bu_master!left(name)&snapshot_date=eq.'+sd[0].snapshot_date+'&order=expected_mrr.desc&limit=100',{headers:cmrrHdr()});
 const d=await r.json();
-return {type:'chart',chartType:'line',title:'MRR Trend – VST Industries Limited',labels:d.map(x=>x.month_date.slice(0,7)),datasets:[{label:'MRR (₹)',data:d.map(x=>Math.round(+x.mrr_amount))}],summary:'Monthly MRR trend for VST Industries Limited.'};`;
+return {columns:['Deal Name','Account','Closing Month','Stage','Probability (%)','Expected MRR (₹)','BU'],rows:d.map(x=>[x.deal_name,x.account_name,x.closing_month,x.stage,x.probability,f(x.expected_mrr),x.bu_master?.name||'—']),summary:'Active pipeline as of '+sd[0].snapshot_date+': '+d.length+' deals.'};`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
@@ -2292,7 +2326,11 @@ const AI_NAME_STOP = new Set([
   // chart / visualisation words
   'line','bar','chart','plot','graph','trend','total','generate','create','draw',
   'between','over','time','past','next','avg','average','sum','count','compare',
-  'comparison','versus','vs','against','across','monthly','weekly','daily'
+  'comparison','versus','vs','against','across','monthly','weekly','daily',
+  // retention / pipeline / analytics words
+  'nrr','grr','arr','mrr','retention','churn','churned','pipeline','deals','deal',
+  'stage','target','budget','forecast','actuals','segment','cohort','aop','fy26',
+  'fy27','net','gross','expansion','contraction','active','inactive','live'
 ]);
 
 function aiResolveNames(question) {
