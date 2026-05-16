@@ -27,6 +27,7 @@ header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px soli
 .hsub{font-size:12px;color:rgba(255,255,255,.35);margin-top:.3rem;font-family:var(--mono)}
 #banner{background:#1a3a5c;padding:.9rem 2rem;display:flex;align-items:flex-start;gap:1rem;border-bottom:1px solid #2a5f9e}
 #banner.hidden{display:none}
+.hidden{display:none!important}
 .btext{color:#c8ddf0;font-size:12.5px;line-height:1.7;flex:1}
 .btext strong{color:#fff}
 .btext code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:11px}
@@ -1115,13 +1116,13 @@ async function initCustMRR() {
   const PAGE = 1000;
   let offset = 0;
   CUST_LINES = [];
-  // Minimal query — no joins, no complex ordering, just the flat columns needed for search
+  // Use exact same query as nretInit — known to work against this table
   try {
     while (true) {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-        `?select=id,zoho_name,go_live_date,churn_date` +
-        `&order=id&limit=${PAGE}&offset=${offset}`,
+        `?select=id,zoho_name,go_live_date,segment_master!left(name),bu_master!left(name)` +
+        `&go_live_date=not.is.null&order=id&limit=${PAGE}&offset=${offset}`,
         { headers: cmrrHdr() }
       );
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1143,17 +1144,14 @@ async function initCustMRR() {
   }
   inp.disabled = false;
   inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
-  // Fetch segment/BU metadata and global end month in background
+  // Enrich with churn_date + global end month in background (non-blocking)
   Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/customer_mrr_lines?select=id,zoho_name,segment_master!left(name),bu_master!left(name)&order=id`, { headers: cmrrHdr() }).then(r => r.json()).catch(() => []),
+    fetch(`${SUPABASE_URL}/rest/v1/customer_mrr_lines?select=id,churn_date&order=id`, { headers: cmrrHdr() }).then(r => r.json()).catch(() => []),
     fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() }).then(r => r.json()).catch(() => [])
-  ]).then(([meta, endR]) => {
-    const metaMap = {};
-    for (const m of meta) metaMap[m.id] = m;
-    for (const line of CUST_LINES) {
-      const m = metaMap[line.id];
-      if (m) { line.segment_master = m.segment_master; line.bu_master = m.bu_master; }
-    }
+  ]).then(([churnRows, endR]) => {
+    const churnMap = {};
+    for (const c of churnRows) churnMap[c.id] = c.churn_date;
+    for (const line of CUST_LINES) line.churn_date = churnMap[line.id] || null;
     if (endR && endR[0]) CMRR_GLOBAL_END = endR[0].month_date.slice(0, 7);
   }).catch(() => {});
 }
@@ -1676,14 +1674,6 @@ function cmrrRenderWf(matrix, months) {
 
 function showCustMRRTab(btn) {
   showTab('cust-mrr', btn);
-  if (!_custInited) {
-    _custInited = true;
-    document.getElementById('cmrr-status').textContent = '';
-    initCustMRR().catch(e => {
-      document.getElementById('cust-input').placeholder = 'Error loading customers';
-      document.getElementById('cmrr-status').textContent = e.message;
-    });
-  }
 }
 
 /* ─── OVERALL MRR TAB ────────────────────────────────────── */
@@ -2185,6 +2175,10 @@ function nretRenderRolling(matrix, mrrMonthSet) {
 
 loadData();
 initAOPPlan();
+_custInited = true;
+initCustMRR().catch(e => {
+  document.getElementById('cust-input').placeholder = 'Error – ' + e.message;
+});
 </script>
 </body>
 </html>
