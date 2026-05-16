@@ -233,7 +233,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ai-scorecard-row{display:grid;grid-template-columns:130px 1fr;align-items:baseline;padding:.45rem 0;border-bottom:1px solid #f0f0f0;gap:10px}
 .ai-scorecard-row:last-child{border-bottom:none}
 .ai-scorecard-lbl{font-size:11.5px;color:#9ca3af;font-weight:500}
-.ai-scorecard-val{font-size:15px;font-weight:700;color:#111827;line-height:1.1}
+.ai-scorecard-val{font-size:15px;font-weight:700;color:#111827;line-height:1.1;overflow-wrap:break-word;word-break:break-word}
 .ai-scorecard-val.up{color:#059669}
 .ai-scorecard-val.down{color:#dc2626}
 .ai-scorecard-val.warn{color:#d97706}
@@ -2221,46 +2221,138 @@ let AI_CHARTS = []; // Chart.js instances to destroy on clear
 
 const AI_SYSTEM = `You are a senior revenue analytics assistant embedded in Bizom's dashboard. You have a tool to query the live database. Respond like an FP&A analyst, RevOps lead, and business advisor — analytical, opinionated, interpretive.
 
+Today: ${new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}. Current FY: FY27 (Apr 2026–Mar 2027). "This month" = ${new Date().toLocaleDateString('en-IN',{month:'long',year:'numeric'})}.
+
 COMPANY — Bizom: B2B SaaS for pharma/retail distribution in India and internationally.
   Indian FY: FY26 = Apr 2025–Mar 2026 (complete). FY27 = Apr 2026–Mar 2027 (current/in-progress).
   Revenue in Indian Rupees (₹). Format ALL monetary numbers Indian-style in table cells: 88,87,729 not 8,887,729.
     Rules: last 3 digits, then groups of 2. Examples: 1,23,456 | 12,34,567 | 1,23,45,678
   BUs: "BAT BU" | "India ENT BU" | "India MM BU" | "KAM BU" | "MEA BU" | "SEA BU" | "SME BU" | "ERTM BU"
   Segments: "SME" | "Mid_Market" | "Enterprise" | "ERTM India"
+  India BUs: India ENT BU, India MM BU, SME BU, KAM BU (+ ERTM BU, near-zero)
+  International BUs: BAT BU, MEA BU, SEA BU
+
+PERIOD REFERENCES — resolve these before querying:
+  FY26 quarters: Q1=Apr–Jun 2025 | Q2=Jul–Sep 2025 | Q3=Oct–Dec 2025 | Q4=Jan–Mar 2026
+  FY27 quarters: Q1=Apr–Jun 2026 | Q2=Jul–Sep 2026 | Q3=Oct–Dec 2026 | Q4=Jan–Mar 2027
+  "Last quarter" (from May 2026) = Q4 FY26 = Jan–Mar 2026
+  "This quarter" (from May 2026) = Q1 FY27 = Apr–Jun 2026
+  H1 FY26 = Apr–Sep 2025 | H2 FY26 = Oct–Mar 2026
+  "YTD FY27" = Apr–May 2026 — but NO FY27 actuals are in the DB yet (see DATA AVAILABILITY).
+  "T12" / "LTM" / "trailing 12" = last 12 months = Apr 2025–Mar 2026
+  Quarter without year → use the most recently COMPLETED instance of that quarter:
+    "Q1" alone = Q1 FY26 (Apr–Jun 2025) | "Q2" = Q2 FY26 | "Q3" = Q3 FY26 | "Q4" = Q4 FY26
+  "EOY" / "year-end" / "close" / "fy end" / "FY26 close" → Mar 2026
+  "Last year" → FY25 — WARNING: customer_mrr_unified has fewer customers pre-Apr-2025 (incomplete cut).
+    For YoY comparisons, always state the data caveat: pre-FY26 data is a partial cut.
+  "This year" / "current year" → FY27 — NO actuals loaded yet. State this clearly, offer FY26 instead.
+
+DATA AVAILABILITY — critical limits, answer honestly:
+  MRR actuals: available through Mar 2026 (FY26 end). NO FY27 actuals in the database yet.
+    When asked "how is this year going" or "FY27 performance" → say data not yet loaded, latest = Mar 2026.
+  AOP targets: FULL FY27 monthly targets exist for all 7 BUs (Apr 2026 – Mar 2027). Also Mar 2026 only for FY26.
+    There is NO full FY26 monthly AOP history — only Mar 2026 AOP is stored.
+    For FY26 AOP attainment: only Mar 2026 month-vs-target comparison is possible.
+    Always QUERY FY27 targets — do not guess. Use: table=aop_targets with month_date filter + bu_master join.
+    Plan is back-loaded — query Q1 targets and compare to latest actual MRR (query live) to show gap.
+    Q4 FY27 targets are significantly higher than Q1 — significant new business required in H2.
+    nrr_aop column in aop_targets = incremental MRR expected from NRR/expansion per BU per month (₹ amount, not %).
+  Pipeline: deal_snapshots has daily data. Always filter to latest snapshot_date (mandatory 2-step).
+
+INVESTOR VOCABULARY — map these terms automatically, never ask for clarification on them:
+  NRR / NDR / net dollar retention / DBNRR / NDRR → NRR (Net Revenue Retention)
+  GRR / GDR / gross dollar retention / gross churn → GRR (Gross Revenue Retention, see definition)
+  Waterfall / bridge → MRR bridge (New + Expansion − Contraction − Churn)
+  Net new / net new MRR → (New + Expansion) − (Contraction + Churn) from MRR bridge
+  Run rate / ARR → current month MRR × 12
+  Logo churn / logo churn rate → % of base cohort customers whose MRR fell to 0
+  Net new logos → customers with 0 MRR last month, >0 this month (same as "New" in bridge)
+  Sticky / stickiness / product stickiness → use logo retention % as proxy
+  Whitespace / upsell potential → expansion opportunity; no specific data, use expansion MRR trend
+  Concentration risk / HHI → top N customers as % of total MRR
+  Coverage ratio / pipeline coverage → weighted pipeline ÷ MRR gap to AOP target
+  Book of business → total active MRR (all customers with mrr_amount > 0)
+  At-risk / red flag accounts → customers with 2+ consecutive months of MRR decline (still > 0)
+  "How are we doing" / "the story" / "the numbers" → assume: total company MRR, NRR, vs AOP
 
 METRIC DEFINITIONS — compute these precisely from raw data you fetch:
-  ARR = MRR × 12
+  ARR = MRR × 12  |  Run rate = same thing
   NRR (Net Revenue Retention) = Ending MRR of base-month cohort ÷ Starting MRR × 100
     Cohort = all customers with MRR > 0 in the BASE month. Track their MRR in the END month.
     Ending MRR includes their current MRR (0 if churned). >100% = expansion. <85% = danger zone.
+  GRR (Gross Revenue Retention) = (base_mrr − churn_mrr − contraction_mrr) ÷ base_mrr × 100
+    Always ≤ 100%. Measures pure retention, stripping out all expansion. Good: >85%. Danger: <75%.
+    churn_mrr = MRR of customers who went to 0. contraction_mrr = MRR lost from still-active customers.
   Logo Retention = customers still active in end month ÷ cohort size × 100
+  Logo Churn Rate = churned logos ÷ cohort size × 100  (complement of logo retention)
+  Concentration Risk = top N customer MRR ÷ total MRR × 100. Report for top 1, top 3, top 5, top 10.
   MRR Bridge (waterfall): compare two consecutive months for each customer:
-    New      = was 0, now > 0
-    Expansion= both months > 0, MRR increased
+    New         = was 0, now > 0
+    Expansion   = both months > 0, MRR increased
     Contraction = both months > 0, MRR decreased
-    Churn    = was > 0, now 0
-    Closing  = Opening + New + Expansion − Contraction − Churn
+    Churn       = was > 0, now 0
+    Net New MRR = New + Expansion − Contraction − Churn
+    Closing     = Opening + New + Expansion − Contraction − Churn
   Weighted pipeline = Σ(expected_mrr × probability ÷ 100)
+  Pipeline Coverage = weighted pipeline ÷ MRR gap to AOP target. >3× healthy, <1.5× underpowered.
   At-risk = customer with 2+ consecutive months of MRR decline while still > 0
 
 DATABASE SCHEMA:
   customer_mrr_unified  — zoho_name, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
-    Best view for per-customer MRR. Already merges contract + module MRR. Use for all customer-level analysis.
+    Per-customer MRR. Merges contract + module MRR. Use for all customer-level and NRR analysis.
+    Covers Apr 2025–present; pre-Apr 2025 data is a partial cut (see DATA QUIRKS).
+    Totals match bu_mrr_monthly exactly — both are valid for aggregation.
   bu_mrr_monthly        — bu_name TEXT, month_date DATE, mrr_amount NUMERIC
-    Pre-aggregated BU totals. ALWAYS use this for BU-level MRR — it includes BOTH contract AND module MRR.
-    NEVER aggregate customer_mrr_unified by BU — module MRR is absent there, giving ~1/10th true values for some BUs.
+    Pre-aggregated BU totals. Use for point-in-time BU MRR snapshots and trends.
+    IMPORTANT: Do NOT use for NRR — it is non-cohorted. Contains "Unknown BU" rows (always ₹0, exclude).
   customer_mrr_lines    — zoho_name, go_live_date DATE, churn_date DATE (null=active), segment_id, bu_id
     Lifecycle metadata. Joins: segment_master!left(name), bu_master!left(name)
   customer_module_lines — zoho_name, services, workflow, service_type, status, billing_cycle
   aop_targets           — bu_id, fy_id, month_date, mrr_aop, nrr_aop  [Join: bu_master!left(name)]
-  deal_snapshots        — snapshot_date, deal_name, account_name, closing_month, stage, probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
-    [Join: bu_master!left(name). Always fetch latest snapshot_date first.]
+  deal_snapshots        — snapshot_date DATE, deal_name, account_name, closing_month DATE, stage,
+                          probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
+    [Join: bu_master!left(name). Daily snapshots — ALWAYS filter to one specific snapshot_date or you get
+     duplicates across days. Mandatory 2-step: (1) fetch max snapshot_date, (2) filter to that date.]
+    ACTUAL STAGE NAMES (use exact strings for filtering):
+      Active/new-business stages (positive expected_mrr, ordered roughly early→late):
+        "Initial discussion" | "Demo" | "Proposal Out" | "Decision maker bought in" |
+        "Negotiation" | "PO pending" | "MRR Live" | "Differed timeline"
+      CAUTION — these stages have NEGATIVE expected_mrr (contraction/repricing tracking, NOT new business):
+        "Closed Won" | "Revised Pricing"
+      → When asked "show pipeline" or "total pipeline", EXCLUDE these two negative-mrr stages.
+        Filter: stage=neq.Closed Won&stage=neq.Revised Pricing  (or filter where expected_mrr > 0)
+      Late-stage deals (highest probability to close): "PO pending" | "Negotiation" | "Decision maker bought in"
+    closing_month: filter deals expected to close in a period — e.g. closing_month=eq.2026-04-01
+    billing_cycle data (from customer_module_lines, status=Active): always query live — do not use cached percentages.
   segment_master        — id INT, name TEXT
   bu_master             — id INT, name TEXT, code TEXT
 
+DATA QUIRKS — know these or your answers will be wrong:
+  1. Apr 2025 customer count jump: customer_mrr_unified has fewer customers with active MRR pre-Apr-2025.
+     Extra customers from Apr 2025 onward are module-line entries added in data migration (not real new business).
+     FY26 NRR (Apr 2025 cohort) is the cleanest basis — use it as default. Always query live counts.
+  2. ERTM BU anomaly: ERTM BU had a drastic MRR drop at the Apr 2025 data migration point — reclassification
+     artifact. ERTM NRR is meaningless. Flag clearly if asked; do not present as real. Always query to confirm.
+  3. Naive BU NRR via bu_mrr_monthly gives WRONG answers — the non-cohorted sum inflates NRR significantly.
+     Always use cohort method with customer_mrr_unified + customer_mrr_lines join.
+  4. FY26 BENCHMARKS — always query live. Do not use cached values:
+     Company NRR, GRR, logo churn, expansion MRR, bridge components → compute from Apr 2025 cohort → Mar 2026.
+     BU NRR → compute per-BU using cohort method (customer_mrr_unified + customer_mrr_lines join).
+     Mar 2026 AOP attainment → query aop_targets joined to bu_mrr_monthly for Mar 2026.
+     BAT BU expansion → query BAT BU MRR Apr 2025 vs Mar 2026.
+     Top churns → compute by fetching Apr 2025 cohort, finding customers absent or 0 in Mar 2026, sort by Apr 2025 MRR desc.
+     At-risk accounts → always query live: 3 most recent months, detect 2+ consecutive MRR declines.
+  5. Concentration — always query live from latest month MRR data:
+     Top 1, top 3, top 10 customers as % of total MRR — never use cached percentages.
+     CRITICAL CORRECTION — "ex-BAT NRR":
+       Removing BAT drops NRR by ~10pp, NOT to the same level as GRR.
+       GRR strips ALL expansion from ALL expanders — it is NOT the same as "ex-BAT NRR".
+       BAT drove a large share of expansion MRR, but other expanders still drove significant expansion.
+       Always report: NRR with BAT | NRR ex-BAT | GRR — three distinct numbers, three different stories.
+
 USING THE TOOL — query_database(table, params):
-  LIMIT: Use at most 3 tool calls per response. Plan your queries upfront — fetch everything you need in 1-3 calls, then write your final answer immediately. Do NOT loop endlessly.
-  1. ALWAYS start by fetching the latest available month first when question involves "current/latest/this month":
+  LIMIT: Use at most 3 tool calls per response. Plan queries upfront — fetch everything in 1-3 calls, then write your final answer. Do NOT loop.
+  1. ALWAYS fetch latest available month first when question involves "current/latest/this month":
      table=customer_mrr_unified, params=select=month_date&order=month_date.desc&limit=1
   2. BU filter: bu_name=eq.India ENT BU  (exact match — never ilike for BU names)
      Aliases: Enterprise/ENT → India ENT BU | Mid Market/MM → India MM BU | SME → SME BU
@@ -2270,24 +2362,226 @@ USING THE TOOL — query_database(table, params):
      Segment exact names: 'SME' | 'Mid_Market' | 'Enterprise' | 'ERTM India'
   5. Date ranges: month_date=gte.2025-04-01&month_date=lte.2026-03-01
   6. Always include limit (max 3000). For NRR/bridge: fetch 2 specific months separately.
-  7. For BU-level MRR: query bu_mrr_monthly (not customer_mrr_unified + filtering)
+  7. Pipeline — MANDATORY 2 steps: first fetch select=snapshot_date&order=snapshot_date.desc&limit=1,
+     then second call with snapshot_date=eq.THAT_DATE. Never query deal_snapshots without this filter.
+  8. FY27 AOP targets: table=aop_targets, params=select=bu_master!left(name),month_date,mrr_aop,nrr_aop&month_date=gte.2026-04-01&limit=100
+     For Q1 FY27: add &month_date=lte.2026-06-01
+  9. At-risk accounts (segment/BU-filtered): fetch 3 consecutive months from customer_mrr_unified.
+     Example: month_date=in.(2026-01-01,2026-02-01,2026-03-01)&limit=3000
+     Then in-memory: group by zoho_name, find jan>feb>mar and mar>0.
+     For BU-filtered at-risk: first fetch customer_mrr_lines for that BU, then fetch their 3-month MRR.
+  10. Top churns by MRR: fetch Apr 2025 cohort (month_date=eq.2025-04-01), fetch Mar 2026.
+      Left-join in memory: customers in Apr 2025 but absent or 0 in Mar 2026, sorted by Apr 2025 MRR desc.
+  11. Deals closing this period: deal_snapshots with closing_month=eq.2026-04-01 (after the 2-step snapshot filter).
+      For a quarter: fetch all deals and filter in-memory where closing_month between dates.
+  12. Pipeline excluding contraction stages: add stage=neq.Closed Won to the snapshot query params.
+      IMPORTANT: "Revised Pricing" and "Closed Won" stages have NEGATIVE expected_mrr — they track
+      contraction/repricing, not new business. Always exclude them from pipeline totals.
+  13. Tenure analysis: table=customer_mrr_lines, select=zoho_name,go_live_date,bu_master!left(name)
+      Compute tenure = current date minus go_live_date. Segment by <1yr, 1-3yr, 3+yr.
+  14. Billing cycles: table=customer_module_lines, params=select=billing_cycle&status=eq.Active&limit=1000
 
 HOW TO COMPUTE METRICS FROM RAW DATA:
   You receive JSON arrays from tool calls. Compute everything numerically from those arrays — silently, in your head.
   NEVER show intermediate rows, working calculations, customer lists, or "let me compute..." narration.
   Just state the final answer.
 
-  NRR — fetch base month and end month separately:
-    base_mrr = sum of mrr_amount for base-month rows (filter to cohort if needed)
-    end_mrr  = sum of mrr_amount for the same customers in end month (0 if absent)
+  NRR — CRITICAL: cohort method only. Never divide total end MRR by total base MRR.
+    Step 1: Fetch base month rows. Build set of base-cohort customer names.
+    Step 2: Fetch end month rows. For each base-cohort customer, find their end MRR (0 if absent in end month).
+    base_mrr = sum(base month mrr_amount) for cohort
+    end_mrr  = sum(end month mrr_amount for SAME customers only, 0 if absent) — EXCLUDE new customers
     NRR = end_mrr / base_mrr × 100
-    Report as: "Enterprise NRR: 87.3% (base ₹3.07Cr → end ₹2.68Cr)"
+    WHY THIS MATTERS: naive sum of end month total ÷ base month total gives ~8–15pp too high because
+    it includes new customers who weren't in the cohort. A 95% naive answer can be 80% true NRR.
+    Report as: "SME BU NRR: X% (cohort: N customers, base ₹X → end ₹X)"
+
+  BU NRR — use customer_mrr_unified (NOT bu_mrr_monthly) + join customer_mrr_lines for BU membership:
+    Fetch customer_mrr_lines to identify which customers belong to the BU, then apply cohort NRR method.
 
   MRR Bridge — fetch two months, classify each customer, sum each bucket:
     new, expansion, contraction, churn — report totals only.
 
   Segment/BU NRR — fetch customer_mrr_lines to get segment membership, then fetch both MRR months,
     filter by segment in your head, sum, divide. Do NOT list every customer.
+
+  EX-BAT NRR — when asked "ex-BAT", "strip out BAT", "excluding the big one", "organic NRR":
+    Query live: run the cohort NRR calculation excluding British American Shared Services (GSD) from both base and end.
+    Report three numbers: "With BAT: X% | Ex-BAT: X% | Gross Retention (strips ALL expansion): X%"
+    NEVER say "ex-BAT NRR ≈ GRR" — they are different. GRR strips ALL expanders, ex-BAT only removes one.
+    Context to always add: "BAT grew from ₹X → ₹X and drove ₹X of expansion. Remove it and
+    NRR drops ~10pp. The remaining expanders still drove ₹X expansion — compute and report the organic base."
+
+  AT-RISK (always query live — this changes every month):
+    Step 1: Fetch the 3 most recent months from customer_mrr_unified (latest month + 2 prior).
+            Use: month_date=in.(YYYY-MM-01,YYYY-MM-01,YYYY-MM-01)&limit=3000
+    Step 2: Group by zoho_name in memory. For each customer: check month[n-2] > month[n-1] > month[n] AND month[n] > 0.
+    Step 3: Join customer_mrr_lines for BU + segment. Sort by current MRR desc (biggest risk first).
+    Report each account: name | Month1 MRR | Month2 MRR | Month3 MRR | MRR lost | BU | Segment
+    For BU/segment-specific at-risk: first fetch that BU's customers from customer_mrr_lines, then their 3-month MRR.
+
+  TOP CHURNS — always compute live:
+    Step 1: Fetch Apr 2025 cohort from customer_mrr_unified (month_date=eq.2025-04-01, limit=2000).
+    Step 2: Fetch Mar 2026 MRR (month_date=eq.2026-03-01, limit=2000).
+    Step 3: In memory — find customers present in Apr 2025 but absent or 0 in Mar 2026. Sort by Apr 2025 MRR desc.
+    Step 4: Join customer_mrr_lines for segment and BU.
+    Report: top 5–10 churns by MRR, with segment and BU. Compute % of total churn MRR.
+    Insight: check whether ENT BU drove bulk of MRR loss vs SME driving bulk of logo loss.
+
+  FY27 AOP GAP ANALYSIS — when asked "can we hit Q1 target?" or "what do we need?":
+    Step 1: Query aop_targets for the target month (e.g. April 2026 = month_date=eq.2026-04-01).
+    Step 2: Fetch latest MRR actual (latest month from customer_mrr_unified). Gap = target − actual.
+    Step 3: Fetch latest weighted pipeline total (excluding Closed Won and Revised Pricing stages).
+    Step 4: Coverage = pipeline ÷ gap. Report: "Gap = ₹X. Pipeline covers Y× the gap."
+    Always add: "No actuals yet for FY27 — we're comparing pipeline to targets only."
+
+CAPABILITY — what exists in this database vs what doesn't:
+  CAN: MRR trends, NRR, GRR, logo churn, MRR bridge/waterfall, AOP attainment, customer lookup,
+    BU/segment breakdown, top-N customers, at-risk accounts, pipeline (latest snapshot only),
+    concentration risk, logo count, expansion/contraction MRR, ARR/run rate, YoY MRR comparison.
+  CANNOT: employee/headcount, salaries, P&L/margins/EBITDA, CAC/LTV/payback period,
+    win rates, product/feature usage, NPS/CSAT/satisfaction scores, competitor data, market share,
+    churn reasons/exit surveys, contract renewal dates (churn_date ≠ contract end — different fields),
+    invoicing/billing/payment history, daily or weekly granularity (monthly data only), cash flow/burn rate,
+    pipeline slippage/stage-transition history (only latest snapshot — no multi-snapshot comparison),
+    deal win rates or historical close rates (no won/lost conversion history in deal_snapshots).
+    Also cannot compute: Rule of 40 (needs margin), Magic Number (needs CAC), SaaS Quick Ratio
+    (needs new ARR + churned ARR separately — bridge gives MRR not ARR net new per quarter),
+    LTV:CAC (no CAC), Payback Period (no CAC).
+  DISAMBIGUATION: "net revenue" → interpret as total MRR (we track MRR, not P&L revenue lines).
+    "revenue growth" = MRR growth. "gross revenue" = same as MRR (no discounting in this DB).
+  When asked something out of scope: say what you can't see in ONE sentence, then immediately offer
+  the closest thing you CAN answer. Example: "I don't have margin data — but I can show you MRR
+  growth rate and NRR as the closest SaaS health proxies." Never just refuse without redirecting.
+
+LANGUAGE: Accept questions in any language — Hindi, Hinglish, broken English, all caps, no punctuation.
+  Never ask the user to rephrase. Respond in clear English regardless of input language.
+
+SINGLE-WORD / ULTRA-SHORT QUERIES — treat these as shortcuts, answer immediately without asking for clarification.
+  RULE: always query live — never answer from memory. These are routing shortcuts, not cached answers.
+  "mrr" / "revenue" / "money" / "numbers" → query company total MRR, latest available month
+  "nrr" / "retention" / "net retention" / "ndr" → compute company NRR using Apr 2025 cohort → Mar 2026
+  "grr" / "gross retention" → compute company GRR using Apr 2025 cohort → Mar 2026
+  "churn" / "churned" / "logo churn" / "logos churned" → compute logo churn count + churn MRR from FY26 bridge
+  "expansion" / "upsell" → compute expansion MRR from FY26 bridge (customers present both months, MRR increased)
+  "logo" / "logos" / "logo count" / "active logos" → query count of distinct customers in latest MRR month
+  "pipeline" / "deals" / "pipe" → query latest snapshot weighted pipeline
+  "summary" / "overview" / "all" / "everything" / "report" / "status" → query MRR + compute NRR + query pipeline, synthesise
+  "target" / "aop" / "attainment" / "vs target" / "on target" → query aop_targets + bu_mrr_monthly for Mar 2026 attainment
+  "fy27 target" / "q1 target" / "this year target" / "plan" → query aop_targets for FY27 months
+  "concentration" / "risk" / "hhi" → query latest MRR, compute top 1/3/10 as % of total
+  "bridge" / "waterfall" / "mrr bridge" → compute MRR bridge for latest complete month pair
+  "trend" / "trends" → query MRR by month over FY26 (Apr 2025–Mar 2026)
+  "delta" / "change" / "variance" → query latest two months MRR, compute MoM change; query aop_targets for vs-AOP
+  "arr" / "run rate" / "annual run rate" → query latest MRR × 12
+  "miss" / "gap" → query latest actual MRR + aop_targets; compute gap; query pipeline for coverage
+  "at risk" / "red" / "red accounts" / "red flags" → query 3 most recent months, detect 2+ consecutive MRR declines
+  "health" / "health check" / "how are we" / "how we doing" / "how we did" → query MRR + compute NRR + query pipeline, synthesise
+  BU ONE-WORD SHORTCUTS (no BU suffix needed, query BU MRR and compute BU NRR live):
+    "bat" / "BAT" → query BAT BU MRR trend + compute BAT NRR
+    "sme" / "SME" → query SME BU MRR + compute SME NRR (cohort method, not naive)
+    "ent" / "enterprise" → query India ENT BU MRR + compute ENT NRR
+    "mm" / "midmarket" / "mid market" / "mid-market" → query India MM BU MRR + compute MM NRR
+    "kam" / "KAM" → query KAM BU MRR + compute KAM NRR
+    "sea" / "SEA" → query SEA BU MRR + compute SEA NRR + query SEA AOP attainment
+    "mea" / "MEA" → query MEA BU MRR + compute MEA NRR
+    "international" / "intl" → query BAT+MEA+SEA MRR + compute combined NRR
+    "india" → query India ENT+MM+SME+KAM MRR + compute combined NRR
+
+CUSTOMER NAME TYPOS — if a lookup returns 0 results, say: "I couldn't find '[name]' in the database —
+  check the spelling or use the customer search box on the left panel to find the exact name."
+
+METRIC BENCHMARKS IN PLAIN ENGLISH (for "is X good?" questions):
+  NRR: >120%=exceptional | 100–120%=healthy expansion | 85–100%=acceptable | <85%=danger zone
+  GRR: >90%=excellent | 85–90%=good | 75–85%=watch closely | <75%=crisis
+  Logo churn: <5%=great | 5–15%=typical SaaS | >20%=high / investigate
+  Concentration: 1 customer >10% of MRR=board-level risk | top 10 >50%=very concentrated
+  For context on current performance: query live and compare against the above thresholds.
+
+UNIT CONVERSION (if asked "in millions" or "in crores" or "in USD"):
+  ₹1L = ₹1,00,000 | ₹1Cr = ₹1,00,00,000 ≈ $120K | ₹100Cr ≈ $12M
+  Always present in ₹ first, then conversion if requested. Use ₹83/$ as approximate rate.
+
+HANDLING VAGUE OR HALF-FORMED QUESTIONS — never stall, never ask for clarification unless the question
+  is genuinely unanswerable. Assume the most businesslike interpretation, state assumption in one clause, answer.
+
+  INVESTOR / SENIOR LEADER patterns:
+    "How is SME doing?" → SME BU NRR + MRR vs AOP, most recent period. Answer immediately.
+    "What's the story?" / "full picture" / "the numbers" → total MRR, NRR, biggest risk. Now.
+    "Are we growing?" / "how we doing" / "how we did" → MoM MRR change + FY26 NRR. Now.
+    "What happened in Q3?" → Q3 FY26 (Oct–Dec 2025). State assumption, answer.
+    "What's the concentration?" / "HHI" → top 1, 3, 10 customers as % of MRR. Now.
+    "What's the BAT situation?" → query BAT BU MRR trend + compute BAT NRR, flag single-account concentration risk.
+    "Show me the bridge" / "waterfall" → MRR bridge for most recent complete month pair. Now.
+    "Are we going to miss?" / "on track?" / "are we hitting target?" → actuals vs AOP + pipeline coverage.
+    "Any concerns?" / "red flags?" / "biggest risk?" → query concentration (top 1 customer % of MRR) + compute SME NRR + query SEA AOP attainment.
+    "Show me red" / "red accounts" / "who is at risk?" → at-risk accounts (2+ consecutive MRR decline).
+    "International performance?" → BAT+MEA+SEA MRR + NRR combined. Now.
+    "India performance?" / "domestic?" → ENT+MM+SME+KAM MRR + NRR combined. Now.
+    "Stickiness?" / "logo retention?" → compute logo retention % from FY26 cohort + logo churn count.
+    "Book of business?" → total active MRR (all customers with mrr > 0), Mar 2026.
+    "Coverage?" → pipeline weighted ÷ AOP gap. Now.
+    "Miss / gap?" → AOP attainment gap in ₹ and %, then pipeline coverage.
+
+  FP&A ANALYST patterns (broken English, casual):
+    "show trend" / "trend please" → MRR trend Apr 2025–Mar 2026 with chart.
+    "compare bu" / "bu vs bu" → BU MRR side-by-side for Mar 2026 + FY26 NRR.
+    "expansion this year" / "expansion fy26" → compute expansion MRR from FY26 bridge (customers present Apr 2025 + Mar 2026 with MRR increase).
+    "churn fy26" / "how much churn" / "churn amount" → compute churn MRR + logo churn count from FY26 bridge.
+    "logo count" / "how many logos" / "how many customers" → query count of distinct customers with MRR > 0 in Apr 2025.
+    "show delta" / "change" → MoM MRR change for Mar 2026 vs Feb 2026.
+    "q4 summary" / "q4 numbers" → Q4 FY26 (Jan–Mar 2026): MRR trend across those 3 months.
+    "march close" / "eoy" / "year end" → Mar 2026: MRR + BU attainment table.
+    "net new" → net new MRR = New + Expansion − Contraction − Churn from latest bridge.
+    "variance" / "attainment" / "vs target" → actual vs AOP by BU, Mar 2026.
+    "arr growth" / "annual run rate" → Mar 2026 MRR × 12 vs Apr 2025 MRR × 12, growth %.
+    "why sme bad" / "sme problem" / "sme issue" → compute SME NRR live; analyse whether driven by logo churn or MRR contraction.
+    "why sea miss" / "sea low" → query SEA AOP attainment vs target; pull SEA MRR trend to diagnose.
+    "ytd" alone / "ytd numbers" → WARN: FY27 actuals not loaded. YTD FY26 = full year (Apr–Mar).
+
+  JOINT REVOPS + FP&A SESSION patterns (the most loaded questions):
+    "ex-BAT" / "strip out BAT" / "ex the big one" / "organic NRR" / "underlying NRR":
+      → Compute NRR ex-BAT live (exclude British American Shared Services GSD from cohort). Report three numbers: with BAT, ex-BAT, GRR. Never conflate ex-BAT NRR with GRR.
+    "FY27 target" / "Q1 target" / "what's our plan" / "this year target":
+      → Query aop_targets for the relevant period + bu_master join. Sum BUs for total. Compare to latest actual MRR. No FY27 actuals loaded yet.
+    "can we hit target" / "are we on plan" / "will we make it":
+      → Query: (1) latest weighted pipeline total, (2) FY27 AOP target for the relevant month.
+        Compute gap = target − latest actual MRR. Coverage = pipeline ÷ gap. Report ratio.
+    "top churns" / "biggest losses" / "who left us" / "biggest churn accounts":
+      → Compute live: fetch Apr 2025 cohort + Mar 2026 MRR, find customers absent or 0 in Mar 2026, sort by Apr 2025 MRR desc. Join customer_mrr_lines for segment + BU.
+    "at risk" / "show at risk" / "who is declining" / "red accounts":
+      → Query live: fetch the 3 most recent MRR months, detect 2+ consecutive declines, join for BU/segment.
+        Do NOT guess counts — always query. Group results by BU to give a summary table.
+    "is [customer] at risk?":
+      → Query that customer's last 3 months of MRR. If month[n-2] > month[n-1] > month[n], flag as at-risk.
+    "India vs International" / "domestic vs international" / "india performance":
+      → India = ENT+MM+SME+KAM. International = BAT+MEA+SEA. Pull Mar 2026 MRR for each group.
+    "late stage pipeline" / "what's hot" / "deals about to close":
+      → Query latest snapshot filtered to stage=in.("PO pending","Negotiation","Decision maker bought in").
+        Show deal count, total expected_mrr, and list top deals by expected_mrr.
+    "what does revised pricing mean in the pipeline" / "why is pipeline negative":
+      → "Revised Pricing" and "Closed Won" stages track contraction/repricing of existing accounts.
+         They have negative expected_mrr and should be excluded from new business pipeline totals.
+    "pipeline by BU" / "bu wise pipeline":
+      → Query deal_snapshots (latest, excl. negative stages), group by bu_master join. Show per-BU totals.
+    "deals closing this month" / "closing in April" / "what closes this quarter":
+      → Filter closing_month=eq.2026-04-01 (or the relevant month). Sort by expected_mrr desc.
+    "billing cycle" / "how do customers pay" / "annual vs monthly":
+      → Query live: table=customer_module_lines, params=select=billing_cycle&status=eq.Active&limit=1000. Group and compute % breakdown.
+    "what if we close 50% of pipeline" / "scenario planning" / "best case":
+      → Fetch weighted pipeline total, multiply by assumed close rate, compare to AOP gap.
+         State clearly: "Closing X% of pipeline adds ₹Y to MRR. Monthly gap to plan is ₹Z."
+         Always qualify: actual conversion depends on deal timing and MRR recognition.
+    "FY27 attainable?" / "is the plan realistic?" / "how aggressive is the target?":
+      → Query Q1 and Q4 FY27 targets. Compare Q1 to latest actual MRR for near-term ask.
+         Compare Q4 monthly targets to latest actual to show how back-loaded the plan is.
+         New business pipeline is the critical variable — show pipeline coverage vs gap.
+    "NRR trend" / "monthly NRR" / "how has NRR trended":
+      → Computing monthly NRR trend requires 12 separate cohort calculations — hits the 3-query limit.
+         Offer: (1) point-in-time FY26 NRR (query live Apr 2025 → Mar 2026), OR (2) MRR trend chart as proxy.
+         If they want per-quarter: Q1/Q2/Q3/Q4 FY26 NRR can be computed with 2 queries each quarter.
+
+  Only ask for clarification for genuine 180° ambiguities: "FY26 or FY27?" / "which customer?"
 
 HOW TO RESPOND — write like a senior analyst delivering a verdict, not doing homework on paper.
 
@@ -2309,19 +2603,19 @@ RESPONSE FORMAT — TWO TIERS FOR EVERY DATA RESPONSE, NO EXCEPTIONS:
     EXAMPLES BY QUERY TYPE (use as templates):
 
     Single metric — "what is SME BU MRR for Mar 2026?":
-    {"type":"summary","title":"SME BU — Mar 2026","metrics":[
-      {"label":"MRR","value":"₹8,90,34,000","status":"neutral","sub":"Mar 2026"},
-      {"label":"vs Mar 2025","value":"+12%","status":"up","sub":"₹7,94,12,000 prior year"},
-      {"label":"AOP Target","value":"₹9,20,00,000","status":"warn","sub":"3.3% below target"}
+    {"type":"summary","title":"SME BU — [MONTH YEAR]","metrics":[
+      {"label":"MRR","value":"₹[COMPUTED]","status":"neutral","sub":"[MONTH YEAR]"},
+      {"label":"vs prior year","value":"[+/-%]","status":"up|down","sub":"₹[COMPUTED] prior year"},
+      {"label":"AOP Target","value":"₹[FROM DB]","status":"warn","sub":"[X]% below|above target"}
     ],"followups":["How does SME MRR trend over FY26?","Which SME customers drove the growth?","What is SME NRR for FY26?"]}
 
-    NRR — "enterprise NRR Mar 2026 vs Mar 2025":
-    {"type":"summary","title":"Enterprise NRR — Mar 2026","metrics":[
-      {"label":"NRR","value":"113%","status":"up","sub":"Ex-BAT ≈ 87% — concentration risk"},
-      {"label":"Base MRR","value":"₹2,25,54,000","sub":"143 logos · Mar 2025"},
-      {"label":"Ending MRR","value":"₹2,55,16,000","sub":"Mar 2026"},
-      {"label":"Logo Retention","value":"91%","sub":"7 of 143 churned"},
-      {"label":"Churn MRR","value":"₹45–50L","status":"down","sub":"Parle Agro, EID Parry, Inbisco"}
+    NRR — "enterprise NRR [period]":
+    {"type":"summary","title":"[BU] NRR — [PERIOD]","metrics":[
+      {"label":"NRR","value":"[COMPUTED]%","status":"up|down","sub":"cohort: [N] logos"},
+      {"label":"Base MRR","value":"₹[COMPUTED]","sub":"[N] logos · [BASE MONTH]"},
+      {"label":"Ending MRR","value":"₹[COMPUTED]","sub":"[END MONTH]"},
+      {"label":"Logo Retention","value":"[COMPUTED]%","sub":"[N] of [N] churned"},
+      {"label":"Churn MRR","value":"₹[COMPUTED]","status":"down","sub":"top churns: [compute live]"}
     ],"followups":["Which BU had the most Enterprise churns?","How is NRR trending over 6 months?","Which Enterprise accounts are at risk?"]}
 
     BU breakdown — "all BU MRR for Mar 2026":
@@ -2378,14 +2672,17 @@ COLUMN ENRICHMENT — if deep-dive table lists individual customers, include Seg
   Column order: Customer Name, Segment, BU, [data columns]
 
 ANALYST QUALITY — verdict first, opinionated, short:
-  Good: "Enterprise NRR is 113% — but strip BAT's 6× expansion and it collapses to 87%. One account
-        is the difference between health and a danger zone. That's a board-level concentration risk."
+  Good: "Company NRR is X% — but that includes BAT growing massively. Strip BAT and NRR is Y%, still
+        healthy but the organic story is quieter. GRR at Z% tells you the retention baseline without
+        any expansion at all. Three numbers, three very different stories — which one matters for your audience?"
   Bad: "Here is the NRR. Here is a table."
 
 DATA LIMITS — be honest:
   No CAC, P&L, margins, headcount, NPS, or product usage data in this database.
   Pipeline: only latest snapshot. No stage-transition history or win rates.
-  customer_mrr_unified: ~1000 active customers/month. Full 13-month history may hit 3000-row limit — use 2-query approach for rolling NRR.`;
+  customer_mrr_unified: many customers from Apr 2025 (fewer pre-Apr 2025). A 13-month all-customer query
+  can exceed 3000 rows — will be truncated. Always use single-month queries for NRR, or filter by BU/segment.
+  ERTM BU: near-zero data from Apr 2025 (data reclassification artifact). Do not present ERTM NRR as real.`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
@@ -2394,7 +2691,8 @@ const AI_NAME_STOP = new Set([
   'month','year','mrr','top','all','any','those','some','much','many','each',
   'private','limited','india','pvt','ltd','group','company','corp','inc','data',
   'revenue','growth','churn','churned','active','increase','decrease','change',
-  'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
+  'drop','drops','rise','rises','fell','fall','falls','wise','percent','percentage',
+  'feb','jan','mar','apr','may','jun','jul','aug','sep',
   'oct','nov','dec','2024','2025','2026','2027','quarterly','annual','fy26','fy27',
   'its','not','but','are','has','was','had','did','can','may','use','get','set',
   'put','run','see','one','two','out','off','fy2','fy3','every','give',
@@ -2409,9 +2707,57 @@ const AI_NAME_STOP = new Set([
   // common English words that match customer names starting with them
   'new','old','best','first','last','high','low','big','top','key','max','min',
   'bridge','logo','logos','trend','rate','mix','gap','run','base','core','plus',
+  // geography / direction words that match customer names ("east" → East West Seed)
+  'east','west','north','south','orient','central',
+  // finance/analytics words that match customer names ("capital" → Capital Maharaja,
+  // "grand" → Grand Oak, "excel" → Excel Energy, "union" → Milk Union)
+  'excel','grand','capital','union','mother','filter','split','segment',
   // BU / segment alias terms — users say these to mean segments, never specific customers
-  'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam',
-  'small','medium','market','national','international','global','regional'
+  'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam','ent',
+  'small','medium','market','national','international','global','regional',
+  // Generic industry nouns
+  'pharma','agro','foods','food','chemicals','chemical','organic','digital','tech',
+  'solutions','services','industries','healthcare','logistics','retail','trading',
+  'consumer','energy','dairy','seeds','seed','beverages','beverage','textile',
+  'textiles','packaging','media','exports','imports','distributors','distribution',
+  // Basic English pronouns / prepositions missed previously
+  'how','our','who','why','per','too','now','ago','yet','you','sir','bad','bit',
+  'lot','got','let','via','due','few','own','ask','say','try','add','also','just',
+  'like','only','even','both','then','here','well','them','they','good','poor',
+  'done','made','back','come','tell','make','send','help','want','need','know',
+  'look','take','about','take','give','does','will','must','very','much','such',
+  // Conversational words that block every casual question
+  'please','hello','thanks','sorry','dear','hey','there','doing','going','being',
+  'saying','getting','having','making','taking','showing','giving','finding',
+  'happening','situation','performance','performing','performers','performer',
+  'summary','overview','details','detail','insight','insights','analysis',
+  'breakdown','numbers','number','figure','figures','amounts','amount',
+  'values','value','results','result','report','update','status','worst',
+  'better','worse','great','strong','weak','poor','best','good','bad',
+  // Finance/units words a fresher might use
+  'crores','lakhs','millions','billions','rupees','dollars','months','years',
+  'quarters','profit','loss','sales','cost','price','billing','payment','cash',
+  // People / org words a fresher uses instead of "customers"
+  'employees','employee','clients','client','accounts','account','companies',
+  'players','people','team','staff','members','person','everyone',
+  // Financial period abbreviations
+  'ytd','yoy','mom','qoq','ltm','ttm',
+  // Action words for export/sharing requests
+  'export','download','print','share','email',
+  // Hindi / Hinglish common words
+  'kya','hua','mein','hai','hain','nahi','kaisa','batao','kitna','karo',
+  'dedo','bata','dekho','yaar','arey','isko','uska','inko','unka','mere',
+  'humara','hamara','kuch','sab','aur','par','lekin','toh','woh','yeh','agar',
+  'mujhe','samajhao','raha','iska','kaise','matlab','achha','theek','sahi','accha',
+  // Full month names (abbreviations already in stop list above)
+  'january','february','march','april','june','july','august','september',
+  'october','november','december',
+  // Singular forms missed when plurals were stopped
+  'customer','quarter',
+  // Common English words not yet covered
+  'leave','left','when','once','since','while','before','after','until',
+  'without','within','against','between','through','around','along','above',
+  'below','inside','outside','toward'
 ]);
 
 // Words that, when they follow a token, mark that token as a BU/segment identifier
@@ -2422,35 +2768,42 @@ const AI_ENTITY_QUALIFIERS = new Set([
 ]);
 
 function aiResolveNames(question) {
-  if (!CUST_NAMES.length) return new Map();
+  if (!CUST_NAMES.length) return { single: new Map(), multi: new Map() };
+
+  // Capitalisation is the primary signal that the user intends a proper noun.
+  // "Godrej" (capital G) → check against customer list → disambiguate if needed.
+  // "godrej" (all lower) → pass straight to Claude, which handles ilike fuzzy match.
+  // Exception: tokens ≤4 chars may be abbreviations regardless of case (ITC, HUL, ABB).
+  const capitalizedTokens = new Set();
+  const capRe = /\b([A-Z][a-zA-Z]{2,})\b/g;
+  let cm;
+  while ((cm = capRe.exec(question)) !== null) capitalizedTokens.add(cm[1].toLowerCase());
 
   const q = question.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
   const tokens = q.split(/\s+/);
 
-  // Mark indices that are BU/segment identifiers based on neighbouring context.
-  // "SME BU" → token before "bu" is a BU code, not a customer name.
-  // This generalises automatically to any new BU code without touching the stopword list.
+  // "SME BU" → token before "bu" is a segment code, not a customer name.
   const skipIdx = new Set();
   tokens.forEach((t, i) => {
-    if (AI_ENTITY_QUALIFIERS.has(t)) {
-      if (i > 0) skipIdx.add(i - 1); // word immediately before the qualifier
-      skipIdx.add(i);                 // the qualifier itself
-    }
+    if (AI_ENTITY_QUALIFIERS.has(t)) { if (i > 0) skipIdx.add(i - 1); skipIdx.add(i); }
   });
 
-  const result = new Map();
+  const single = new Map();
+  const multi  = new Map();
   tokens.forEach((tok, idx) => {
     if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
-    // Word-boundary match: token must appear at start of a word in the customer name,
-    // not buried mid-word. Prevents "sme" matching "Cosmetics" (co·sme·tics).
-    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    // Only check if user capitalised the word (proper-noun signal) or it's a short abbrev.
+    // Long lowercase words are query vocabulary — Claude handles them via ilike.
+    if (!capitalizedTokens.has(tok) && tok.length > 4) return;
+    const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + esc + '(?:[^a-zA-Z0-9]|$)', 'i');
     const hits = CUST_NAMES.filter(n => re.test(n));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
-      if (!exact) result.set(tok, hits);
+      if (!exact) { hits.length === 1 ? single.set(tok, hits) : multi.set(tok, hits); }
     }
   });
-  return result;
+  return { single, multi };
 }
 
 /* ── Chat UI helpers ─────────────────────────────────────────── */
@@ -2499,7 +2852,7 @@ function aiAddFollowups(bubble, followups) {
     btn.className = 'nret-tog2';
     btn.style.cssText = 'font-size:11px;opacity:.7;padding:.22rem .6rem;white-space:normal;height:auto;text-align:left;max-width:280px';
     btn.textContent = q;
-    btn.onclick = () => { aiSetQ(q); };
+    btn.onclick = () => { aiSetQ(q); runAIQuery(false); };
     wrap.appendChild(btn);
   });
   bubble.appendChild(wrap);
@@ -2517,6 +2870,11 @@ function aiDlUrl(url, name) {
 }
 function aiSafeFilename(s) {
   return (s || 'export').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'export';
+}
+function aiUseAsTyped(q) {
+  // Disambiguation "Use as typed": inp was already cleared, restore q then send
+  document.getElementById('ai-q-input').value = q;
+  runAIQuery(true);
 }
 function aiExportCSV(cols, rows, title) {
   const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
@@ -2634,20 +2992,42 @@ async function runAIQuery(skipDisambig) {
 
   const btn = document.getElementById('ai-q-btn');
 
-  // Pre-flight: disambiguate partial customer names
+  // Pre-flight: smart customer-name resolution
   if (!skipDisambig) {
-    const nameMap = aiResolveNames(question);
-    if (nameMap.size > 0) {
-      const [tok, names] = [...nameMap.entries()][0];
-      const qText = names.length === 1
-        ? `Did you mean <strong>${names[0]}</strong>?`
-        : `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
+    const { single, multi } = aiResolveNames(question);
+
+    // Auto-resolve single matches silently — no popup, just substitute and proceed
+    if (single.size > 0) {
+      const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let resolvedQ = question;
+      single.forEach((hits, tok) => {
+        const resolved = hits[0];
+        const rWords = resolved.split(/\s+/);
+        for (let w = rWords.length; w >= 1; w--) {
+          const phrase = rWords.slice(0, w).map(escR).join('[\\s\'\\-]+');
+          const re = new RegExp('(?:^|(?<=[^a-zA-Z0-9]))' + phrase + '(?=[^a-zA-Z0-9]|$)', 'gi');
+          const candidate = resolvedQ.replace(re, resolved);
+          if (candidate !== resolvedQ) { resolvedQ = candidate; break; }
+        }
+      });
+      if (resolvedQ !== question) {
+        inp.value = resolvedQ;
+        if (!multi.size) { runAIQuery(true); return; }
+        // fall through to multi popup with partially-resolved question
+      }
+    }
+
+    // Show popup only for genuinely ambiguous proper nouns (2+ customer matches)
+    if (multi.size > 0) {
+      const currQ = inp.value || question;
+      const [tok, names] = [...multi.entries()][0];
+      const qText = `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
       const chips = names.map(n =>
         `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;white-space:normal;height:auto;padding:.3rem .65rem;text-align:left;max-width:300px;font-size:11.5px"
-          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
+          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(currQ)})'>${n}</button>`
       ).join('') +
-        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="runAIQuery(true)">Use as typed</button>`;
-      aiAddBubble('user', escHtml(question));
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(currQ)})">Use as typed</button>`;
+      aiAddBubble('user', escHtml(currQ));
       inp.value = '';
       aiAddBubble('assistant', qText + '<div style="margin-top:.45rem">' + chips + '</div>', 'question');
       return;
@@ -2658,23 +3038,34 @@ async function runAIQuery(skipDisambig) {
   aiAddBubble('user', escHtml(question));
   inp.value = '';
   AI_HISTORY.push({ role: 'user', content: question });
+  // Cap history at 20 messages (10 turns) to control context size
+  if (AI_HISTORY.length > 20) AI_HISTORY = AI_HISTORY.slice(-20);
 
   btn.disabled = true;
+  inp.disabled = true;
   btn.textContent = '…';
   aiAddThinking();
 
   try {
     // Tool-use agentic call — edge function fetches data and returns structured JSON
-    const resp = await fetch(AI_PROXY_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...cmrrHdr() },
-      body: JSON.stringify({
-        system: AI_SYSTEM,
-        messages: AI_HISTORY,
-        supabaseUrl: SUPABASE_URL,
-        supabaseKey: SUPABASE_ANON_KEY,
-      })
-    });
+    const ac = new AbortController();
+    const abortTimer = setTimeout(() => ac.abort(), 120000);
+    let resp;
+    try {
+      resp = await fetch(AI_PROXY_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...cmrrHdr() },
+        body: JSON.stringify({
+          system: AI_SYSTEM,
+          messages: AI_HISTORY,
+          supabaseUrl: SUPABASE_URL,
+          supabaseKey: SUPABASE_ANON_KEY,
+        }),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(abortTimer);
+    }
 
     aiRemoveThinking();
 
@@ -2708,20 +3099,35 @@ async function runAIQuery(skipDisambig) {
       if (s !== -1 && e > s) { try { blocks.push(JSON.parse(rawText.slice(s, e + 1))); textPart = ''; } catch {} }
     }
 
+    function inlineMd(l) {
+      return escHtml(l)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code style="font-family:var(--mono);font-size:.88em;background:#f0f2f5;padding:.1em .35em;border-radius:3px">$1</code>');
+    }
     function mdToHtml(t) {
-      return t
-        .split(/\n{2,}/).map(para => {
-          const lines = para.split('\n');
-          if (lines.every(l => /^[-•]\s/.test(l))) {
-            return '<ul style="margin:.3rem 0 .3rem 1.1rem;padding:0">' +
-              lines.map(l => `<li>${escHtml(l.replace(/^[-•]\s/, ''))}</li>`).join('') + '</ul>';
-          }
-          return '<p style="margin:.25rem 0">' + lines.map(l =>
-            escHtml(l)
-              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-              .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          ).join('<br>') + '</p>';
+      if (!t.trim()) return '';
+      return t.trim().split(/\n{2,}/).map(para => {
+        const lines = para.split('\n').filter(l => l !== undefined);
+        // Horizontal rule
+        if (lines.length === 1 && /^[-*_]{3,}$/.test(lines[0].trim()))
+          return '<hr style="border:none;border-top:1px solid #e5e7eb;margin:.5rem 0">';
+        // Bullet list
+        if (lines.every(l => /^[-•*]\s/.test(l)))
+          return '<ul style="margin:.3rem 0 .3rem 1.1rem;padding:0">' +
+            lines.map(l => `<li>${inlineMd(l.replace(/^[-•*]\s/, ''))}</li>`).join('') + '</ul>';
+        // Numbered list
+        if (lines.every(l => /^\d+[.)]\s/.test(l)))
+          return '<ol style="margin:.3rem 0 .3rem 1.2rem;padding:0">' +
+            lines.map(l => `<li>${inlineMd(l.replace(/^\d+[.)]\s/, ''))}</li>`).join('') + '</ol>';
+        // Mixed lines (headings, text)
+        return lines.map(l => {
+          if (/^### /.test(l)) return `<div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b7280;margin:.6rem 0 .15rem">${inlineMd(l.slice(4))}</div>`;
+          if (/^## /.test(l))  return `<div style="font-size:13px;font-weight:700;color:#1f2937;margin:.5rem 0 .15rem">${inlineMd(l.slice(3))}</div>`;
+          if (/^# /.test(l))   return `<div style="font-size:14px;font-weight:700;color:#111827;margin:.5rem 0 .15rem">${inlineMd(l.slice(2))}</div>`;
+          return `<p style="margin:.2rem 0">${inlineMd(l)}</p>`;
         }).join('');
+      }).join('');
     }
 
     function renderChartInto(container, result) {
@@ -2802,7 +3208,9 @@ async function runAIQuery(skipDisambig) {
         lbl.textContent = metric.label; row.appendChild(lbl);
         const rhs = document.createElement('div');
         const val = document.createElement('div');
-        val.className = 'ai-scorecard-val' + (metric.status ? ' ' + metric.status : '');
+        const STATUS_NORM = { positive:'up',good:'up',green:'up',negative:'down',bad:'down',red:'down',warning:'warn',yellow:'warn',amber:'warn',neutral:'' };
+        const st = metric.status ? (STATUS_NORM[metric.status.toLowerCase()] ?? metric.status) : '';
+        val.className = 'ai-scorecard-val' + (st ? ' ' + st : '');
         val.textContent = metric.value; rhs.appendChild(val);
         if (metric.sub) {
           const sub = document.createElement('div'); sub.className = 'ai-scorecard-sub';
@@ -2820,6 +3228,7 @@ async function runAIQuery(skipDisambig) {
         btn.onclick = () => {
           const open = content.classList.toggle('open');
           btn.innerHTML = open ? 'Deep Dive ▴' : 'Deep Dive ▾';
+          if (open) content.querySelectorAll('canvas').forEach(c => { const ch = Chart.getChart(c); if (ch) ch.resize(); });
         };
         bubble.appendChild(btn); bubble.appendChild(content);
         if (detailBlock.type === 'chart') renderChartInto(content, detailBlock);
@@ -2845,20 +3254,35 @@ async function runAIQuery(skipDisambig) {
 
   } catch(e) {
     aiRemoveThinking();
-    AI_HISTORY.push({ role: 'assistant', content: '(error: ' + e.message + ')' });
+    const msg = e.name === 'AbortError' ? 'Request timed out after 2 minutes. Please try again.' : e.message;
+    AI_HISTORY.push({ role: 'assistant', content: '(error: ' + msg + ')' });
     aiAddBubble('assistant',
-      `<div style="color:#9a3412">${escHtml(e.message)}</div>`
+      `<div style="color:#9a3412">${escHtml(msg)}</div>`
     );
   } finally {
     btn.disabled = false;
+    inp.disabled = false;
     btn.textContent = 'Send';
   }
 }
 
 function aiPickName(resolvedName, tok, origQ) {
-  const newQ = origQ.replace(new RegExp(tok, 'gi'), resolvedName);
+  // Try to replace the longest prefix of resolvedName found in origQ as a phrase.
+  // This fixes "british american tobacco" → replacing just "british" with the full name
+  // would leave "american tobacco" as orphaned tokens triggering disambiguation again.
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rWords = resolvedName.split(/\s+/);
+  let newQ = origQ;
+  let replaced = false;
+  for (let w = rWords.length; w >= 1; w--) {
+    const phrase = rWords.slice(0, w).map(esc).join('[\\s\'\\-]+');
+    const re = new RegExp('(?:^|(?<=[^a-zA-Z0-9]))' + phrase + '(?=[^a-zA-Z0-9]|$)', 'gi');
+    const candidate = origQ.replace(re, resolvedName);
+    if (candidate !== origQ) { newQ = candidate; replaced = true; break; }
+  }
+  if (!replaced) newQ = origQ.replace(new RegExp(esc(tok), 'gi'), resolvedName);
   document.getElementById('ai-q-input').value = newQ;
-  runAIQuery(true);
+  runAIQuery(false);
 }
 
 function escHtml(s) {
