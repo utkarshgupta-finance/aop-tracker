@@ -2243,6 +2243,7 @@ DATABASE SCHEMA:
   bu_master             — id INT, name TEXT, code TEXT
 
 USING THE TOOL — query_database(table, params):
+  LIMIT: Use at most 3 tool calls per response. Plan your queries upfront — fetch everything you need in 1-3 calls, then write your final answer immediately. Do NOT loop endlessly.
   1. ALWAYS start by fetching the latest available month first when question involves "current/latest/this month":
      table=customer_mrr_unified, params=select=month_date&order=month_date.desc&limit=1
   2. BU filter: bu_name=eq.India ENT BU  (exact match — never ilike for BU names)

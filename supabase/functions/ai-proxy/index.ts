@@ -85,8 +85,11 @@ Deno.serve(async (req) => {
 
   const msgs: { role: string; content: unknown }[] = [...messages];
 
-  // Agentic tool-use loop — up to 10 iterations
-  for (let iter = 0; iter < 10; iter++) {
+  // Agentic tool-use loop — up to 5 tool-call rounds, then force conclusion
+  const MAX_TOOL_ROUNDS = 5;
+  for (let iter = 0; iter <= MAX_TOOL_ROUNDS; iter++) {
+    // On the final iteration, switch to text-only to force an end_turn
+    const isLastChance = iter === MAX_TOOL_ROUNDS;
     const apiResp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -99,8 +102,10 @@ Deno.serve(async (req) => {
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         ...(systemBlocks ? { system: systemBlocks } : {}),
-        tools: TOOLS,
-        messages: msgs,
+        ...(isLastChance ? {} : { tools: TOOLS }),
+        messages: isLastChance
+          ? [...msgs, { role: 'user', content: 'Please now write your final response with the analysis you have gathered so far.' }]
+          : msgs,
       }),
     });
 
