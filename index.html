@@ -1111,34 +1111,43 @@ function cmrrHdr() {
 }
 
 async function initCustMRR() {
+  const inp = document.getElementById('cust-input');
   const fetchPage = async (offset) => {
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-      `?select=id,zoho_name,go_live_date,churn_date,segment_master(name),bu_master(name)` +
+      `?select=id,zoho_name,go_live_date,churn_date,segment_master!left(name),bu_master!left(name)` +
       `&order=zoho_name.asc,id.asc&limit=1000&offset=${offset}`,
       { headers: cmrrHdr() }
     );
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' – ' + await r.text());
     return r.json();
   };
-  const [p1, p2] = await Promise.all([fetchPage(0), fetchPage(1000)]);
-  CUST_LINES = [...p1, ...p2];
-  // Fetch global end month in the background — don't block customer list
-  fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() })
-    .then(r => r.json())
-    .then(maxR => { if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7); })
-    .catch(() => {});
+  // Load page 0 first so the input enables immediately; page 1 in background
+  const p1 = await fetchPage(0);
+  CUST_LINES = p1;
   const seen = new Set();
-  for (const row of CUST_LINES) {
+  for (const row of p1) {
     if (row.zoho_name && !seen.has(row.zoho_name)) {
-      seen.add(row.zoho_name);
-      CUST_NAMES.push(row.zoho_name);
+      seen.add(row.zoho_name); CUST_NAMES.push(row.zoho_name);
     }
   }
-  const inp = document.getElementById('cust-input');
   inp.disabled = false;
   inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
-  document.getElementById('cmrr-status').textContent = '';
+
+  // Page 2 + global end month in background
+  Promise.all([
+    fetchPage(1000),
+    fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() }).then(r => r.json()).catch(() => [])
+  ]).then(([p2, maxR]) => {
+    for (const row of p2) {
+      if (row.zoho_name && !seen.has(row.zoho_name)) {
+        seen.add(row.zoho_name); CUST_NAMES.push(row.zoho_name);
+        CUST_LINES.push(row);
+      }
+    }
+    inp.placeholder = `Search ${CUST_NAMES.length} customers…`;
+    if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7);
+  }).catch(() => {});
 }
 
 function cmrrFilter(q) {
