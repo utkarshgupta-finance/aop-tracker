@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AOP Tracker FY 2026–27</title>
+<title>Bizom Revenue</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -227,8 +227,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 </head>
 <body>
 <header>
-  <div class="eyebrow">Annual Operating Plan · FY 2026–27</div>
-  <div class="htitle">AOP Revenue Tracker</div>
+  <div class="eyebrow">Revenue Intelligence · FY 2026–27</div>
+  <div class="htitle">Bizom Revenue</div>
   <div class="hsub" id="sub">Loading…</div>
 </header>
 <div id="banner">
@@ -246,30 +246,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="bdismiss" onclick="document.getElementById('banner').classList.add('hidden')">Dismiss</button>
 </div>
 <nav>
-  <button class="tbtn active" onclick="showTab('mrr',this)">Exit MRR</button>
-  <button class="tbtn" onclick="showTab('nrr',this)">NRR</button>
-  <button class="tbtn" onclick="showTab('overall',this)">Overall</button>
-  <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
-  <button class="tbtn" onclick="showCustMRRTab(this)">Customer MRR</button>
+  <button class="tbtn active" onclick="showCustMRRTab(this)">Customer MRR</button>
   <button class="tbtn" onclick="showOverallMRRTab(this)">Overall MRR</button>
   <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
-  <button class="rbtn" id="export-btn" onclick="exportMRR()">⬇ Export MRR</button>
-  <button class="rbtn" id="sync-btn" onclick="syncCRM()"><span class="dot" id="sync-dot"></span><span id="sync-lbl">Sync CRM</span></button>
-  <button class="rbtn" onclick="loadData()"><span class="dot" id="dot"></span>Refresh</button>
+  <button class="tbtn" onclick="showAIQueryTab(this)">Ask AI</button>
+  <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
 </nav>
 <main>
-  <div id="mrr" class="pane active">
-    <p class="slabel">Exit MRR — Monthly AOP vs Actual <span class="crm-badge"><span class="crm-dot"></span>Live from Zoho CRM</span></p>
-    <div class="twrap" id="w-mrr"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
-  </div>
-  <div id="nrr" class="pane">
-    <p class="slabel">NRR — Monthly AOP vs Actual</p>
-    <div class="twrap" id="w-nrr"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
-  </div>
-  <div id="overall" class="pane">
-    <p class="slabel">Overall Revenue — AOP vs Actual by BU</p>
-    <div class="twrap" id="w-overall"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
-  </div>
   <div id="aop-plan" class="pane">
     <p class="slabel">AOP Plan FY 2026–27 — Targets by BU <span class="crm-badge"><span class="crm-dot" style="background:#854f0b"></span>From AOP Sheet</span></p>
     <div class="aop-filter-bar">
@@ -289,7 +272,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="aop-unit">Values in INR Crores</div>
     <div class="twrap" id="w-aop-plan"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
     </div>
-  <div id="cust-mrr" class="pane">
+  <div id="cust-mrr" class="pane active">
     <div class="cmrr-bar">
       <div class="cmrr-combo-wrap">
         <div class="flabel">Customer</div>
@@ -358,6 +341,41 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="twrap" id="nret-wrap">
       <div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>
     </div>
+  </div>
+  <div id="ai-query" class="pane">
+    <div class="cmrr-bar" style="flex-direction:column;align-items:flex-start;gap:1rem">
+      <div style="display:flex;align-items:center;gap:.75rem;width:100%">
+        <div style="flex:1">
+          <div class="flabel" style="margin-bottom:.35rem">Ask anything about customer revenue</div>
+          <div style="display:flex;gap:.6rem">
+            <input type="text" id="ai-q-input" class="cust-input"
+              style="flex:1;padding:.6rem .9rem;font-size:13px"
+              placeholder="e.g. List customers whose MRR increased by 3% or more in Feb 2026"
+              onkeydown="if(event.key==='Enter')runAIQuery()">
+            <button class="rbtn" id="ai-q-btn" onclick="runAIQuery()" style="padding:.6rem 1.2rem;font-size:12.5px">Ask</button>
+          </div>
+        </div>
+        <div style="min-width:200px">
+          <div class="flabel" style="margin-bottom:.35rem">Anthropic API Key</div>
+          <div style="display:flex;gap:.4rem">
+            <input type="password" id="ai-api-key" class="cust-input"
+              style="flex:1;padding:.5rem .7rem;font-size:12px;font-family:var(--mono)"
+              placeholder="sk-ant-…"
+              value=""
+              oninput="localStorage.setItem('ai_api_key',this.value)">
+          </div>
+        </div>
+      </div>
+      <div id="ai-q-examples" style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <span class="flabel" style="align-self:center">Try:</span>
+        <button class="nret-tog2" onclick="aiSetQ('List customers whose MRR increased by 3% or more in Feb 2026')">MRR up 3%+ in Feb 26</button>
+        <button class="nret-tog2" onclick="aiSetQ('Which customers churned in FY2026? Show their last MRR')">Churned in FY26</button>
+        <button class="nret-tog2" onclick="aiSetQ('Top 10 customers by MRR in March 2026')">Top 10 by MRR Mar 26</button>
+        <button class="nret-tog2" onclick="aiSetQ('Customers with declining MRR for 3 consecutive months ending Mar 2026')">Declining 3 months</button>
+      </div>
+    </div>
+    <div id="ai-q-status" class="cmrr-status" style="padding:.6rem 0;font-size:12px"></div>
+    <div id="ai-q-result" style="overflow-x:auto"></div>
   </div>
 </main>
 <div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
@@ -1327,17 +1345,20 @@ function cmrrRenderMetrics(byMonth) {
     ? `MRR ${mLbl(end)} = ${fLbl(endV)}\nMRR ${mLbl(start12Key)} = ${fLbl(start12V)}\n\n(${fLbl(endV)} ÷ ${fLbl(start12V)}) − 1\n= ${cagrHtml}`
     : `No data for ${mLbl(end)} or ${mLbl(start12Key)}`;
 
-  // 3. Avg CMGR — arithmetic mean of MoM growth rates in the window
+  // 3. Avg CMGR — arithmetic mean of MoM growth rates over 12 months
+  // Always divides by 12; months with no data contribute 0% growth
   let cmgrHtml = '—', cmgrCls = '';
   let cmgrTipLines = `MoM growth rates (${mLbl(start12Key)} → ${mLbl(end)}):\n`;
   if (window12.length > 0) {
-    const avg = window12.reduce((s, r) => s + r.rate, 0) / window12.length * 100;
+    const avg = window12.reduce((s, r) => s + r.rate, 0) / 12 * 100;
     cmgrCls  = avg >= 0 ? 'pos' : 'neg';
     cmgrHtml = (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%';
     cmgrTipLines += window12.map(r =>
       `  ${mLbl(r.month)}: ${fLbl(r.pv)} → ${fLbl(r.cv)} (${(r.rate*100 >= 0 ? '+' : '')}${(r.rate*100).toFixed(1)}%)`
     ).join('\n');
-    cmgrTipLines += `\n\nSum ÷ ${window12.length} = ${cmgrHtml}/month`;
+    const missingMonths = 12 - window12.length;
+    if (missingMonths > 0) cmgrTipLines += `\n  (${missingMonths} month${missingMonths>1?'s':''} with no data = 0%)`;
+    cmgrTipLines += `\n\nSum ÷ 12 = ${cmgrHtml}/month`;
   } else {
     cmgrTipLines += '  No overlapping MoM pairs found';
   }
@@ -1364,7 +1385,7 @@ function cmrrRenderMetrics(byMonth) {
       ${tip(cagrTip)}
     </div>
     <div class="cmrr-metric">
-      <div class="cmrr-metric-lbl">Avg CMGR (${window12.length}m)</div>
+      <div class="cmrr-metric-lbl">Avg CMGR (12m)</div>
       <div class="cmrr-metric-val ${cmgrCls}">${cmgrHtml}</div>
       <div class="cmrr-metric-lbl" style="margin-top:.1rem">per month avg</div>
       ${tip(cmgrTipLines)}
@@ -1681,6 +1702,12 @@ function cmrrRenderWf(matrix, months) {
 
 function showCustMRRTab(btn) {
   showTab('cust-mrr', btn);
+}
+
+function showAIQueryTab(btn) {
+  showTab('ai-query', btn);
+  const stored = localStorage.getItem('ai_api_key') || '';
+  document.getElementById('ai-api-key').value = stored;
 }
 
 /* ─── OVERALL MRR TAB ────────────────────────────────────── */
@@ -2186,6 +2213,139 @@ _custInited = true;
 initCustMRR().catch(e => {
   document.getElementById('cust-input').placeholder = 'Error – ' + e.message;
 });
+
+/* ─── AI QUERY ───────────────────────────────────────────── */
+const AI_SYSTEM = `You are a Supabase PostgREST query generator for Bizom's customer revenue database.
+
+Schema:
+  customer_mrr_unified  — zoho_name TEXT, month_date DATE (stored as YYYY-MM-01), mrr_amount NUMERIC
+  customer_mrr_lines    — id INT, zoho_name TEXT, go_live_date DATE, churn_date DATE
+
+PostgREST REST API rules:
+  Base URL: SUPABASE_URL + '/rest/v1/' + table
+  Filters appended as query params: ?col=eq.value, gt.value, gte.value, lt.value, lte.value, like.pat, is.null, not.is.null
+  Select specific columns: ?select=col1,col2
+  Order: &order=col.asc or .desc
+  Limit: &limit=N
+  Headers: always include {  "apikey": ANON_KEY, "Authorization": "Bearer " + ANON_KEY }
+  Date format in filters: YYYY-MM-01  (e.g. 2026-02-01 for Feb 2026)
+
+You must return ONLY a raw JavaScript async function body (no "async function" declaration, no markdown fences).
+The function body has access to:
+  SUPABASE_URL  — string, the PostgREST base
+  SUPABASE_ANON — string, the anon key
+  f(n)          — formats a number as Indian currency string
+
+The function must:
+1. Fetch data from Supabase REST API using fetch() with proper headers
+2. Process the data to answer the user question
+3. Return an object:
+   {
+     columns: ['Col A', 'Col B', ...],   // table header labels
+     rows: [[val, val, ...], ...],         // data rows (values as strings/numbers)
+     summary: 'Short text summary'         // one sentence describing the result
+   }
+
+For MoM change queries, fetch two months and join on zoho_name in JavaScript.
+Always sort results meaningfully (e.g. largest change first).
+Limit to top 200 rows max.`;
+
+function aiSetQ(q) {
+  document.getElementById('ai-q-input').value = q;
+  document.getElementById('ai-q-input').focus();
+}
+
+async function runAIQuery() {
+  const question = document.getElementById('ai-q-input').value.trim();
+  if (!question) return;
+
+  const apiKey = localStorage.getItem('ai_api_key') || document.getElementById('ai-api-key').value.trim();
+  if (!apiKey) {
+    document.getElementById('ai-q-status').textContent = 'Enter your Anthropic API key first.';
+    return;
+  }
+  localStorage.setItem('ai_api_key', apiKey);
+
+  const status = document.getElementById('ai-q-status');
+  const resultEl = document.getElementById('ai-q-result');
+  const btn = document.getElementById('ai-q-btn');
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  status.textContent = 'Asking Claude to generate a query…';
+  resultEl.innerHTML = '';
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        system: AI_SYSTEM,
+        messages: [{ role: 'user', content: question }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'API error ' + resp.status);
+    }
+
+    const data = await resp.json();
+    let code = data.content[0]?.text || '';
+    // Strip any accidental markdown fences
+    code = code.replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
+
+    status.textContent = 'Running query…';
+
+    const SUPABASE_ANON = SUPABASE_URL
+      ? document.cookie // not used — pass via closure
+      : '';
+
+    const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+    const fn = new AsyncFn('SUPABASE_URL', 'SUPABASE_ANON', 'f', 'cmrrHdr', code);
+    const anonKey = (() => {
+      // Extract anon key from existing cmrrHdr call
+      const h = cmrrHdr();
+      return h['apikey'] || '';
+    })();
+    const result = await fn(SUPABASE_URL, anonKey, f, cmrrHdr);
+
+    if (!result || !result.columns || !result.rows) {
+      throw new Error('Claude returned an unexpected format. Try rephrasing your question.');
+    }
+
+    status.textContent = result.summary || '';
+    resultEl.innerHTML = aiRenderTable(result.columns, result.rows);
+
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ask';
+  }
+}
+
+function aiRenderTable(cols, rows) {
+  if (!rows.length) return '<div style="padding:1.5rem;color:var(--txt3);font-size:13px">No results found.</div>';
+  let h = `<div class="twrap" style="margin-top:.5rem"><table><thead><tr>`;
+  h += `<th class="th-bu" style="min-width:36px">#</th>`;
+  for (const c of cols) h += `<th class="th-mon" style="min-width:90px;white-space:nowrap">${c}</th>`;
+  h += `</tr></thead><tbody>`;
+  rows.forEach((row, i) => {
+    h += `<tr class="${i%2?'alt':''}"><td class="bu" style="color:var(--txt3);font-size:10px">${i+1}</td>`;
+    for (const v of row) h += `<td class="caop">${v ?? '—'}</td>`;
+    h += `</tr>`;
+  });
+  h += `</tbody></table></div>`;
+  h += `<div style="padding:.4rem 0;color:var(--txt3);font-size:10.5px;font-family:var(--mono)">${rows.length} row${rows.length!==1?'s':''}</div>`;
+  return h;
+}
 </script>
 </body>
 </html>
