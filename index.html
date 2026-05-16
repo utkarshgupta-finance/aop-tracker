@@ -2278,6 +2278,37 @@ SUMMARY — write like a senior analyst, not a script. Interpret the numbers:
 DATA LIMITS — say honestly when you don't have it:
   No CAC, margins, P&L, headcount, NPS, or product usage/DAU data.
   Pipeline: only latest snapshot, no stage-transition history or win rates.
+  Pipeline account names ≠ customer MRR names exactly — use ilike for fuzzy matching.
+
+CRITICAL PATTERNS — always apply these, never skip:
+
+  ① NEVER hardcode dates for "current / latest / this month / last month / recent":
+    Always fetch the latest available month first, then use it:
+    const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+    // LM = "2026-03-01". Use LM in all subsequent fetches instead of hardcoded dates.
+    // Prior month = subtract 1 month from LM manually: if LM.slice(5,7)==='01' → prev year Dec, else same year month-1
+
+  ② SEGMENT / BU breakdown requires a JS join — customer_mrr_unified has NO segment or BU column:
+    Build a lookup from customer_mrr_lines first, then join in JS:
+    const segMap={};
+    (await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name),bu_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()))
+      .forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]={seg:x.segment_master?.name||'Other',bu:x.bu_master?.name||'Other'}});
+    Then: segMap[zoho_name]?.seg  /  segMap[zoho_name]?.bu
+
+  ③ LARGE DATE RANGES: customer_mrr has 29,000+ rows. A 5000-row fetch silently truncates.
+    For full-history bridge or full-history NRR, limit to the last 13–14 months unless asked for more.
+    If query may exceed 5000 rows, add to summary: "(Results limited to most recent data — full history may have more)"
+
+  ④ FISCAL YEAR: FY26 = Apr 2025–Mar 2026 (most recent complete FY). FY27 starts Apr 2026.
+    "This FY" / "current FY" → always use pattern ① to find latest data month, then pick the correct FY range.
+    Never assume a date range — derive it from what data actually exists.
+
+  ⑤ MULTI-LINE CUSTOMERS: customer_mrr_lines has multiple rows per customer (one per contract/product).
+    When building segMap / buMap, first-match-wins is fine. When counting distinct customers from
+    customer_mrr_lines always use [...new Set(d.map(x=>x.zoho_name))].length
+
+  ⑥ BILLING CYCLE / MODULE FIELD VALUES: values in customer_module_lines are free-text.
+    Never filter by assumed values like "Annual" — GROUP BY the field first and show all distinct values.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXAMPLES (learn the patterns)
@@ -2391,7 +2422,59 @@ const sorted=[...curr].sort((a,b)=> +b.mrr_amount- +a.mrr_amount);
 const med= +sorted[Math.floor(sorted.length/2)]?.mrr_amount||0;
 const prevNames=new Set(prev.map(x=>x.zoho_name));
 const newLogos=curr.filter(x=>!prevNames.has(x.zoho_name));
-return {columns:['Metric','Value','Notes'],rows:[['ARR (Mar 2026)',f(tot*12),'MRR × 12'],['Total MRR',f(tot),(((tot-totP)/totP)*100).toFixed(1)+'% vs Feb'],['Active Customers',curr.length,(curr.length-prev.length>0?'+':'')+( curr.length-prev.length)+' vs Feb'],['Avg MRR / Customer',f(avg),'Mean'],['Median MRR / Customer',f(med),'50th percentile — shows skew'],['New Logos This Month',newLogos.length,newLogos.slice(0,2).map(x=>x.zoho_name).join(', ')+(newLogos.length>2?' +more':'')]],summary:'Business snapshot Mar 2026. ARR: '+f(tot*12)+'. MRR grew '+((tot-totP)/totP*100).toFixed(1)+'% MoM.',followups:['Show the full MRR bridge for FY26','Which customers churned this month?','Show top 10 customers by MRR']};`;
+return {columns:['Metric','Value','Notes'],rows:[['ARR (Mar 2026)',f(tot*12),'MRR × 12'],['Total MRR',f(tot),(((tot-totP)/totP)*100).toFixed(1)+'% vs Feb'],['Active Customers',curr.length,(curr.length-prev.length>0?'+':'')+( curr.length-prev.length)+' vs Feb'],['Avg MRR / Customer',f(avg),'Mean'],['Median MRR / Customer',f(med),'50th percentile — shows skew'],['New Logos This Month',newLogos.length,newLogos.slice(0,2).map(x=>x.zoho_name).join(', ')+(newLogos.length>2?' +more':'')]],summary:'Business snapshot Mar 2026. ARR: '+f(tot*12)+'. MRR grew '+((tot-totP)/totP*100).toFixed(1)+'% MoM.',followups:['Show the full MRR bridge for FY26','Which customers churned this month?','Show top 10 customers by MRR']};
+
+[PATTERN: Dynamic latest month — ALWAYS use for "current/latest/this month/last month"] — universal:
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const mm=+LM.slice(5,7),yyyy=+LM.slice(0,4);
+const prevLM=(mm===1?yyyy-1+'-12':yyyy+'-'+(mm-1).toString().padStart(2,'0'))+'-01';
+const [curr,prev]=await Promise.all([LM,prevLM].map(m=>fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+m+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())));
+const tot=curr.reduce((s,x)=>s+ +x.mrr_amount,0),totP=prev.reduce((s,x)=>s+ +x.mrr_amount,0);
+return {columns:['Metric','Value'],rows:[['Latest Data Month',LM.slice(0,7)],['Total MRR',f(tot)],['ARR',f(tot*12)],['MoM Change',f(tot-totP)+' ('+(((tot-totP)/totP)*100).toFixed(1)+'%)'],['Active Customers',curr.length]],summary:'Business snapshot as of '+LM.slice(0,7)+' (latest available data). ARR: '+f(tot*12)+'.',followups:['Show MRR bridge to explain the change','Which customers are new this month?','Show top 10 customers']};
+
+[PATTERN: MRR / ARR by Segment] — requires JS join (segment not in customer_mrr_unified):
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const [mrr,lines]=await Promise.all([
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+LM+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name),bu_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())
+]);
+const segMap={};lines.forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]={seg:x.segment_master?.name||'Other',bu:x.bu_master?.name||'Other'}});
+const bySeg={};
+mrr.forEach(x=>{const s=segMap[x.zoho_name]?.seg||'Other';if(!bySeg[s])bySeg[s]={mrr:0,count:0};bySeg[s].mrr+= +x.mrr_amount;bySeg[s].count++;});
+const total=Object.values(bySeg).reduce((s,v)=>s+v.mrr,0);
+const rows=Object.entries(bySeg).sort((a,b)=>b[1].mrr-a[1].mrr).map(([seg,v])=>[seg,v.count,f(v.mrr),f(v.mrr*12),(v.mrr/total*100).toFixed(1)+'%']);
+return {columns:['Segment','Customers','MRR – '+LM.slice(0,7)+' (₹)','ARR (₹)','% of Total'],rows,summary:'MRR breakdown by segment as of '+LM.slice(0,7)+'. Total MRR: '+f(total)+'.',followups:['Show NRR by segment','Which segment has the most churn risk?','Show top 5 customers in each segment']};
+
+[PATTERN: Customer Modules — what products/services does a customer use]:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_module_lines?select=zoho_name,services,workflow,service_type,status,billing_cycle&zoho_name=ilike.*'+encodeURIComponent('Glaxosmithkline')+'*',{headers:cmrrHdr()});
+const d=await r.json();
+if(!d.length)return{columns:['Note'],rows:[['No module data found for this customer']],summary:'Customer not found in module lines.'};
+return {columns:['Customer','Services','Workflow','Type','Status','Billing Cycle'],rows:d.map(x=>[x.zoho_name,x.services||'—',x.workflow||'—',x.service_type||'—',x.status||'—',x.billing_cycle||'—']),summary:'Module and service breakdown for '+d[0].zoho_name+'. '+d.length+' product line(s).',followups:['Show their MRR trend','Which other customers use the same services?','How does their MRR compare to customers with more modules?']};
+
+[PATTERN: Billing cycle breakdown — group by, never assume values]:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_module_lines?select=billing_cycle,zoho_name&limit=5000',{headers:cmrrHdr()});
+const d=await r.json();
+const byBC={};d.forEach(x=>{const bc=x.billing_cycle||'Unknown';if(!byBC[bc])byBC[bc]=new Set();byBC[bc].add(x.zoho_name)});
+const rows=Object.entries(byBC).sort((a,b)=>b[1].size-a[1].size).map(([bc,s])=>[bc,s.size]);
+return {columns:['Billing Cycle','Distinct Customers'],rows,summary:'Customer count by billing cycle. Note: one customer may appear in multiple billing cycles (different modules).',followups:['Which annual-billing customers are up for renewal?','Show MRR by billing cycle','Which customers have mixed billing cycles?']};
+
+[PATTERN: Customer Tenure — longest-tenured and avg lifetime]:
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,go_live_date,churn_date,segment_master!left(name),bu_master!left(name)&go_live_date=not.is.null&order=go_live_date.asc&limit=2000',{headers:cmrrHdr()});
+const d=await r.json();
+const ref=new Date(LM);
+const rows=d.map(x=>{
+  const gl=new Date(x.go_live_date);
+  const end=x.churn_date?new Date(x.churn_date):ref;
+  const months=Math.round((end-gl)/(1000*60*60*24*30.44));
+  return{name:x.zoho_name,go:x.go_live_date,churn:x.churn_date||null,months,seg:x.segment_master?.name||'—',bu:x.bu_master?.name||'—'};
+}).filter(x=>x.months>0);
+const active=rows.filter(x=>!x.churn);
+const avgActive=Math.round(active.reduce((s,x)=>s+x.months,0)/active.length);
+const churned=rows.filter(x=>x.churn);
+const avgChurn=churned.length?Math.round(churned.reduce((s,x)=>s+x.months,0)/churned.length):0;
+const top20=active.sort((a,b)=>b.months-a.months).slice(0,20);
+return {columns:['Customer Name','Segment','BU','Go-Live Date','Tenure (Months)'],rows:top20.map(x=>[x.name,x.seg,x.bu,x.go,x.months]),summary:'Top 20 longest-tenured active customers. Avg active tenure: '+avgActive+' months. Avg churned tenure before leaving: '+avgChurn+' months.',followups:['Which long-tenured customers have flat MRR (expansion opportunity)?','Show me customers who joined in FY24','What is tenure distribution by segment?']};`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
@@ -2414,18 +2497,39 @@ const AI_NAME_STOP = new Set([
   'fy27','net','gross','expansion','contraction','active','inactive','live'
 ]);
 
+// Words that, when they follow a token, mark that token as a BU/segment identifier
+// rather than a customer name. Extend this list as the business adds new entity types.
+const AI_ENTITY_QUALIFIERS = new Set([
+  'bu','bus','unit','units','business','segment','segments','region','regions',
+  'vertical','verticals','team','teams','division','divisions','market','markets'
+]);
+
 function aiResolveNames(question) {
   if (!CUST_NAMES.length) return new Map();
-  const tokens = question.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/)
-    .filter(t => t.length >= 3 && !AI_NAME_STOP.has(t));
+
+  const q = question.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const tokens = q.split(/\s+/);
+
+  // Mark indices that are BU/segment identifiers based on neighbouring context.
+  // "SME BU" → token before "bu" is a BU code, not a customer name.
+  // This generalises automatically to any new BU code without touching the stopword list.
+  const skipIdx = new Set();
+  tokens.forEach((t, i) => {
+    if (AI_ENTITY_QUALIFIERS.has(t)) {
+      if (i > 0) skipIdx.add(i - 1); // word immediately before the qualifier
+      skipIdx.add(i);                 // the qualifier itself
+    }
+  });
+
   const result = new Map();
-  for (const tok of tokens) {
+  tokens.forEach((tok, idx) => {
+    if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
     const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
       if (!exact) result.set(tok, hits);
     }
-  }
+  });
   return result;
 }
 
