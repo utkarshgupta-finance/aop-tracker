@@ -240,20 +240,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div class="htitle">Bizom Revenue</div>
   <div class="hsub" id="sub">Loading…</div>
 </header>
-<div id="banner">
-  <div class="btext">
-    <strong>No AOP data received yet.</strong>
-    Currently showing cached AOP values. To push live data from your Google Sheet:
-    <ol>
-      <li>Copy the script from <code>supabase/google-apps-script.js</code> in this repo</li>
-      <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong> → paste the script</li>
-      <li>Set <code>PUSH_SECRET</code> to match the <code>AOP_PUSH_SECRET</code> env var on the Edge Function</li>
-      <li>Run <strong>pushAOPData()</strong> once, then add a trigger for automatic updates</li>
-    </ol>
-    <strong>Actual MRR</strong> is fetched live from Zoho CRM on every page load.
-  </div>
-  <button class="bdismiss" onclick="document.getElementById('banner').classList.add('hidden')">Dismiss</button>
-</div>
+
 <nav>
   <button class="tbtn active" onclick="showCustMRRTab(this)">Customer MRR</button>
   <button class="tbtn" onclick="showOverallMRRTab(this)">Overall MRR</button>
