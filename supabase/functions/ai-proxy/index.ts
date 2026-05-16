@@ -16,16 +16,16 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { system?: string; question: string };
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
-  }
+  let body: { system?: string; question?: string; messages?: {role:string;content:string}[] };
+  try { body = await req.json(); }
+  catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } }); }
 
-  const { system, question } = body;
-  if (!question) {
-    return new Response(JSON.stringify({ error: 'Missing question' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  const { system, question, messages } = body;
+
+  // Accept either messages array (conversational) or single question string
+  const msgs: {role:string;content:string}[] = messages ?? (question ? [{ role: 'user', content: question }] : []);
+  if (!msgs.length) {
+    return new Response(JSON.stringify({ error: 'Missing messages or question' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
 
   const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -39,12 +39,11 @@ Deno.serve(async (req) => {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1200,
       ...(system ? { system } : {}),
-      messages: [{ role: 'user', content: question }],
+      messages: msgs,
     }),
   });
 
   const data = await anthropicResp.json();
-
   return new Response(JSON.stringify(data), {
     status: anthropicResp.status,
     headers: { ...CORS, 'Content-Type': 'application/json' },

@@ -217,6 +217,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .nret-tog2:hover{background:#f0f4f9}
 .nret-tog2.active{background:var(--navy3);color:#fff;border-color:var(--navy3)}
 .nret-divsep{color:#ccc;font-size:14px;padding:0 .2rem;align-self:center}
+/* ── Ask AI chat ───────────────────────────────────────────── */
+.ai-bubble{max-width:82%;padding:.6rem .95rem;border-radius:12px;font-size:12.5px;line-height:1.6;font-family:var(--sans);word-break:break-word}
+.ai-bubble.user{align-self:flex-end;background:var(--navy3);color:#fff;border-bottom-right-radius:3px}
+.ai-bubble.assistant{align-self:flex-start;background:#f1f5fb;color:var(--txt);border-bottom-left-radius:3px}
+.ai-bubble.assistant.question{background:#fefce8;border:1px solid #fde68a}
+.ai-bubble .ai-tbl-wrap{margin-top:.5rem;overflow-x:auto;border-radius:6px;border:1px solid var(--brd2)}
+.ai-bubble .ai-summary{color:var(--txt3);font-size:11px;margin-top:.3rem;font-family:var(--mono)}
+.ai-thinking{align-self:flex-start;color:var(--txt3);font-size:11.5px;font-family:var(--mono);padding:.4rem 0;animation:blink 1.2s infinite}
+@keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
 /* ── Overall MRR tab ───────────────────────────────────────── */
 .omrr-bar{padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .omrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3)}
@@ -231,20 +240,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div class="htitle">Bizom Revenue</div>
   <div class="hsub" id="sub">Loading…</div>
 </header>
-<div id="banner">
-  <div class="btext">
-    <strong>No AOP data received yet.</strong>
-    Currently showing cached AOP values. To push live data from your Google Sheet:
-    <ol>
-      <li>Copy the script from <code>supabase/google-apps-script.js</code> in this repo</li>
-      <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong> → paste the script</li>
-      <li>Set <code>PUSH_SECRET</code> to match the <code>AOP_PUSH_SECRET</code> env var on the Edge Function</li>
-      <li>Run <strong>pushAOPData()</strong> once, then add a trigger for automatic updates</li>
-    </ol>
-    <strong>Actual MRR</strong> is fetched live from Zoho CRM on every page load.
-  </div>
-  <button class="bdismiss" onclick="document.getElementById('banner').classList.add('hidden')">Dismiss</button>
-</div>
+
 <nav>
   <button class="tbtn active" onclick="showCustMRRTab(this)">Customer MRR</button>
   <button class="tbtn" onclick="showOverallMRRTab(this)">Overall MRR</button>
@@ -343,29 +339,25 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div>
   <div id="ai-query" class="pane">
-    <div class="cmrr-bar" style="flex-direction:column;align-items:flex-start;gap:1rem">
-      <div style="display:flex;align-items:center;gap:.75rem;width:100%">
-        <div style="flex:1">
-          <div class="flabel" style="margin-bottom:.35rem">Ask anything about customer revenue</div>
-          <div style="display:flex;gap:.6rem">
-            <input type="text" id="ai-q-input" class="cust-input"
-              style="flex:1;padding:.6rem .9rem;font-size:13px"
-              placeholder="e.g. List customers whose MRR increased by 3% or more in Feb 2026"
-              onkeydown="if(event.key==='Enter')runAIQuery()">
-            <button class="rbtn" id="ai-q-btn" onclick="runAIQuery()" style="padding:.6rem 1.2rem;font-size:12.5px">Ask</button>
-          </div>
-        </div>
+    <div id="ai-chat" style="display:flex;flex-direction:column;gap:.75rem;padding:.5rem 0 1rem;min-height:120px;max-height:62vh;overflow-y:auto"></div>
+    <div style="border-top:1px solid var(--brd2);padding-top:.75rem;display:flex;flex-direction:column;gap:.5rem">
+      <div style="display:flex;gap:.6rem">
+        <input type="text" id="ai-q-input" class="cust-input"
+          style="flex:1;padding:.6rem .9rem;font-size:13px"
+          placeholder="Ask anything — e.g. VST MRR in Jan, or top 10 customers last month"
+          onkeydown="if(event.key==='Enter')runAIQuery()">
+        <button class="rbtn" id="ai-q-btn" onclick="runAIQuery()" style="padding:.6rem 1.2rem;font-size:12.5px">Send</button>
+        <button class="rbtn" onclick="aiClearChat()" style="padding:.6rem .9rem;font-size:12px;opacity:.6" title="Clear chat">✕</button>
       </div>
-      <div id="ai-q-examples" style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <span class="flabel" style="align-self:center">Try:</span>
-        <button class="nret-tog2" onclick="aiSetQ('List customers whose MRR increased by 3% or more in Feb 2026')">MRR up 3%+ in Feb 26</button>
-        <button class="nret-tog2" onclick="aiSetQ('Which customers churned in FY2026? Show their last MRR')">Churned in FY26</button>
-        <button class="nret-tog2" onclick="aiSetQ('Top 10 customers by MRR in March 2026')">Top 10 by MRR Mar 26</button>
-        <button class="nret-tog2" onclick="aiSetQ('Customers with declining MRR for 3 consecutive months ending Mar 2026')">Declining 3 months</button>
+      <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+        <span class="flabel" style="align-self:center;font-size:10px">Try:</span>
+        <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('VST Industries MRR in Jan 2026')">VST Jan 26</button>
+        <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Show me Glaxo MRR for all months in FY2026')">Glaxo FY26</button>
+        <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Top 10 customers by MRR in March 2026')">Top 10 Mar 26</button>
+        <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Which customers had MRR go up by 5% or more in Feb 2026?')">MRR up 5%+ Feb 26</button>
+        <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Glaxo MRR for every January')">Glaxo all Januaries</button>
       </div>
     </div>
-    <div id="ai-q-status" class="cmrr-status" style="padding:.6rem 0;font-size:12px"></div>
-    <div id="ai-q-result" style="overflow-x:auto"></div>
   </div>
 </main>
 <div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
@@ -2203,58 +2195,64 @@ initCustMRR().catch(e => {
 });
 
 /* ─── AI QUERY ───────────────────────────────────────────── */
+/* ── Ask AI — conversational interface ───────────────────────── */
 const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
+let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
 
-const AI_SYSTEM = `You are a Supabase PostgREST query generator for Bizom's customer revenue database.
+const AI_SYSTEM = `You are a friendly revenue analytics assistant for Bizom. You have access to a customer MRR database and can answer questions conversationally.
 
-CRITICAL RULES — violating any of these will break the system:
-1. Return ONLY raw JavaScript code — zero prose, zero explanation, zero markdown fences.
-2. The code is injected directly into an async function body and eval'd. Any non-JS text = SyntaxError.
-3. If you cannot answer with a DB query, write: throw new Error("Cannot answer: <one short reason>");
-
-Schema:
+DATABASE:
   customer_mrr_unified  — zoho_name TEXT, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
   customer_mrr_lines    — id INT, zoho_name TEXT, go_live_date DATE, churn_date DATE
 
-PostgREST rules:
-  URL = SUPABASE_URL + '/rest/v1/' + table + '?select=col1,col2&col=op.value&order=col.desc&limit=N'
-  Filter ops: eq  neq  lt  lte  gt  gte  like  ilike  is.null  not.is.null
-  Always use { headers: cmrrHdr() } in every fetch call
-  Dates: YYYY-MM-01 format (e.g. 2026-02-01 for Feb 2026)
-  IMPORTANT — customer names: NEVER use eq for zoho_name (names contain spaces, punctuation).
-    Always use ilike with wildcard AND encodeURIComponent:
-    zoho_name=ilike.*${encodeURIComponent(name)}*
-    Example: zoho_name=ilike.*${encodeURIComponent('Glaxosmithkline Asia Private Limited')}*
+WHEN TO ASK A CLARIFYING QUESTION:
+- Year is missing or ambiguous: "January" without a year → ask "Which January? 2024, 2025, or 2026?"
+- Customer name is vague and could match multiple → ask which one they mean
+- "recent" / "last month" / "this year" → ask which period specifically
+- Multiple interpretations exist → ask before guessing
 
-Available in scope:
-  SUPABASE_URL  — string
-  cmrrHdr()     — returns correct auth headers
-  f(n)          — formats number as ₹ Indian string
+RESPONSE FORMAT — choose ONE:
+A) If you need clarification: reply with ONLY {"q":"Your question here?"}
+   Examples:
+   {"q":"Which January — 2024, 2025, or 2026?"}
+   {"q":"I found multiple matches for 'VST' — did you mean VST Industries Limited or VST Tillers Tractors?"}
 
-Return format (last expression or explicit return):
-  return { columns: ['Col A', ...], rows: [[val, ...], ...], summary: 'One sentence.' };
+B) If you can answer: reply with ONLY raw JavaScript async function body (no function keyword, no markdown, no prose).
+   The code runs in the browser and must return: { columns:[...], rows:[[...]], summary:'...' }
 
-Example — top 10 by MRR Feb 2026:
-const r = await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
-const d = await r.json();
-return { columns:['Customer','MRR'], rows:d.map(x=>[x.zoho_name, f(x.mrr_amount)]), summary:\`Top 10 customers by MRR in Feb 2026.\` };
+CODE RULES:
+  SUPABASE_URL, cmrrHdr(), f(n) are available in scope
+  ALWAYS use ilike + encodeURIComponent for customer name filters (never eq — names have spaces)
+  Dates: YYYY-MM-01 (Jan 2026 = 2026-01-01)
+  For multi-month queries use month_date=gte.X&month_date=lte.Y, then filter in JS
+  All Januaries = fetch full history with limit=5000, then filter rows where month_date includes '-01-'
+  Fetch limit: max 5000 rows per request
 
-Example — single customer (use ilike+encodeURIComponent, never eq):
-const name = 'VST Industries Limited';
-const r = await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent(name)+'*&order=month_date.desc&limit=24',{headers:cmrrHdr()});
-const d = await r.json();
-return { columns:['Month','MRR'], rows:d.map(x=>[x.month_date.slice(0,7), f(x.mrr_amount)]), summary:\`MRR history for \${name}.\` };
+EXAMPLES:
 
-Example — MoM change Feb vs Jan 2026:
-const [rFeb,rJan] = await Promise.all([
-  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
-  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-01-01&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
-]);
-const janMap = Object.fromEntries(rJan.map(x=>[x.zoho_name,+x.mrr_amount]));
-const results = rFeb.filter(x=>janMap[x.zoho_name]>0).map(x=>({name:x.zoho_name,feb:+x.mrr_amount,jan:janMap[x.zoho_name],chg:(+x.mrr_amount/janMap[x.zoho_name]-1)*100})).filter(x=>x.chg>=3).sort((a,b)=>b.chg-a.chg);
-return { columns:['Customer','Jan MRR','Feb MRR','MoM %'], rows:results.map(x=>[x.name,f(x.jan),f(x.feb),x.chg.toFixed(1)+'%']), summary:\`\${results.length} customers grew MRR ≥3% in Feb 2026.\` };`;
+Single customer all months:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('VST Industries Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
+const d=await r.json();
+return {columns:['Month','MRR'],rows:d.map(x=>[x.month_date.slice(0,7),f(+x.mrr_amount)]),summary:'MRR history for VST Industries Limited.'};
 
-/* ── Customer name resolver ─────────────────────────────────── */
+All Januaries for a customer:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent('Glaxosmithkline Asia Private Limited')+'*&order=month_date.asc&limit=200',{headers:cmrrHdr()});
+const d=await r.json();
+const jan=d.filter(x=>x.month_date.slice(5,7)==='01');
+return {columns:['Year','MRR'],rows:jan.map(x=>[x.month_date.slice(0,4),f(+x.mrr_amount)]),summary:'January MRR for Glaxo across all years.'};
+
+Top 10 by MRR:
+const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-03-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
+const d=await r.json();
+return {columns:['Customer','MRR'],rows:d.map(x=>[x.zoho_name,f(+x.mrr_amount)]),summary:'Top 10 customers by MRR in Mar 2026.'};
+
+MoM growth (fetch both months in parallel, join in JS):
+const [feb,jan]=await Promise.all(['2026-02-01','2026-01-01'].map(m=>fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+m+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())));
+const jm=Object.fromEntries(jan.map(x=>[x.zoho_name,+x.mrr_amount]));
+const res=feb.filter(x=>jm[x.zoho_name]>0).map(x=>({n:x.zoho_name,f:+x.mrr_amount,j:jm[x.zoho_name],c:(+x.mrr_amount/jm[x.zoho_name]-1)*100})).filter(x=>x.c>=3).sort((a,b)=>b.c-a.c);
+return {columns:['Customer','Jan','Feb','Δ%'],rows:res.map(x=>[x.n,f(x.j),f(x.f),x.c.toFixed(1)+'%']),summary:res.length+' customers grew ≥3% MoM.'};`;
+
+/* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
   'the','and','for','with','that','this','from','have','more','than','show','list',
   'customers','whose','their','last','which','give','find','what','when','where',
@@ -2262,148 +2260,66 @@ const AI_NAME_STOP = new Set([
   'private','limited','india','pvt','ltd','group','company','corp','inc','data',
   'revenue','growth','churn','churned','active','increase','decrease','change',
   'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
-  'oct','nov','dec','2025','2026','2027','quarterly','annual','fy26','fy27',
-  // 3-char common words to exclude
-  'the','and','for','its','not','but','are','has','was','had','did','can','may',
-  'use','get','set','put','run','see','all','one','two','out','off','fy2','fy3'
+  'oct','nov','dec','2024','2025','2026','2027','quarterly','annual','fy26','fy27',
+  'its','not','but','are','has','was','had','did','can','may','use','get','set',
+  'put','run','see','one','two','out','off','fy2','fy3','every','give'
 ]);
 
 function aiResolveNames(question) {
   if (!CUST_NAMES.length) return new Map();
-  const tokens = question.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
+  const tokens = question.toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/)
     .filter(t => t.length >= 3 && !AI_NAME_STOP.has(t));
   const result = new Map();
   for (const tok of tokens) {
     const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
-    // Only flag if ambiguous (no exact full-name match but partial hits exist)
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
       if (!exact) result.set(tok, hits);
     }
   }
-  return result; // Map<partialToken, matchingCustomerNames[]>
+  return result;
 }
 
+/* ── Chat UI helpers ─────────────────────────────────────────── */
 function aiSetQ(q) {
   document.getElementById('ai-q-input').value = q;
   document.getElementById('ai-q-input').focus();
 }
 
-function aiPickName(resolvedName, originalToken, originalQ) {
-  const newQ = originalQ.replace(new RegExp(originalToken, 'gi'), resolvedName);
-  document.getElementById('ai-q-input').value = newQ;
-  runAIQuery(true);
+function aiClearChat() {
+  AI_HISTORY = [];
+  document.getElementById('ai-chat').innerHTML = '';
 }
 
-/* ── Main query runner ──────────────────────────────────────── */
-async function runAIQuery(skipDisambig) {
-  const question = document.getElementById('ai-q-input').value.trim();
-  if (!question) return;
-
-  const status  = document.getElementById('ai-q-status');
-  const resultEl = document.getElementById('ai-q-result');
-  const btn     = document.getElementById('ai-q-btn');
-
-  // ── Step 1: resolve ambiguous customer names ──
-  if (!skipDisambig) {
-    const nameMap = aiResolveNames(question);
-    if (nameMap.size > 0) {
-      const [tok, names] = [...nameMap.entries()][0];
-      status.textContent = names.length === 1
-        ? `Did you mean "${names[0]}"?`
-        : `Found ${names.length} customers matching "${tok}" — select one:`;
-      resultEl.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.5rem;padding:.6rem 0">` +
-        names.map(n =>
-          `<button class="nret-tog2" style="white-space:normal;height:auto;padding:.35rem .75rem;text-align:left;max-width:320px"
-            onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
-        ).join('') +
-        `<button class="nret-tog2" onclick="runAIQuery(true)" style="opacity:.6">Use as typed</button>` +
-        `</div>`;
-      return;
-    }
-  }
-
-  // ── Step 2: call Claude via edge function ──
-  btn.disabled = true;
-  btn.textContent = 'Thinking…';
-  status.textContent = 'Asking Claude…';
-  resultEl.innerHTML = '';
-
-  try {
-    const resp = await fetch(AI_PROXY_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...cmrrHdr() },
-      body: JSON.stringify({ system: AI_SYSTEM, question })
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      const msg = err.error?.message || err.error || 'Edge function error ' + resp.status;
-      if (resp.status === 500 && String(msg).includes('ANTHROPIC_API_KEY')) {
-        throw new Error('ANTHROPIC_API_KEY not set — add it in Supabase → Project Settings → Edge Functions → Secrets');
-      }
-      throw new Error(msg);
-    }
-
-    const data = await resp.json();
-    let code = (data.content?.[0]?.text || '').trim();
-    // Strip accidental markdown fences
-    code = code.replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-
-    // ── Step 3: execute generated code ──
-    status.textContent = 'Running query…';
-    let result;
-    try {
-      const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
-      const fn = new AsyncFn('SUPABASE_URL', 'f', 'cmrrHdr', code);
-      result = await fn(SUPABASE_URL, f, cmrrHdr);
-    } catch(execErr) {
-      // Syntax or runtime error in generated code → ask Claude to fix
-      aiShowRetry(
-        execErr instanceof SyntaxError
-          ? 'Claude generated invalid code. Try rephrasing your question more specifically.'
-          : 'Query failed: ' + execErr.message,
-        question
-      );
-      return;
-    }
-
-    if (!result || !result.columns || !result.rows) {
-      aiShowRetry('Claude returned an unexpected format. Try rephrasing.', question);
-      return;
-    }
-
-    status.textContent = result.summary || '';
-    resultEl.innerHTML = aiRenderTable(result.columns, result.rows);
-
-  } catch(e) {
-    aiShowRetry(e.message, question);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Ask';
-  }
+function aiAddBubble(role, html, extraClass) {
+  const chat = document.getElementById('ai-chat');
+  const div = document.createElement('div');
+  div.className = `ai-bubble ${role}${extraClass ? ' ' + extraClass : ''}`;
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
 }
 
-function aiShowRetry(msg, originalQ) {
-  const status  = document.getElementById('ai-q-status');
-  const resultEl = document.getElementById('ai-q-result');
-  status.textContent = '';
-  resultEl.innerHTML =
-    `<div style="padding:.9rem 1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;font-size:12.5px;font-family:var(--mono);display:flex;flex-direction:column;gap:.65rem">` +
-    `<div>${msg}</div>` +
-    `<div style="display:flex;gap:.5rem;flex-wrap:wrap">` +
-    `<button class="nret-tog2" onclick="runAIQuery(true)">Retry same question</button>` +
-    `<button class="nret-tog2" onclick="document.getElementById('ai-q-input').focus()">Rephrase</button>` +
-    `</div></div>`;
+function aiAddThinking() {
+  const chat = document.getElementById('ai-chat');
+  const div = document.createElement('div');
+  div.className = 'ai-thinking';
+  div.id = 'ai-thinking-dot';
+  div.textContent = 'thinking…';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+function aiRemoveThinking() {
+  const el = document.getElementById('ai-thinking-dot');
+  if (el) el.remove();
 }
 
 function aiRenderTable(cols, rows) {
-  if (!rows.length) return '<div style="padding:1.5rem;color:var(--txt3);font-size:13px">No results found.</div>';
-  let h = `<div class="twrap" style="margin-top:.5rem"><table><thead><tr>`;
-  h += `<th class="th-bu" style="min-width:36px">#</th>`;
-  for (const c of cols) h += `<th class="th-mon" style="min-width:90px;white-space:nowrap">${c}</th>`;
+  if (!rows.length) return '<em style="color:var(--txt3);font-size:12px">No results found.</em>';
+  let h = `<div class="ai-tbl-wrap"><table style="font-size:11.5px"><thead><tr>`;
+  h += `<th class="th-bu" style="min-width:28px;font-size:10px">#</th>`;
+  for (const c of cols) h += `<th class="th-mon" style="min-width:80px;white-space:nowrap">${c}</th>`;
   h += `</tr></thead><tbody>`;
   rows.forEach((row, i) => {
     h += `<tr class="${i%2?'alt':''}"><td class="bu" style="color:var(--txt3);font-size:10px">${i+1}</td>`;
@@ -2411,8 +2327,129 @@ function aiRenderTable(cols, rows) {
     h += `</tr>`;
   });
   h += `</tbody></table></div>`;
-  h += `<div style="padding:.4rem 0;color:var(--txt3);font-size:10.5px;font-family:var(--mono)">${rows.length} row${rows.length!==1?'s':''}</div>`;
   return h;
+}
+
+/* ── Main runner ─────────────────────────────────────────────── */
+async function runAIQuery(skipDisambig) {
+  const inp = document.getElementById('ai-q-input');
+  const question = inp.value.trim();
+  if (!question) return;
+
+  const btn = document.getElementById('ai-q-btn');
+
+  // Pre-flight: disambiguate partial customer names
+  if (!skipDisambig) {
+    const nameMap = aiResolveNames(question);
+    if (nameMap.size > 0) {
+      const [tok, names] = [...nameMap.entries()][0];
+      const qText = names.length === 1
+        ? `Did you mean <strong>${names[0]}</strong>?`
+        : `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
+      const chips = names.map(n =>
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;white-space:normal;height:auto;padding:.3rem .65rem;text-align:left;max-width:300px;font-size:11.5px"
+          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
+      ).join('') +
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="runAIQuery(true)">Use as typed</button>`;
+      aiAddBubble('user', escHtml(question));
+      inp.value = '';
+      aiAddBubble('assistant', qText + '<div style="margin-top:.45rem">' + chips + '</div>', 'question');
+      return;
+    }
+  }
+
+  // Show user bubble + clear input
+  aiAddBubble('user', escHtml(question));
+  inp.value = '';
+  AI_HISTORY.push({ role: 'user', content: question });
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  aiAddThinking();
+
+  try {
+    // Call edge function with full conversation history
+    const resp = await fetch(AI_PROXY_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...cmrrHdr() },
+      body: JSON.stringify({ system: AI_SYSTEM, messages: AI_HISTORY })
+    });
+
+    aiRemoveThinking();
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const msg = err.error?.message || err.error || 'Error ' + resp.status;
+      if (resp.status === 500 && String(msg).includes('ANTHROPIC_API_KEY'))
+        throw new Error('ANTHROPIC_API_KEY not set in Supabase Edge Function secrets.');
+      throw new Error(msg);
+    }
+
+    const data = await resp.json();
+    let raw = (data.content?.[0]?.text || '').trim();
+    raw = raw.replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+
+    // ── Is it a clarifying question? ──
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.q) {
+        AI_HISTORY.push({ role: 'assistant', content: raw });
+        aiAddBubble('assistant', escHtml(parsed.q), 'question');
+        return;
+      }
+    } catch {}
+
+    // ── It's code — execute it ──
+    let result;
+    try {
+      const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+      result = await new AsyncFn('SUPABASE_URL','f','cmrrHdr', raw)(SUPABASE_URL, f, cmrrHdr);
+    } catch(execErr) {
+      const msg = execErr instanceof SyntaxError
+        ? 'Could not understand that query. Try rephrasing.'
+        : execErr.message;
+      AI_HISTORY.push({ role: 'assistant', content: '(error: ' + msg + ')' });
+      aiAddBubble('assistant',
+        `<div style="color:#9a3412">${escHtml(msg)}</div>` +
+        `<div style="margin-top:.4rem;font-size:11px;color:var(--txt3)">Try rephrasing or ask a follow-up.</div>`
+      );
+      return;
+    }
+
+    if (!result || !result.columns || !result.rows) {
+      const msg = 'Unexpected result format. Try rephrasing.';
+      AI_HISTORY.push({ role: 'assistant', content: msg });
+      aiAddBubble('assistant', escHtml(msg));
+      return;
+    }
+
+    const tableHtml = aiRenderTable(result.columns, result.rows);
+    const summaryHtml = result.summary
+      ? `<div class="ai-summary">${escHtml(result.summary)}</div>` : '';
+    const rowCount = result.rows.length;
+    AI_HISTORY.push({ role: 'assistant', content: result.summary || `Returned ${rowCount} rows.` });
+    aiAddBubble('assistant', tableHtml + summaryHtml);
+
+  } catch(e) {
+    aiRemoveThinking();
+    AI_HISTORY.push({ role: 'assistant', content: '(error: ' + e.message + ')' });
+    aiAddBubble('assistant',
+      `<div style="color:#9a3412">${escHtml(e.message)}</div>`
+    );
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+}
+
+function aiPickName(resolvedName, tok, origQ) {
+  const newQ = origQ.replace(new RegExp(tok, 'gi'), resolvedName);
+  document.getElementById('ai-q-input').value = newQ;
+  runAIQuery(true);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
