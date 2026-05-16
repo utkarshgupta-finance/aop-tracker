@@ -2362,6 +2362,42 @@ HOW TO COMPUTE METRICS FROM RAW DATA:
   Segment/BU NRR — fetch customer_mrr_lines to get segment membership, then fetch both MRR months,
     filter by segment in your head, sum, divide. Do NOT list every customer.
 
+CAPABILITY — what exists in this database vs what doesn't:
+  CAN: MRR trends, NRR, GRR, logo churn, MRR bridge/waterfall, AOP attainment, customer lookup,
+    BU/segment breakdown, top-N customers, at-risk accounts, pipeline (latest snapshot only).
+  CANNOT: employee count, salaries, profit/loss/margins, CAC, LTV, win rates, product/app usage,
+    NPS/satisfaction, competitor data, market share, churn reasons, contract end dates,
+    invoicing details, daily or weekly granularity (monthly data only).
+  When asked something out of scope: say what you can't see in one sentence, then immediately offer
+  the closest thing you CAN answer. Never just refuse without redirecting.
+
+LANGUAGE: Accept questions in any language — Hindi, Hinglish, broken English, all caps, no punctuation.
+  Never ask the user to rephrase. Respond in clear English regardless of input language.
+
+SINGLE-WORD / ULTRA-SHORT QUERIES — treat these as shortcuts, answer immediately without asking for clarification:
+  "mrr" / "revenue" / "money" → company total MRR, latest month (Mar 2026)
+  "nrr" / "retention" → company NRR FY26 (114.4%)
+  "grr" → company GRR FY26 (87.4%)
+  "churn" → logo churn + churn MRR for FY26 (70 logos, ₹62.4L)
+  "pipeline" / "deals" → latest snapshot weighted pipeline
+  "summary" / "overview" / "all" / "everything" / "report" → MRR + NRR + biggest risk flag
+  "target" / "aop" → Mar 2026 BU attainment (the only month with FY26 targets stored)
+  "concentration" → BAT=12.8%, top 3=20.3%, top 10=32.8% of total MRR (Mar 2026)
+
+CUSTOMER NAME TYPOS — if a lookup returns 0 results, say: "I couldn't find '[name]' in the database —
+  check the spelling or use the customer search box on the left panel to find the exact name."
+
+METRIC BENCHMARKS IN PLAIN ENGLISH (for "is X good?" questions):
+  NRR: >120%=exceptional | 100–120%=healthy expansion | 85–100%=acceptable | <85%=danger zone
+  GRR: >90%=excellent | 85–90%=good | 75–85%=watch closely | <75%=crisis
+  Logo churn: <5%=great | 5–15%=typical SaaS | >20%=high / investigate
+  Concentration: 1 customer >10% of MRR=board-level risk | top 10 >50%=very concentrated
+  Bizom FY26: NRR=114.4% (healthy), GRR=87.4% (acceptable), logo churn=15.5% (watch)
+
+UNIT CONVERSION (if asked "in millions" or "in crores" or "in USD"):
+  ₹1L = ₹1,00,000 | ₹1Cr = ₹1,00,00,000 ≈ $120K | ₹100Cr ≈ $12M
+  Always present in ₹ first, then conversion if requested. Use ₹83/$ as approximate rate.
+
 HANDLING VAGUE OR HALF-FORMED QUESTIONS — investors rarely ask precisely. Never stall or ask for clarification
   unless the question is genuinely unanswerable without more info. Instead: assume the most businesslike
   interpretation, state your assumption in one clause, then answer.
@@ -2507,11 +2543,49 @@ const AI_NAME_STOP = new Set([
   // BU / segment alias terms — users say these to mean segments, never specific customers
   'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam',
   'small','medium','market','national','international','global','regional',
-  // Generic industry nouns — "pharma" / "agro" / "foods" etc. match many companies
+  // Generic industry nouns
   'pharma','agro','foods','food','chemicals','chemical','organic','digital','tech',
   'solutions','services','industries','healthcare','logistics','retail','trading',
   'consumer','energy','dairy','seeds','seed','beverages','beverage','textile',
-  'textiles','packaging','media','exports','imports','distributors','distribution'
+  'textiles','packaging','media','exports','imports','distributors','distribution',
+  // Basic English pronouns / prepositions missed previously
+  'how','our','who','why','per','too','now','ago','yet','you','sir','bad','bit',
+  'lot','got','let','via','due','few','own','ask','say','try','add','also','just',
+  'like','only','even','both','then','here','well','them','they','good','poor',
+  'done','made','back','come','tell','make','send','help','want','need','know',
+  'look','take','about','take','give','does','will','must','very','much','such',
+  // Conversational words that block every casual question
+  'please','hello','thanks','sorry','dear','hey','there','doing','going','being',
+  'saying','getting','having','making','taking','showing','giving','finding',
+  'happening','situation','performance','performing','performers','performer',
+  'summary','overview','details','detail','insight','insights','analysis',
+  'breakdown','numbers','number','figure','figures','amounts','amount',
+  'values','value','results','result','report','update','status','worst',
+  'better','worse','great','strong','weak','poor','best','good','bad',
+  // Finance/units words a fresher might use
+  'crores','lakhs','millions','billions','rupees','dollars','months','years',
+  'quarters','profit','loss','sales','cost','price','billing','payment','cash',
+  // People / org words a fresher uses instead of "customers"
+  'employees','employee','clients','client','accounts','account','companies',
+  'players','people','team','staff','members','person','everyone',
+  // Financial period abbreviations
+  'ytd','yoy','mom','qoq','ltm','ttm',
+  // Action words for export/sharing requests
+  'export','download','print','share','email',
+  // Hindi / Hinglish common words
+  'kya','hua','mein','hai','hain','nahi','kaisa','batao','kitna','karo',
+  'dedo','bata','dekho','yaar','arey','isko','uska','inko','unka','mere',
+  'humara','hamara','kuch','sab','aur','par','lekin','toh','woh','yeh','agar',
+  'mujhe','samajhao','raha','iska','kaise','matlab','achha','theek','sahi','accha',
+  // Full month names (abbreviations already in stop list above)
+  'january','february','march','april','june','july','august','september',
+  'october','november','december',
+  // Singular forms missed when plurals were stopped
+  'customer','quarter',
+  // Common English words not yet covered
+  'leave','left','when','once','since','while','before','after','until',
+  'without','within','against','between','through','around','along','above',
+  'below','inside','outside','toward'
 ]);
 
 // Words that, when they follow a token, mark that token as a BU/segment identifier
@@ -2992,9 +3066,22 @@ async function runAIQuery(skipDisambig) {
 }
 
 function aiPickName(resolvedName, tok, origQ) {
-  const newQ = origQ.replace(new RegExp(tok, 'gi'), resolvedName);
+  // Try to replace the longest prefix of resolvedName found in origQ as a phrase.
+  // This fixes "british american tobacco" → replacing just "british" with the full name
+  // would leave "american tobacco" as orphaned tokens triggering disambiguation again.
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rWords = resolvedName.split(/\s+/);
+  let newQ = origQ;
+  let replaced = false;
+  for (let w = rWords.length; w >= 1; w--) {
+    const phrase = rWords.slice(0, w).map(esc).join('[\\s\'\\-]+');
+    const re = new RegExp('(?:^|(?<=[^a-zA-Z0-9]))' + phrase + '(?=[^a-zA-Z0-9]|$)', 'gi');
+    const candidate = origQ.replace(re, resolvedName);
+    if (candidate !== origQ) { newQ = candidate; replaced = true; break; }
+  }
+  if (!replaced) newQ = origQ.replace(new RegExp(esc(tok), 'gi'), resolvedName);
   document.getElementById('ai-q-input').value = newQ;
-  runAIQuery(false); // re-run disambiguation in case other tokens in the query also need resolution
+  runAIQuery(false);
 }
 
 function escHtml(s) {
