@@ -1121,13 +1121,13 @@ async function initCustMRR() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   };
-  const [p1, p2, maxR] = await Promise.all([
-    fetchPage(0),
-    fetchPage(1000),
-    fetch(`${SUPABASE_URL}/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() }).then(r => r.json())
-  ]);
+  const [p1, p2] = await Promise.all([fetchPage(0), fetchPage(1000)]);
   CUST_LINES = [...p1, ...p2];
-  if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7);
+  // Fetch global end month in the background — don't block customer list
+  fetch(`${SUPABASE_URL}/rest/v1/customer_module_mrr?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() })
+    .then(r => r.json())
+    .then(maxR => { if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7); })
+    .catch(() => {});
   const seen = new Set();
   for (const row of CUST_LINES) {
     if (row.zoho_name && !seen.has(row.zoho_name)) {
