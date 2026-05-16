@@ -176,7 +176,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cust-opt{padding:.38rem .75rem;font-size:12.5px;font-family:var(--sans);cursor:pointer;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cust-opt:hover,.cust-opt.hl{background:#eff6ff;color:var(--navy2)}
 .cmrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3);padding-bottom:.5rem}
-.cmrr-info{display:flex;flex-wrap:wrap;gap:.4rem .6rem;margin-bottom:1.1rem}
+.cmrr-info{display:flex;flex-wrap:wrap;gap:.4rem .6rem;margin-bottom:.7rem}
+.cmrr-metric{display:flex;flex-direction:column;gap:.18rem;padding:.55rem .95rem;border-radius:8px;border:1px solid var(--brd2);background:#fff;min-width:130px}
+.cmrr-metric-lbl{font-size:9.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--txt3);white-space:nowrap}
+.cmrr-metric-val{font-size:18px;font-family:var(--mono);font-weight:700;color:var(--txt);line-height:1}
+.cmrr-metric-val.pos{color:#166534}.cmrr-metric-val.neg{color:#991b1b}
 .cmrr-pill{display:inline-flex;align-items:center;font-size:11.5px;font-family:var(--sans);padding:.22rem .7rem;border-radius:20px;border:1px solid var(--brd2);background:#fff;color:var(--txt2);white-space:nowrap}
 .cmrr-pill b{color:var(--txt);font-weight:500;margin-right:.3rem}
 .cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
@@ -299,6 +303,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div id="cust-detail" class="hidden">
       <div class="cmrr-info" id="cmrr-info"></div>
+      <div id="cmrr-metrics" style="display:none;gap:.75rem;margin-bottom:1.1rem;flex-wrap:wrap"></div>
       <div class="cmrr-chart-box">
         <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Apr 2026</div>
         <div class="cmrr-chart-inner"><canvas id="cust-chart"></canvas></div>
@@ -1173,6 +1178,7 @@ async function loadCustMRR(zohoName) {
   if (wfWrap) { wfWrap.style.display = 'none'; wfBtn.textContent = '▶ Workflow Breakup'; }
   document.getElementById('cmrr-wf-status').textContent = '';
   document.getElementById('cmrr-wf-table').innerHTML = '';
+  document.getElementById('cmrr-metrics').style.display = 'none';
 
   const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
   if (!lines.length) return;
@@ -1195,7 +1201,7 @@ async function loadCustMRR(zohoName) {
     : 'background:#dcfce7;color:#166534;border-color:#86efac';
   html += `<span class="cmrr-pill" style="${stStyle}"><b>${allChurned ? 'Churned' : 'Active'}</b></span>`;
   document.getElementById('cmrr-info').innerHTML = html;
-  document.getElementById('cmrr-status').textContent = 'Loading MRR…';
+  document.getElementById('cmrr-status').textContent = '';
   document.getElementById('cust-detail').classList.remove('hidden');
 
   try {
@@ -1216,9 +1222,8 @@ async function loadCustMRR(zohoName) {
 
     cmrrRenderChart(byMonth);
     cmrrRenderTable(byMonth);
-    const pts = rows.length;
-    document.getElementById('cmrr-status').textContent =
-      `${pts} month${pts!==1?'s':''} of data · ${lines.length} line${lines.length!==1?'s':''}`;
+    cmrrRenderMetrics(byMonth);
+    document.getElementById('cmrr-status').textContent = '';
   } catch(e) {
     document.getElementById('cmrr-status').textContent = 'Error: ' + e.message;
   }
@@ -1228,6 +1233,84 @@ function cmrrFmtDate(d) {
   if (!d) return '';
   const dt = new Date(d + 'T00:00:00Z');
   return dt.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+function cmrrRenderMetrics(byMonth) {
+  const el = document.getElementById('cmrr-metrics');
+  const keys = Object.keys(byMonth).sort().filter(k => byMonth[k] > 0);
+  if (keys.length < 2) { el.style.display = 'none'; return; }
+
+  function prevKey(ym) {
+    let [y, m] = ym.split('-').map(Number); m--; if (m === 0) { m = 12; y--; }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+  function mLbl(ym) {
+    const [y, m] = ym.split('-');
+    return new Date(Date.UTC(+y, +m-1, 1)).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  }
+
+  const end   = keys[keys.length - 1];
+  const endV  = byMonth[end];
+
+  // Find the month 12 months before end
+  let [ey, em] = end.split('-').map(Number);
+  em -= 12; if (em <= 0) { em += 12; ey--; }
+  const start12Key = `${ey}-${String(em).padStart(2, '0')}`;
+  const start12V   = byMonth[start12Key];
+
+  // Collect the 12 month window ending at end
+  const window12 = [];
+  let cur = end;
+  for (let i = 0; i < 12; i++) {
+    const prev = prevKey(cur);
+    const pv = byMonth[prev], cv = byMonth[cur];
+    if (pv && cv && pv > 0) window12.unshift({ rate: cv / pv - 1 });
+    cur = prev;
+  }
+
+  // 1. 12M Trailing Net Retention %
+  let nrrHtml = '—', nrrCls = '';
+  if (start12V && start12V > 0) {
+    const nrr = endV / start12V * 100;
+    nrrCls = nrr >= 100 ? 'pos' : 'neg';
+    nrrHtml = nrr.toFixed(1) + '%';
+  }
+
+  // 2. 12M Rolling CAGR (annualised, based on 12m window = 1 year)
+  let cagrHtml = '—', cagrCls = '';
+  if (start12V && start12V > 0) {
+    const cagr = (endV / start12V - 1) * 100;
+    cagrCls = cagr >= 0 ? 'pos' : 'neg';
+    cagrHtml = (cagr >= 0 ? '+' : '') + cagr.toFixed(1) + '%';
+  }
+
+  // 3. 12M Rolling Average CMGR (arithmetic mean of MoM growth rates)
+  let cmgrHtml = '—', cmgrCls = '';
+  if (window12.length > 0) {
+    const avg = window12.reduce((s, r) => s + r.rate, 0) / window12.length * 100;
+    cmgrCls = avg >= 0 ? 'pos' : 'neg';
+    cmgrHtml = (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%';
+  }
+
+  const period = start12V ? `${mLbl(start12Key)} – ${mLbl(end)}` : `trailing ${mLbl(end)}`;
+
+  el.innerHTML = `
+    <div class="cmrr-metric">
+      <div class="cmrr-metric-lbl">12M Net Retention</div>
+      <div class="cmrr-metric-val ${nrrCls}">${nrrHtml}</div>
+      <div class="cmrr-metric-lbl" style="margin-top:.1rem">${period}</div>
+    </div>
+    <div class="cmrr-metric">
+      <div class="cmrr-metric-lbl">12M CAGR</div>
+      <div class="cmrr-metric-val ${cagrCls}">${cagrHtml}</div>
+      <div class="cmrr-metric-lbl" style="margin-top:.1rem">${period}</div>
+    </div>
+    <div class="cmrr-metric">
+      <div class="cmrr-metric-lbl">Avg CMGR (${window12.length}m)</div>
+      <div class="cmrr-metric-val ${cmgrCls}">${cmgrHtml}</div>
+      <div class="cmrr-metric-lbl" style="margin-top:.1rem">per month avg</div>
+    </div>`;
+  el.style.display = 'flex';
 }
 
 function cmrrFillMonths(byMonth) {
@@ -1408,7 +1491,7 @@ async function cmrrLoadWf() {
   if (!_cmrrCurName) return;
   const status = document.getElementById('cmrr-wf-status');
   const tbl    = document.getElementById('cmrr-wf-table');
-  status.textContent = 'Loading…';
+  status.textContent = '';
   tbl.innerHTML = '';
   try {
     const lR = await fetch(
@@ -1443,7 +1526,7 @@ async function cmrrLoadWf() {
     _cmrrWfLoaded = true;
     const months = [...mSet].sort();
     cmrrRenderWf(matrix, months);
-    status.textContent = `${lines.length} line${lines.length !== 1 ? 's' : ''} · ${months.length} months`;
+    status.textContent = '';
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
   }
@@ -1538,7 +1621,7 @@ function showCustMRRTab(btn) {
   showTab('cust-mrr', btn);
   if (!_custInited) {
     _custInited = true;
-    document.getElementById('cmrr-status').textContent = 'Loading customer list…';
+    document.getElementById('cmrr-status').textContent = '';
     initCustMRR().catch(e => {
       document.getElementById('cust-input').placeholder = 'Error loading customers';
       document.getElementById('cmrr-status').textContent = e.message;
@@ -1557,7 +1640,7 @@ function showOverallMRRTab(btn) {
 async function loadOverallMRR() {
   const status = document.getElementById('omrr-status');
   const wrap   = document.getElementById('omrr-wrap');
-  status.textContent = 'Loading…';
+  status.textContent = '';
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
   try {
     const PAGE = 1000;
@@ -1583,7 +1666,7 @@ async function loadOverallMRR() {
     }
     const months = [...monthSet].sort();
     const bus    = [...buSet].filter(b => b !== 'Unknown BU').sort();
-    status.textContent = `${rows.length} rows · ${bus.length} BUs · ${months.length} months`;
+    status.textContent = '';
     omrrRender(buMap, months, bus);
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
@@ -1749,7 +1832,7 @@ function nretDispatch() {
 
 async function nretInit() {
   const status = document.getElementById('nret-status');
-  status.textContent = 'Loading lines…';
+  status.textContent = '';
   const PAGE = 1000;
   let offset = 0;
   _nretAllLines = [];
@@ -1799,7 +1882,7 @@ async function nretLoad() {
     _nretLoading = false; return;
   }
 
-  status.textContent = `Loading ${lines.length} lines…`;
+  status.textContent = '';
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading MRR data…</div>';
 
   const lineIds   = lines.map(l => l.id);
@@ -1880,7 +1963,7 @@ async function nretLoad() {
 
     _nretMatrix    = matrix;
     _nretMrrMonths = mrrMonthSet;
-    status.textContent = `${(allRows.length+newRows.length).toLocaleString()} records · ${lines.length} lines`;
+    status.textContent = '';
     nretDispatch();
   } catch(e) {
     status.textContent = 'Error: '+e.message;
