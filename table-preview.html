@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Table Style Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+         background: #f0f2f5; color: #1a1d23; padding: 32px; }
+  h1 { font-size: 13px; font-weight: 600; color: #6b7280; letter-spacing: .08em;
+       text-transform: uppercase; margin-bottom: 32px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .card { background: #fff; border-radius: 12px; padding: 28px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+           color: #9ca3af; margin-bottom: 16px; }
+  .title { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #9ca3af; margin-bottom: 20px; }
+
+  /* ── Direction 1: FT/Bloomberg ─────────────────── */
+  .d1-table { width: 100%; border-collapse: collapse; }
+  .d1-table thead th {
+    font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: #9ca3af; padding: 0 8px 10px; text-align: left; border-bottom: 1.5px solid #e5e7eb;
+  }
+  .d1-table thead th:last-child { text-align: right; }
+  .d1-table tbody tr:nth-child(even) td { background: #fafafa; }
+  .d1-table tbody td { padding: 9px 8px; font-size: 13px; color: #1f2937;
+                        border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  .d1-table tbody td:last-child { text-align: right; color: #6b7280; font-size: 12px; }
+  .d1-table tbody td.val { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .d1-up { color: #059669 !important; }
+  .d1-down { color: #dc2626 !important; }
+  .d1-table tfoot td { padding: 10px 8px 0; font-size: 11px; color: #9ca3af;
+                        border-top: 1.5px solid #e5e7eb; }
+
+  /* ── Direction 2: Card rows ─────────────────────── */
+  .d2-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0;
+            border-bottom: 1px solid #f3f4f6; }
+  .d2-row:last-child { border-bottom: none; }
+  .d2-bar { width: 3px; min-height: 36px; border-radius: 2px; flex-shrink: 0; margin-top: 2px; }
+  .d2-bar.neutral { background: #d1d5db; }
+  .d2-bar.up { background: #10b981; }
+  .d2-bar.down { background: #ef4444; }
+  .d2-bar.warn { background: #f59e0b; }
+  .d2-body { flex: 1; }
+  .d2-metric { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase;
+               letter-spacing: .06em; margin-bottom: 2px; }
+  .d2-note { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+  .d2-value { font-size: 15px; font-weight: 700; color: #111827; text-align: right;
+              white-space: nowrap; }
+  .d2-value.up { color: #059669; }
+  .d2-value.down { color: #dc2626; }
+  .d2-value.warn { color: #d97706; }
+
+  /* ── Direction 3: Executive scorecard ──────────── */
+  .d3-row { display: grid; grid-template-columns: 140px 1fr; align-items: center;
+            padding: 10px 0; border-bottom: 1px solid #f3f4f6; gap: 16px; }
+  .d3-row:last-child { border-bottom: none; }
+  .d3-label { font-size: 12px; color: #9ca3af; font-weight: 500; }
+  .d3-right { }
+  .d3-val { font-size: 16px; font-weight: 700; color: #111827; line-height: 1; }
+  .d3-val.up { color: #059669; }
+  .d3-val.down { color: #dc2626; }
+  .d3-sub { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+  .d3-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .d3-track { flex: 1; height: 4px; background: #e5e7eb; border-radius: 2px; }
+  .d3-fill { height: 100%; border-radius: 2px; background: #10b981; }
+
+  /* ── Direction 4: Condensed pill table ─────────── */
+  .d4-table { width: 100%; border-collapse: separate; border-spacing: 0;
+              border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+  .d4-table thead th { font-size: 11px; font-weight: 600; color: #6b7280; letter-spacing: .05em;
+                        background: #f9fafb; padding: 10px 14px; text-align: left;
+                        border-bottom: 1px solid #e5e7eb; }
+  .d4-table thead th:nth-child(2) { text-align: right; }
+  .d4-table tbody td { padding: 10px 14px; font-size: 13px; color: #374151;
+                        border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  .d4-table tbody tr:last-child td { border-bottom: none; }
+  .d4-table tbody td:nth-child(2) { text-align: right; font-weight: 600;
+                                     font-variant-numeric: tabular-nums; }
+  .d4-pill { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px;
+             border-radius: 99px; margin-left: 6px; vertical-align: middle; }
+  .d4-pill.up { background: #d1fae5; color: #065f46; }
+  .d4-pill.down { background: #fee2e2; color: #991b1b; }
+  .d4-pill.flat { background: #f3f4f6; color: #6b7280; }
+
+  .section-title {
+    font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px;
+  }
+  .section-desc {
+    font-size: 13px; color: #6b7280; margin-bottom: 24px; line-height: 1.5;
+  }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 36px 0; }
+</style>
+</head>
+<body>
+
+<h1>AI Table — Style Options · Enterprise NRR Mar 2026</h1>
+
+<div class="grid">
+
+  <!-- ───── D1: FT/Bloomberg ───── -->
+  <div class="card">
+    <div class="label">Option 1 — FT / Bloomberg</div>
+    <div class="title">Enterprise NRR: Mar 2026</div>
+    <div class="sub">Ruling lines only · No vertical borders · Right-aligned numbers</div>
+    <table class="d1-table">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th style="text-align:right">Value</th>
+          <th style="text-align:right">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Base MRR (Mar 2025)</td>
+          <td class="val" style="text-align:right">₹2,25,54,000</td>
+          <td>143 logos in cohort</td>
+        </tr>
+        <tr>
+          <td>Ending MRR (Mar 2026)</td>
+          <td class="val" style="text-align:right">₹2,55,16,000</td>
+          <td>Same cohort, 0 for churned</td>
+        </tr>
+        <tr>
+          <td>NRR</td>
+          <td class="val d1-up" style="text-align:right">113%</td>
+          <td>Strong net expansion</td>
+        </tr>
+        <tr>
+          <td>Logo Retention</td>
+          <td class="val" style="text-align:right">91%</td>
+          <td>7 of 143 churned</td>
+        </tr>
+        <tr>
+          <td>Key Churns</td>
+          <td class="val d1-down" style="text-align:right">₹45–50L</td>
+          <td>Parle Agro, EID Parry, Inbisco</td>
+        </tr>
+        <tr>
+          <td>Key Expansion</td>
+          <td class="val d1-up" style="text-align:right">BAT +₹82L</td>
+          <td>Nearly 6× — drives all upside</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="3">NRR ex-BAT ≈ 87% · concentration risk</td></tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- ───── D2: Card rows ───── -->
+  <div class="card">
+    <div class="label">Option 2 — Card Rows</div>
+    <div class="title">Enterprise NRR: Mar 2026</div>
+    <div class="sub">Colored accent bars · No table borders · Scannable at a glance</div>
+
+    <div class="d2-row">
+      <div class="d2-bar neutral"></div>
+      <div class="d2-body">
+        <div class="d2-metric">Base MRR — Mar 2025</div>
+        <div class="d2-note">143 Enterprise logos in cohort</div>
+      </div>
+      <div class="d2-value">₹2,25,54,000</div>
+    </div>
+    <div class="d2-row">
+      <div class="d2-bar neutral"></div>
+      <div class="d2-body">
+        <div class="d2-metric">Ending MRR — Mar 2026</div>
+        <div class="d2-note">Same cohort, 0 for churned logos</div>
+      </div>
+      <div class="d2-value">₹2,55,16,000</div>
+    </div>
+    <div class="d2-row">
+      <div class="d2-bar up"></div>
+      <div class="d2-body">
+        <div class="d2-metric">NRR</div>
+        <div class="d2-note">Strong net expansion — ex-BAT ≈ 87%</div>
+      </div>
+      <div class="d2-value up">113%</div>
+    </div>
+    <div class="d2-row">
+      <div class="d2-bar down"></div>
+      <div class="d2-body">
+        <div class="d2-metric">Key Churns</div>
+        <div class="d2-note">Parle Agro, EID Parry, Inbisco India, Kimberly-Clark</div>
+      </div>
+      <div class="d2-value down">₹45–50L</div>
+    </div>
+    <div class="d2-row">
+      <div class="d2-bar up"></div>
+      <div class="d2-body">
+        <div class="d2-metric">Biggest Expansion</div>
+        <div class="d2-note">British American Tobacco — near 6× growth</div>
+      </div>
+      <div class="d2-value up">+₹82L</div>
+    </div>
+    <div class="d2-row">
+      <div class="d2-bar warn"></div>
+      <div class="d2-body">
+        <div class="d2-metric">Concentration Risk</div>
+        <div class="d2-note">BAT alone is the difference between 87% and 113%</div>
+      </div>
+      <div class="d2-value warn">⚠ High</div>
+    </div>
+  </div>
+
+  <!-- ───── D3: Executive scorecard ───── -->
+  <div class="card">
+    <div class="label">Option 3 — Executive Scorecard</div>
+    <div class="title">Enterprise NRR: Mar 2026</div>
+    <div class="sub">Bold values · Muted labels · Progress bar for NRR</div>
+
+    <div class="d3-row">
+      <div class="d3-label">Base MRR</div>
+      <div class="d3-right">
+        <div class="d3-val">₹2,25,54,000</div>
+        <div class="d3-sub">143 Enterprise logos · Mar 2025</div>
+      </div>
+    </div>
+    <div class="d3-row">
+      <div class="d3-label">Ending MRR</div>
+      <div class="d3-right">
+        <div class="d3-val">₹2,55,16,000</div>
+        <div class="d3-sub">Same cohort · Mar 2026</div>
+      </div>
+    </div>
+    <div class="d3-row">
+      <div class="d3-label">NRR</div>
+      <div class="d3-right">
+        <div class="d3-bar-wrap">
+          <div class="d3-val up">113%</div>
+          <div class="d3-track"><div class="d3-fill" style="width:85%"></div></div>
+        </div>
+        <div class="d3-sub">Target: 100% · Ex-BAT: ≈ 87%</div>
+      </div>
+    </div>
+    <div class="d3-row">
+      <div class="d3-label">Logo Retention</div>
+      <div class="d3-right">
+        <div class="d3-val">91%</div>
+        <div class="d3-sub">136 of 143 still active</div>
+      </div>
+    </div>
+    <div class="d3-row">
+      <div class="d3-label">Churn MRR</div>
+      <div class="d3-right">
+        <div class="d3-val down">₹45–50L</div>
+        <div class="d3-sub">Parle Agro · EID Parry · Inbisco · Kimberly-Clark</div>
+      </div>
+    </div>
+    <div class="d3-row">
+      <div class="d3-label">Expansion Leader</div>
+      <div class="d3-right">
+        <div class="d3-val up">BAT +₹82L</div>
+        <div class="d3-sub">₹16.8L → ₹98.8L · near-6× in 12 months</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── D4: Condensed pill table ───── -->
+  <div class="card">
+    <div class="label">Option 4 — Condensed Pill Table</div>
+    <div class="title">Enterprise NRR: Mar 2026</div>
+    <div class="sub">Rounded border · Status pills · Clean header</div>
+    <table class="d4-table">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Value</th>
+          <th>Commentary</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Base MRR (Mar 2025)</td>
+          <td>₹2,25,54,000</td>
+          <td>143 logos in cohort</td>
+        </tr>
+        <tr>
+          <td>Ending MRR (Mar 2026)</td>
+          <td>₹2,55,16,000</td>
+          <td>0 for churned accounts</td>
+        </tr>
+        <tr>
+          <td>NRR <span class="d4-pill up">▲ Above 100%</span></td>
+          <td>113%</td>
+          <td>Strong expansion driven by BAT</td>
+        </tr>
+        <tr>
+          <td>Logo Retention</td>
+          <td>91%</td>
+          <td>7 logos churned</td>
+        </tr>
+        <tr>
+          <td>Churn MRR <span class="d4-pill down">▼ Loss</span></td>
+          <td>₹45–50L</td>
+          <td>Parle Agro, EID Parry, Inbisco</td>
+        </tr>
+        <tr>
+          <td>BAT Expansion <span class="d4-pill up">▲ 6×</span></td>
+          <td>+₹82L</td>
+          <td>Concentration risk — ex-BAT NRR ≈ 87%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<hr>
+<p style="font-size:12px;color:#9ca3af;text-align:center">
+  All 4 options use the same data · Pick one (or mix elements) to implement →
+</p>
+
+</body>
+</html>
