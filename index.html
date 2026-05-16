@@ -227,6 +227,22 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ai-bubble.assistant.question{background:#fefce8;border:1px solid #fde68a}
 .ai-bubble .ai-tbl-wrap{margin-top:.5rem;overflow-x:auto;border-radius:6px;border:1px solid var(--brd2)}
 .ai-bubble .ai-summary{color:var(--txt3);font-size:11px;margin-top:.3rem;font-family:var(--mono)}
+/* ── AI executive scorecard ─────────────────────────────── */
+.ai-scorecard{margin-top:.5rem}
+.ai-scorecard-title{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#9ca3af;margin-bottom:.6rem}
+.ai-scorecard-row{display:grid;grid-template-columns:130px 1fr;align-items:baseline;padding:.45rem 0;border-bottom:1px solid #f0f0f0;gap:10px}
+.ai-scorecard-row:last-child{border-bottom:none}
+.ai-scorecard-lbl{font-size:11.5px;color:#9ca3af;font-weight:500}
+.ai-scorecard-val{font-size:15px;font-weight:700;color:#111827;line-height:1.1}
+.ai-scorecard-val.up{color:#059669}
+.ai-scorecard-val.down{color:#dc2626}
+.ai-scorecard-val.warn{color:#d97706}
+.ai-scorecard-sub{font-size:11px;color:#9ca3af;margin-top:1px}
+/* ── Deep dive toggle ───────────────────────────────────── */
+.ai-deepdive-btn{display:inline-flex;align-items:center;gap:5px;margin-top:.7rem;padding:.3rem .7rem;font-size:11.5px;font-weight:600;color:var(--navy2);background:#e8eef7;border:none;border-radius:5px;cursor:pointer;transition:background .15s}
+.ai-deepdive-btn:hover{background:#d4e0f0}
+.ai-deepdive-content{display:none;margin-top:.55rem}
+.ai-deepdive-content.open{display:block}
 .ai-thinking{align-self:flex-start;color:var(--txt3);font-size:11.5px;font-family:var(--mono);padding:.4rem 0;animation:blink 1.2s infinite}
 @keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
 /* ── Overall MRR tab ───────────────────────────────────────── */
@@ -2275,47 +2291,96 @@ HOW TO COMPUTE METRICS FROM RAW DATA:
 
 HOW TO RESPOND — write like a senior analyst delivering a verdict, not doing homework on paper.
 
-  CRITICAL RULE: Never show your working. Never list every customer with their values.
-  Compute from the JSON, then speak only in conclusions and summaries.
+  CRITICAL RULE: Never show your working. Compute silently, speak only in conclusions.
 
-  BAD (never do this): list 60 rows with "Customer | Mar-25 MRR | Mar-26 MRR | Status"
-  GOOD: "Enterprise NRR for Mar 2026: **87.3%**. 7 logos churned (₹24.2L combined), offset by
-         expansion in 32 accounts — biggest mover was British American Tobacco (+₹82L). Logo
-         retention: 88% (54 of 62 base accounts still active)."
+RESPONSE FORMAT — TWO TIERS FOR EVERY DATA RESPONSE, NO EXCEPTIONS:
 
-  Respond conversationally in plain text. When you have summary data to show (a compact table or
-  chart), embed it as a fenced JSON block. Tables should show summary rows, NOT raw per-customer dumps.
-
-  PURE TEXT (analysis, metrics, interpretation):
-    Just write the answer. No JSON needed unless a table/chart genuinely adds value.
-
-  COMPACT TABLE — use only when a structured comparison helps (e.g. BU breakdown, top 5 churners):
+  TIER 1 — EXECUTIVE SUMMARY CARD (ALWAYS include when you have data):
+    1–3 sentence verdict, then a summary card. This applies to EVERY query type:
+    single metrics, NRR, MRR totals, customer lists, BU breakdowns, pipeline, trends — everything.
     \`\`\`json
-    {"type":"table","title":"Enterprise NRR: Mar 2025 vs Mar 2026","columns":["Metric","Value","Notes"],"rows":[["NRR","87.3%","7 churns offset by 32 expansions"],["Logo Retention","88%","54 of 62 active"],["Churn MRR","₹24,23,000","Merino, Parle Agro key exits"]],"summary":"...","followups":["Q1?","Q2?","Q3?"]}
+    {"type":"summary","title":"SHORT TITLE","metrics":[
+      {"label":"METRIC NAME","value":"THE VALUE","status":"up|down|warn|neutral","sub":"context or sub-note"}
+    ],"followups":["Q1?","Q2?","Q3?"]}
     \`\`\`
+    Rules: 3–5 metrics. status: "up"=green, "down"=red, "warn"=amber, "neutral"=gray.
+    followups: 3 smart follow-on questions for a CEO/CRO/CFO.
 
-  CHART:
+    EXAMPLES BY QUERY TYPE (use as templates):
+
+    Single metric — "what is SME BU MRR for Mar 2026?":
+    {"type":"summary","title":"SME BU — Mar 2026","metrics":[
+      {"label":"MRR","value":"₹8,90,34,000","status":"neutral","sub":"Mar 2026"},
+      {"label":"vs Mar 2025","value":"+12%","status":"up","sub":"₹7,94,12,000 prior year"},
+      {"label":"AOP Target","value":"₹9,20,00,000","status":"warn","sub":"3.3% below target"}
+    ],"followups":["How does SME MRR trend over FY26?","Which SME customers drove the growth?","What is SME NRR for FY26?"]}
+
+    NRR — "enterprise NRR Mar 2026 vs Mar 2025":
+    {"type":"summary","title":"Enterprise NRR — Mar 2026","metrics":[
+      {"label":"NRR","value":"113%","status":"up","sub":"Ex-BAT ≈ 87% — concentration risk"},
+      {"label":"Base MRR","value":"₹2,25,54,000","sub":"143 logos · Mar 2025"},
+      {"label":"Ending MRR","value":"₹2,55,16,000","sub":"Mar 2026"},
+      {"label":"Logo Retention","value":"91%","sub":"7 of 143 churned"},
+      {"label":"Churn MRR","value":"₹45–50L","status":"down","sub":"Parle Agro, EID Parry, Inbisco"}
+    ],"followups":["Which BU had the most Enterprise churns?","How is NRR trending over 6 months?","Which Enterprise accounts are at risk?"]}
+
+    BU breakdown — "all BU MRR for Mar 2026":
+    {"type":"summary","title":"BU MRR Snapshot — Mar 2026","metrics":[
+      {"label":"Total MRR","value":"₹X","status":"neutral","sub":"across all BUs"},
+      {"label":"Largest BU","value":"India ENT BU","sub":"₹X · X% of total"},
+      {"label":"Fastest Growing","value":"KAM BU","status":"up","sub":"+X% vs Mar 2025"},
+      {"label":"Below AOP","value":"2 BUs","status":"warn","sub":"SME BU, MEA BU"}
+    ],"followups":["Show BU MRR trend over FY26?","Which BU has the best NRR?","How does each BU compare to AOP target?"]}
+
+    Customer list — "top 10 customers by MRR":
+    {"type":"summary","title":"Top 10 Customers — Mar 2026","metrics":[
+      {"label":"#1 Customer","value":"Customer Name","sub":"₹X MRR · Segment · BU"},
+      {"label":"Top 10 Total","value":"₹X","sub":"X% of total company MRR"},
+      {"label":"YoY Change","value":"+X%","status":"up","sub":"vs top 10 Mar 2025"},
+      {"label":"Concentration","value":"X%","status":"warn","sub":"top 3 = X% of company MRR"}
+    ],"followups":["Which of these are at risk of churn?","How has concentration changed over FY26?","Show full customer MRR ranking?"]}
+
+    Trend / chart — "SME BU MRR over FY26":
+    {"type":"summary","title":"SME BU — FY26 MRR Trend","metrics":[
+      {"label":"Start (Apr 2025)","value":"₹X"},
+      {"label":"End (Mar 2026)","value":"₹X"},
+      {"label":"FY26 Growth","value":"+X%","status":"up","sub":"₹X added"},
+      {"label":"vs AOP","value":"X% attainment","status":"warn","sub":"₹X short of target"}
+    ],"followups":["What drove the dip in Month X?","How does SME compare to India ENT growth?","What is SME NRR for FY26?"]}
+
+    Pipeline — "weighted pipeline":
+    {"type":"summary","title":"Pipeline — Latest Snapshot","metrics":[
+      {"label":"Weighted Pipeline","value":"₹X","sub":"as of DATE"},
+      {"label":"Deals","value":"X deals","sub":"X% probability weighted"},
+      {"label":"Top Deal","value":"DEAL NAME","sub":"₹X · closing MONTH"},
+      {"label":"Coverage Ratio","value":"Xх","status":"warn","sub":"pipeline vs MRR gap to target"}
+    ],"followups":["Which deals are closing this month?","What is BU-wise pipeline breakdown?","Which deals slipped from last snapshot?"]}
+
+  TIER 2 — DEEP DIVE (optional — only when granular rows add real value beyond the summary):
+    Add immediately after the summary block. User clicks "Deep Dive" to reveal. Do NOT repeat followups here.
+    Table:
     \`\`\`json
-    {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"...","followups":["...","...","..."]}
+    {"type":"table","title":"...","columns":["Col1","Col2","Col3"],"rows":[["v1","v2","v3"]],"summary":"one-line insight"}
     \`\`\`
+    Chart:
+    \`\`\`json
+    {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"one-line insight"}
+    \`\`\`
+    Deep dive rules: table max 10 rows · monetary values Indian-style (88,87,729) · no followups
 
-  CLARIFICATION (only when genuinely ambiguous):
+  PURE TEXT ONLY (no JSON at all):
+    Use only when: no data to show, pure interpretation, clarification needed, or capability gap.
+
+  CLARIFICATION:
     Just ask naturally: "Do you mean FY26 or calendar year 2026?"
 
-  RULES for embedded JSON:
-    - followups: 3 smart next questions a CEO/CRO/CFO would naturally ask
-    - Chart datasets: raw numbers only (browser formats axes)
-    - Table monetary values: Indian-style (88,87,729 not 8887729)
-    - title: short phrase readable without the original question
-    - Tables show MAX 10 rows — aggregate or pick top-N if more
+COLUMN ENRICHMENT — if deep-dive table lists individual customers, include Segment and BU:
+  Column order: Customer Name, Segment, BU, [data columns]
 
-COLUMN ENRICHMENT — if asked to list specific customers, include Segment and BU columns:
-  Default column order: Customer Name, Segment, BU, [data columns]
-
-ANALYST QUALITY — be opinionated, concise, verdict-first:
-  Good: "Enterprise NRR is 87.3% — below the 90% target. 7 churns wiped ₹24L; without British
-        American Tobacco's massive ₹82L expansion, NRR would have been ~65%. That's a concentration risk."
-  Bad:  "The NRR for Enterprise is 87.3%. Here is a table of all customers..."
+ANALYST QUALITY — verdict first, opinionated, short:
+  Good: "Enterprise NRR is 113% — but strip BAT's 6× expansion and it collapses to 87%. One account
+        is the difference between health and a danger zone. That's a board-level concentration risk."
+  Bad: "Here is the NRR. Here is a table."
 
 DATA LIMITS — be honest:
   No CAC, P&L, margins, headcount, NPS, or product usage data in this database.
@@ -2628,21 +2693,21 @@ async function runAIQuery(skipDisambig) {
       throw new Error('No response from AI. Please try again.');
     }
 
-    // Parse: extract optional embedded JSON block; rest is conversational text
-    let result = null;
+    // Parse: extract ALL embedded JSON blocks; rest is conversational text
+    const blocks = [];
     let textPart = rawText;
     const blockRx = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
-    const blockMatch = blockRx.exec(rawText);
-    if (blockMatch) {
-      try { result = JSON.parse(blockMatch[1].trim()); textPart = rawText.replace(blockMatch[0], '').trim(); } catch {}
+    let m;
+    while ((m = blockRx.exec(rawText)) !== null) {
+      try { blocks.push(JSON.parse(m[1].trim())); textPart = textPart.replace(m[0], ''); } catch {}
     }
+    textPart = textPart.trim();
     // Fallback: whole response is bare JSON
-    if (!result) {
+    if (!blocks.length) {
       const s = rawText.indexOf('{'), e = rawText.lastIndexOf('}');
-      if (s !== -1 && e > s) { try { result = JSON.parse(rawText.slice(s, e + 1)); textPart = ''; } catch {} }
+      if (s !== -1 && e > s) { try { blocks.push(JSON.parse(rawText.slice(s, e + 1))); textPart = ''; } catch {} }
     }
 
-    // Render text portion as a markdown-lite chat bubble
     function mdToHtml(t) {
       return t
         .split(/\n{2,}/).map(para => {
@@ -2659,58 +2724,28 @@ async function runAIQuery(skipDisambig) {
         }).join('');
     }
 
-    AI_HISTORY.push({ role: 'assistant', content: result?.summary || textPart || rawText });
-
-    const textBubble = textPart ? aiAddBubble('assistant', mdToHtml(textPart)) : null;
-
-    if (!result) {
-      // Pure text response — done
-      return;
-    }
-
-    // ── Clarifying question (natural text already shown above) ──
-    if (result.q && !textPart) {
-      // Claude asked a question purely in JSON format (legacy)
-      if (!textBubble) aiAddBubble('assistant', escHtml(result.q), 'question');
-      return;
-    }
-
-    // ── Chart result ──
-    if (result.type === 'chart') {
+    function renderChartInto(container, result) {
       const isLine = result.chartType === 'line';
       const palette = ['#2563eb','#16a34a','#9333ea','#ea580c'];
-      const bubble = aiAddBubble('assistant', '');
-
       if (result.title) {
         const titleEl = document.createElement('div');
         titleEl.style.cssText = 'font-size:12px;font-weight:600;color:var(--navy2);margin-bottom:.45rem';
         titleEl.textContent = result.title;
-        bubble.appendChild(titleEl);
+        container.appendChild(titleEl);
       }
-
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'max-height:240px;width:100%';
-      bubble.appendChild(canvas);
-
+      container.appendChild(canvas);
       const chartInstance = new Chart(canvas, {
         type: result.chartType || 'bar',
         data: {
           labels: result.labels,
           datasets: (result.datasets || []).map((ds, dsIdx) => {
             const color = palette[dsIdx % palette.length];
-            const barColors = ds.data.map((v, i, arr) =>
-              v >= (arr[i - 1] ?? v) ? '#16a34a' : '#dc2626');
-            return {
-              label: ds.label,
-              data: ds.data,
-              borderColor: isLine ? color : barColors,
-              backgroundColor: isLine ? color + '22' : barColors,
-              fill: isLine,
-              tension: 0.35,
-              pointRadius: isLine ? 4 : 0,
-              pointHoverRadius: 6,
-              borderWidth: isLine ? 2 : 0,
-            };
+            const barColors = ds.data.map((v, i, arr) => v >= (arr[i - 1] ?? v) ? '#16a34a' : '#dc2626');
+            return { label: ds.label, data: ds.data,
+              borderColor: isLine ? color : barColors, backgroundColor: isLine ? color + '22' : barColors,
+              fill: isLine, tension: 0.35, pointRadius: isLine ? 4 : 0, pointHoverRadius: 6, borderWidth: isLine ? 2 : 0 };
           })
         },
         options: {
@@ -2726,33 +2761,87 @@ async function runAIQuery(skipDisambig) {
         }
       });
       AI_CHARTS.push(chartInstance);
-
       if (result.summary) {
-        const sumEl = document.createElement('div');
-        sumEl.className = 'ai-summary';
-        sumEl.textContent = result.summary;
-        bubble.appendChild(sumEl);
+        const sumEl = document.createElement('div'); sumEl.className = 'ai-summary';
+        sumEl.textContent = result.summary; container.appendChild(sumEl);
       }
-
-      aiAddFollowups(bubble, result.followups);
       const chartCols = ['Label', ...(result.datasets || []).map(ds => ds.label)];
       const chartRows = (result.labels || []).map((lbl, i) => [lbl, ...(result.datasets || []).map(ds => ds.data[i] ?? '')]);
-      aiAddExportBar(bubble, { type: 'chart', chartCanvas: canvas, title: result.title, cols: chartCols, rows: chartRows });
+      aiAddExportBar(container, { type: 'chart', chartCanvas: canvas, title: result.title, cols: chartCols, rows: chartRows });
+    }
+
+    function renderTableInto(container, result) {
+      const tableHtml = aiRenderTable(result.columns, result.rows);
+      const summaryHtml = result.summary ? `<div class="ai-summary">${escHtml(result.summary)}</div>` : '';
+      container.insertAdjacentHTML('beforeend', tableHtml + summaryHtml);
+      aiAddExportBar(container, { type: 'table', cols: result.columns, rows: result.rows, title: result.title || '' });
+    }
+
+    const summaryBlock = blocks.find(b => b.type === 'summary');
+    const detailBlock  = blocks.find(b => b.type === 'table' || b.type === 'chart');
+    const legacyBlock  = !summaryBlock ? blocks.find(b => b.type === 'table' || b.type === 'chart' || b.columns || b.labels) : null;
+
+    AI_HISTORY.push({ role: 'assistant', content: summaryBlock?.metrics?.map(m => m.label + ': ' + m.value).join(' · ') || textPart || rawText });
+
+    // ── Text portion ──
+    if (textPart) aiAddBubble('assistant', mdToHtml(textPart));
+
+    // ── New two-tier: summary card + optional deep dive ──
+    if (summaryBlock) {
+      const bubble = aiAddBubble('assistant', '');
+
+      // Scorecard
+      const card = document.createElement('div'); card.className = 'ai-scorecard';
+      if (summaryBlock.title) {
+        const t = document.createElement('div'); t.className = 'ai-scorecard-title';
+        t.textContent = summaryBlock.title; card.appendChild(t);
+      }
+      for (const metric of (summaryBlock.metrics || [])) {
+        const row = document.createElement('div'); row.className = 'ai-scorecard-row';
+        const lbl = document.createElement('div'); lbl.className = 'ai-scorecard-lbl';
+        lbl.textContent = metric.label; row.appendChild(lbl);
+        const rhs = document.createElement('div');
+        const val = document.createElement('div');
+        val.className = 'ai-scorecard-val' + (metric.status ? ' ' + metric.status : '');
+        val.textContent = metric.value; rhs.appendChild(val);
+        if (metric.sub) {
+          const sub = document.createElement('div'); sub.className = 'ai-scorecard-sub';
+          sub.textContent = metric.sub; rhs.appendChild(sub);
+        }
+        row.appendChild(rhs); card.appendChild(row);
+      }
+      bubble.appendChild(card);
+
+      // Deep dive toggle
+      if (detailBlock) {
+        const btn = document.createElement('button'); btn.className = 'ai-deepdive-btn';
+        btn.innerHTML = 'Deep Dive ▾';
+        const content = document.createElement('div'); content.className = 'ai-deepdive-content';
+        btn.onclick = () => {
+          const open = content.classList.toggle('open');
+          btn.innerHTML = open ? 'Deep Dive ▴' : 'Deep Dive ▾';
+        };
+        bubble.appendChild(btn); bubble.appendChild(content);
+        if (detailBlock.type === 'chart') renderChartInto(content, detailBlock);
+        else renderTableInto(content, detailBlock);
+      }
+
+      aiAddFollowups(bubble, summaryBlock.followups);
       return;
     }
 
-    // ── Table result ──
-    if (!result.columns || !result.rows) {
-      if (!textPart) aiAddBubble('assistant', 'Received an unexpected response format. Try rephrasing.');
-      return;
+    // ── Legacy fallback: plain table or chart (no summary block) ──
+    if (legacyBlock) {
+      if (legacyBlock.type === 'chart' || legacyBlock.labels) {
+        const bubble = aiAddBubble('assistant', '');
+        renderChartInto(bubble, legacyBlock);
+        aiAddFollowups(bubble, legacyBlock.followups);
+      } else if (legacyBlock.type === 'table' || legacyBlock.columns) {
+        const tblBubble = aiAddBubble('assistant', '');
+        renderTableInto(tblBubble, legacyBlock);
+        aiAddFollowups(tblBubble, legacyBlock.followups);
+      }
     }
-
-    const tableHtml = aiRenderTable(result.columns, result.rows);
-    const summaryHtml = result.summary
-      ? `<div class="ai-summary">${escHtml(result.summary)}</div>` : '';
-    const tblBubble = aiAddBubble('assistant', tableHtml + (textPart ? '' : summaryHtml));
-    aiAddFollowups(tblBubble, result.followups);
-    aiAddExportBar(tblBubble, { type: 'table', cols: result.columns, rows: result.rows, title: result.title || result.summary?.slice(0, 60) });
 
   } catch(e) {
     aiRemoveThinking();
