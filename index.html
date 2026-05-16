@@ -2596,35 +2596,42 @@ const AI_ENTITY_QUALIFIERS = new Set([
 ]);
 
 function aiResolveNames(question) {
-  if (!CUST_NAMES.length) return new Map();
+  if (!CUST_NAMES.length) return { single: new Map(), multi: new Map() };
+
+  // Capitalisation is the primary signal that the user intends a proper noun.
+  // "Godrej" (capital G) → check against customer list → disambiguate if needed.
+  // "godrej" (all lower) → pass straight to Claude, which handles ilike fuzzy match.
+  // Exception: tokens ≤4 chars may be abbreviations regardless of case (ITC, HUL, ABB).
+  const capitalizedTokens = new Set();
+  const capRe = /\b([A-Z][a-zA-Z]{2,})\b/g;
+  let cm;
+  while ((cm = capRe.exec(question)) !== null) capitalizedTokens.add(cm[1].toLowerCase());
 
   const q = question.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
   const tokens = q.split(/\s+/);
 
-  // Mark indices that are BU/segment identifiers based on neighbouring context.
-  // "SME BU" → token before "bu" is a BU code, not a customer name.
-  // This generalises automatically to any new BU code without touching the stopword list.
+  // "SME BU" → token before "bu" is a segment code, not a customer name.
   const skipIdx = new Set();
   tokens.forEach((t, i) => {
-    if (AI_ENTITY_QUALIFIERS.has(t)) {
-      if (i > 0) skipIdx.add(i - 1); // word immediately before the qualifier
-      skipIdx.add(i);                 // the qualifier itself
-    }
+    if (AI_ENTITY_QUALIFIERS.has(t)) { if (i > 0) skipIdx.add(i - 1); skipIdx.add(i); }
   });
 
-  const result = new Map();
+  const single = new Map();
+  const multi  = new Map();
   tokens.forEach((tok, idx) => {
     if (tok.length < 3 || AI_NAME_STOP.has(tok) || skipIdx.has(idx)) return;
-    // Word-boundary match: token must be a complete word in the customer name (bounded
-    // on both sides). Prevents "drops" matching "Dropshop" or "top" matching "Topline".
-    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-zA-Z0-9]|$)', 'i');
+    // Only check if user capitalised the word (proper-noun signal) or it's a short abbrev.
+    // Long lowercase words are query vocabulary — Claude handles them via ilike.
+    if (!capitalizedTokens.has(tok) && tok.length > 4) return;
+    const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(?:^|[^a-zA-Z0-9])' + esc + '(?:[^a-zA-Z0-9]|$)', 'i');
     const hits = CUST_NAMES.filter(n => re.test(n));
     if (hits.length >= 1 && hits.length <= 10) {
       const exact = hits.find(n => n.toLowerCase() === tok);
-      if (!exact) result.set(tok, hits);
+      if (!exact) { hits.length === 1 ? single.set(tok, hits) : multi.set(tok, hits); }
     }
   });
-  return result;
+  return { single, multi };
 }
 
 /* ── Chat UI helpers ─────────────────────────────────────────── */
@@ -2813,20 +2820,42 @@ async function runAIQuery(skipDisambig) {
 
   const btn = document.getElementById('ai-q-btn');
 
-  // Pre-flight: disambiguate partial customer names
+  // Pre-flight: smart customer-name resolution
   if (!skipDisambig) {
-    const nameMap = aiResolveNames(question);
-    if (nameMap.size > 0) {
-      const [tok, names] = [...nameMap.entries()][0];
-      const qText = names.length === 1
-        ? `Did you mean <strong>${names[0]}</strong>?`
-        : `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
+    const { single, multi } = aiResolveNames(question);
+
+    // Auto-resolve single matches silently — no popup, just substitute and proceed
+    if (single.size > 0) {
+      const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let resolvedQ = question;
+      single.forEach((hits, tok) => {
+        const resolved = hits[0];
+        const rWords = resolved.split(/\s+/);
+        for (let w = rWords.length; w >= 1; w--) {
+          const phrase = rWords.slice(0, w).map(escR).join('[\\s\'\\-]+');
+          const re = new RegExp('(?:^|(?<=[^a-zA-Z0-9]))' + phrase + '(?=[^a-zA-Z0-9]|$)', 'gi');
+          const candidate = resolvedQ.replace(re, resolved);
+          if (candidate !== resolvedQ) { resolvedQ = candidate; break; }
+        }
+      });
+      if (resolvedQ !== question) {
+        inp.value = resolvedQ;
+        if (!multi.size) { runAIQuery(true); return; }
+        // fall through to multi popup with partially-resolved question
+      }
+    }
+
+    // Show popup only for genuinely ambiguous proper nouns (2+ customer matches)
+    if (multi.size > 0) {
+      const currQ = inp.value || question;
+      const [tok, names] = [...multi.entries()][0];
+      const qText = `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
       const chips = names.map(n =>
         `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;white-space:normal;height:auto;padding:.3rem .65rem;text-align:left;max-width:300px;font-size:11.5px"
-          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
+          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(currQ)})'>${n}</button>`
       ).join('') +
-        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(question)})">Use as typed</button>`;
-      aiAddBubble('user', escHtml(question));
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(currQ)})">Use as typed</button>`;
+      aiAddBubble('user', escHtml(currQ));
       inp.value = '';
       aiAddBubble('assistant', qText + '<div style="margin-top:.45rem">' + chips + '</div>', 'question');
       return;
