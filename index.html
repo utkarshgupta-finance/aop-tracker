@@ -2264,19 +2264,36 @@ HOW TO COMPUTE METRICS FROM RAW DATA:
   Segment breakdown — fetch customer_mrr_lines with joins to get segment/BU, build a lookup map,
     then join to MRR data by zoho_name in your reasoning.
 
-RESPONSE FORMAT — CRITICAL: your ENTIRE final message must be ONE valid JSON object. No text before it, no text after it, no explanation, no markdown wrapper.
+HOW TO RESPOND — write like a senior analyst talking to a CEO. Natural text first, data second.
 
-  Table: {"type":"table","title":"Descriptive title","columns":["Col (₹)","Col2"],"rows":[["v1","v2"]],"summary":"Analyst insight...","followups":["Q1?","Q2?","Q3?"]}
-  Chart: {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"...","followups":["...","...","..."]}
-  Clarify: {"q":"One clarifying question?"}
+  Respond conversationally in plain text. Interpret the numbers — don't just report them.
+  When you have data to show (a table or chart), embed it as a fenced JSON block anywhere in your response.
 
-  WRONG: "Here is the analysis: {..." — do NOT add any text before the JSON.
-  RIGHT: Start your reply with { and end with }. Nothing outside the braces.
+  PURE TEXT (analysis, clarification, "I don't have that data"):
+    Just write. No JSON needed. Example:
+    "Enterprise NRR improved from 88% to 94% year-over-year. The main driver was a drop in logo churn —
+    3 accounts that left in FY25 were replaced by 5 new ones this year. Expansion MRR also grew,
+    particularly from accounts that added the workflow module."
 
-  Chart datasets: raw numbers only — do NOT format them. Browser formats tooltips/axes.
-  Table cells: format monetary values Indian-style (88,87,729 not 8887729).
-  Always include 3 smart followup questions a CEO/CFO/CRO would naturally ask next.
-  Table title: short phrase that stands alone without reading the question.
+  TEXT + DATA (most analytical responses):
+    Write your analysis, then embed the data block, then optionally add more commentary.
+    ```json
+    {"type":"table","title":"Enterprise NRR: Mar 2025 vs Mar 2026","columns":["Metric","Value","Notes"],"rows":[...],"summary":"...","followups":["Q1?","Q2?","Q3?"]}
+    ```
+
+  CHART:
+    ```json
+    {"type":"chart","chartType":"line","title":"...","labels":["2025-04",...],"datasets":[{"label":"Series","data":[123456,...]}],"summary":"...","followups":["...","...","..."]}
+    ```
+
+  CLARIFICATION (only when genuinely ambiguous):
+    Just ask naturally in text: "Do you mean FY26 or the calendar year 2026?"
+
+  RULES for embedded JSON:
+    - followups: 3 smart next questions a CEO/CRO/CFO would naturally ask
+    - Chart datasets: raw numbers only (browser formats axes)
+    - Table monetary values: Indian-style (88,87,729 not 8887729)
+    - title: short phrase readable without the original question
 
 COLUMN ENRICHMENT — for any table listing individual customers:
   Always include Segment and BU columns (join from customer_mrr_lines).
@@ -2592,35 +2609,56 @@ async function runAIQuery(skipDisambig) {
     }
 
     const data = await resp.json();
-    // Claude may add preamble text before the JSON — extract robustly
     const rawText = (data.content?.find?.(b => b.type === 'text')?.text || '').trim();
 
-    function extractJSON(text) {
-      // 1. JSON fenced code block
-      const block = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-      if (block) { try { return JSON.parse(block[1].trim()); } catch {} }
-      // 2. First { ... last }
-      const s = text.indexOf('{'), e = text.lastIndexOf('}');
-      if (s !== -1 && e > s) { try { return JSON.parse(text.slice(s, e + 1)); } catch {} }
-      // 3. Raw
-      try { return JSON.parse(text.trim()); } catch {}
-      return null;
+    if (!rawText) {
+      throw new Error('No response from AI. Please try again.');
     }
 
-    const result = extractJSON(rawText);
+    // Parse: extract optional embedded JSON block; rest is conversational text
+    let result = null;
+    let textPart = rawText;
+    const blockRx = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+    const blockMatch = blockRx.exec(rawText);
+    if (blockMatch) {
+      try { result = JSON.parse(blockMatch[1].trim()); textPart = rawText.replace(blockMatch[0], '').trim(); } catch {}
+    }
+    // Fallback: whole response is bare JSON
+    if (!result) {
+      const s = rawText.indexOf('{'), e = rawText.lastIndexOf('}');
+      if (s !== -1 && e > s) { try { result = JSON.parse(rawText.slice(s, e + 1)); textPart = ''; } catch {} }
+    }
 
-    if (!result || typeof result !== 'object') {
-      // Claude returned plain text — show it (e.g. explanation of why it can't answer)
-      const displayText = rawText || 'No response. Try rephrasing.';
-      AI_HISTORY.push({ role: 'assistant', content: displayText });
-      aiAddBubble('assistant', escHtml(displayText));
+    // Render text portion as a markdown-lite chat bubble
+    function mdToHtml(t) {
+      return t
+        .split(/\n{2,}/).map(para => {
+          const lines = para.split('\n');
+          if (lines.every(l => /^[-•]\s/.test(l))) {
+            return '<ul style="margin:.3rem 0 .3rem 1.1rem;padding:0">' +
+              lines.map(l => `<li>${escHtml(l.replace(/^[-•]\s/, ''))}</li>`).join('') + '</ul>';
+          }
+          return '<p style="margin:.25rem 0">' + lines.map(l =>
+            escHtml(l)
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\*(.*?)\*/g, '<em>$1</em>')
+          ).join('<br>') + '</p>';
+        }).join('');
+    }
+
+    AI_HISTORY.push({ role: 'assistant', content: result?.summary || textPart || rawText });
+
+    const textBubble = textPart ? aiAddBubble('assistant', mdToHtml(textPart)) : null;
+
+    if (!result) {
+      // Pure text response — done
       return;
     }
 
-    // ── Clarifying question ──
-    if (result.q) {
-      AI_HISTORY.push({ role: 'assistant', content: JSON.stringify(result) });
-      aiAddBubble('assistant', escHtml(result.q), 'question');
+    // ── Clarifying question (natural text already shown above) ──
+    if (result.q && !textPart) {
+      // Claude asked a question purely in JSON format (legacy)
+      if (!textBubble) aiAddBubble('assistant', escHtml(result.q), 'question');
       return;
     }
 
@@ -2687,24 +2725,19 @@ async function runAIQuery(skipDisambig) {
       const chartCols = ['Label', ...(result.datasets || []).map(ds => ds.label)];
       const chartRows = (result.labels || []).map((lbl, i) => [lbl, ...(result.datasets || []).map(ds => ds.data[i] ?? '')]);
       aiAddExportBar(bubble, { type: 'chart', chartCanvas: canvas, title: result.title, cols: chartCols, rows: chartRows });
-      AI_HISTORY.push({ role: 'assistant', content: result.summary || `Chart: ${result.title}` });
       return;
     }
 
     // ── Table result ──
     if (!result.columns || !result.rows) {
-      const msg = 'Unexpected result format. Try rephrasing.';
-      AI_HISTORY.push({ role: 'assistant', content: msg });
-      aiAddBubble('assistant', escHtml(msg));
+      if (!textPart) aiAddBubble('assistant', 'Received an unexpected response format. Try rephrasing.');
       return;
     }
 
     const tableHtml = aiRenderTable(result.columns, result.rows);
     const summaryHtml = result.summary
       ? `<div class="ai-summary">${escHtml(result.summary)}</div>` : '';
-    const rowCount = result.rows.length;
-    AI_HISTORY.push({ role: 'assistant', content: result.summary || `Returned ${rowCount} rows.` });
-    const tblBubble = aiAddBubble('assistant', tableHtml + summaryHtml);
+    const tblBubble = aiAddBubble('assistant', tableHtml + (textPart ? '' : summaryHtml));
     aiAddFollowups(tblBubble, result.followups);
     aiAddExportBar(tblBubble, { type: 'table', cols: result.columns, rows: result.rows, title: result.title || result.summary?.slice(0, 60) });
 
