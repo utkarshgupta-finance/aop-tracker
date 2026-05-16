@@ -3165,42 +3165,29 @@ async function runAIQuery(skipDisambig) {
 
   const btn = document.getElementById('ai-q-btn');
 
-  // Pre-flight: smart customer-name resolution
+  // Pre-flight: smart customer-name resolution — ALWAYS prompt, never auto-replace
   if (!skipDisambig) {
     const { single, multi } = aiResolveNames(question);
 
-    // Auto-resolve single matches silently — no popup, just substitute and proceed
-    if (single.size > 0) {
-      const escR = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      let resolvedQ = question;
-      single.forEach((hits, tok) => {
-        const resolved = hits[0];
-        const rWords = resolved.split(/\s+/);
-        for (let w = rWords.length; w >= 1; w--) {
-          const phrase = rWords.slice(0, w).map(escR).join('[\\s\'\\-]+');
-          const re = new RegExp('(?:^|(?<=[^a-zA-Z0-9]))' + phrase + '(?=[^a-zA-Z0-9]|$)', 'gi');
-          const candidate = resolvedQ.replace(re, resolved);
-          if (candidate !== resolvedQ) { resolvedQ = candidate; break; }
-        }
-      });
-      if (resolvedQ !== question) {
-        inp.value = resolvedQ;
-        if (!multi.size) { runAIQuery(true); return; }
-        // fall through to multi popup with partially-resolved question
-      }
-    }
+    // Single match → "Did you mean X?" with one option + "Use as typed"
+    // Multi match  → "Found N matches — which one?" with all options + "Use as typed"
+    // Both routes go through the same prompt — user always chooses, text never changes silently.
+    const firstSingle = [...single.entries()][0];
+    const firstMulti  = [...multi.entries()][0];
+    const entry = firstSingle || firstMulti;
 
-    // Show popup only for genuinely ambiguous proper nouns (2+ customer matches)
-    if (multi.size > 0) {
-      const currQ = inp.value || question;
-      const [tok, names] = [...multi.entries()][0];
-      const qText = `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one?`;
+    if (entry) {
+      const [tok, names] = entry;
+      const isSingle = !!firstSingle;
+      const qText = isSingle
+        ? `I noticed "<strong>${tok}</strong>" — did you mean the customer <strong>${names[0]}</strong>?`
+        : `I found ${names.length} customers matching "<strong>${tok}</strong>" — which one did you mean?`;
       const chips = names.map(n =>
         `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;white-space:normal;height:auto;padding:.3rem .65rem;text-align:left;max-width:300px;font-size:11.5px"
-          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(currQ)})'>${n}</button>`
+          onclick='aiPickName(${JSON.stringify(n)},${JSON.stringify(tok)},${JSON.stringify(question)})'>${n}</button>`
       ).join('') +
-        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(currQ)})">Use as typed</button>`;
-      aiAddBubble('user', escHtml(currQ));
+        `<button class="nret-tog2" style="margin:.2rem .2rem 0 0;opacity:.55;font-size:11.5px" onclick="aiUseAsTyped(${JSON.stringify(question)})">No, use as typed</button>`;
+      aiAddBubble('user', escHtml(question));
       inp.value = '';
       aiAddBubble('assistant', qText + '<div style="margin-top:.45rem">' + chips + '</div>', 'question');
       return;
