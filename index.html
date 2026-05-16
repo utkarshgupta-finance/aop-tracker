@@ -2221,6 +2221,10 @@ PostgREST rules:
   Filter ops: eq  neq  lt  lte  gt  gte  like  ilike  is.null  not.is.null
   Always use { headers: cmrrHdr() } in every fetch call
   Dates: YYYY-MM-01 format (e.g. 2026-02-01 for Feb 2026)
+  IMPORTANT — customer names: NEVER use eq for zoho_name (names contain spaces, punctuation).
+    Always use ilike with wildcard AND encodeURIComponent:
+    zoho_name=ilike.*${encodeURIComponent(name)}*
+    Example: zoho_name=ilike.*${encodeURIComponent('Glaxosmithkline Asia Private Limited')}*
 
 Available in scope:
   SUPABASE_URL  — string
@@ -2234,6 +2238,12 @@ Example — top 10 by MRR Feb 2026:
 const r = await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.2026-02-01&order=mrr_amount.desc&limit=10',{headers:cmrrHdr()});
 const d = await r.json();
 return { columns:['Customer','MRR'], rows:d.map(x=>[x.zoho_name, f(x.mrr_amount)]), summary:\`Top 10 customers by MRR in Feb 2026.\` };
+
+Example — single customer (use ilike+encodeURIComponent, never eq):
+const name = 'VST Industries Limited';
+const r = await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date,mrr_amount&zoho_name=ilike.*'+encodeURIComponent(name)+'*&order=month_date.desc&limit=24',{headers:cmrrHdr()});
+const d = await r.json();
+return { columns:['Month','MRR'], rows:d.map(x=>[x.month_date.slice(0,7), f(x.mrr_amount)]), summary:\`MRR history for \${name}.\` };
 
 Example — MoM change Feb vs Jan 2026:
 const [rFeb,rJan] = await Promise.all([
@@ -2252,7 +2262,10 @@ const AI_NAME_STOP = new Set([
   'private','limited','india','pvt','ltd','group','company','corp','inc','data',
   'revenue','growth','churn','churned','active','increase','decrease','change',
   'percent','percentage','feb','jan','mar','apr','may','jun','jul','aug','sep',
-  'oct','nov','dec','2025','2026','2027','quarterly','annual','fy26','fy27'
+  'oct','nov','dec','2025','2026','2027','quarterly','annual','fy26','fy27',
+  // 3-char common words to exclude
+  'the','and','for','its','not','but','are','has','was','had','did','can','may',
+  'use','get','set','put','run','see','all','one','two','out','off','fy2','fy3'
 ]);
 
 function aiResolveNames(question) {
@@ -2260,7 +2273,7 @@ function aiResolveNames(question) {
   const tokens = question.toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(t => t.length >= 4 && !AI_NAME_STOP.has(t));
+    .filter(t => t.length >= 3 && !AI_NAME_STOP.has(t));
   const result = new Map();
   for (const tok of tokens) {
     const hits = CUST_NAMES.filter(n => n.toLowerCase().includes(tok));
