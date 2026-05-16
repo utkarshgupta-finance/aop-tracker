@@ -2300,12 +2300,16 @@ CRITICAL PATTERNS — always apply these, never skip:
     // LM = "2026-03-01". Use LM in all subsequent fetches instead of hardcoded dates.
     // Prior month = subtract 1 month from LM manually: if LM.slice(5,7)==='01' → prev year Dec, else same year month-1
 
-  ② SEGMENT / BU breakdown requires a JS join — customer_mrr_unified has NO segment or BU column:
-    Build a lookup from customer_mrr_lines first, then join in JS:
-    const segMap={};
-    (await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name),bu_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()))
-      .forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]={seg:x.segment_master?.name||'Other',bu:x.bu_master?.name||'Other'}});
-    Then: segMap[zoho_name]?.seg  /  segMap[zoho_name]?.bu
+  ② SEGMENT / BU breakdown — choose the right source:
+    • For BU-level MRR totals or trends → ALWAYS use bu_mrr_monthly directly. NEVER use customer_mrr_unified+segMap for BU aggregations.
+      Reason: some BUs (e.g. SME BU) earn the bulk of their MRR from customer_module_mrr (modules), not customer_mrr (contracts).
+      bu_mrr_monthly already unions BOTH sources correctly. Using segMap gives you only the contract portion — a fraction of reality.
+      Example for SME BU trend: fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=month_date,mrr_amount&bu_name=eq.SME BU&order=month_date',{headers:cmrrHdr()})
+    • For CUSTOMER-level segment/BU breakdown → build a JS join via segMap from customer_mrr_lines:
+      const segMap={};
+      (await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name),bu_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()))
+        .forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]={seg:x.segment_master?.name||'Other',bu:x.bu_master?.name||'Other'}});
+      Then: segMap[zoho_name]?.seg  /  segMap[zoho_name]?.bu
 
   ③ LARGE DATE RANGES: customer_mrr has 29,000+ rows. A 5000-row fetch silently truncates.
     For full-history bridge or full-history NRR, limit to the last 13–14 months unless asked for more.
@@ -2321,6 +2325,12 @@ CRITICAL PATTERNS — always apply these, never skip:
 
   ⑥ BILLING CYCLE / MODULE FIELD VALUES: values in customer_module_lines are free-text.
     Never filter by assumed values like "Annual" — GROUP BY the field first and show all distinct values.
+
+  ⑦ BU NAME FILTER: use the exact bu_name value with eq (case-sensitive). Never fabricate or abbreviate.
+    EXACT bu_name values in bu_mrr_monthly: "BAT BU","India ENT BU","India MM BU","KAM BU","MEA BU","SEA BU","SME BU","ERTM BU"
+    User says "Enterprise" or "ENT" → bu_name=eq.India ENT BU
+    User says "Mid Market" or "MM"  → bu_name=eq.India MM BU
+    User says "SME"                 → bu_name=eq.SME BU
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXAMPLES (learn the patterns)
@@ -2486,7 +2496,29 @@ const avgActive=Math.round(active.reduce((s,x)=>s+x.months,0)/active.length);
 const churned=rows.filter(x=>x.churn);
 const avgChurn=churned.length?Math.round(churned.reduce((s,x)=>s+x.months,0)/churned.length):0;
 const top20=active.sort((a,b)=>b.months-a.months).slice(0,20);
-return {columns:['Customer Name','Segment','BU','Go-Live Date','Tenure (Months)'],rows:top20.map(x=>[x.name,x.seg,x.bu,x.go,x.months]),summary:'Top 20 longest-tenured active customers. Avg active tenure: '+avgActive+' months. Avg churned tenure before leaving: '+avgChurn+' months.',followups:['Which long-tenured customers have flat MRR (expansion opportunity)?','Show me customers who joined in FY24','What is tenure distribution by segment?']};`;
+return {columns:['Customer Name','Segment','BU','Go-Live Date','Tenure (Months)'],rows:top20.map(x=>[x.name,x.seg,x.bu,x.go,x.months]),summary:'Top 20 longest-tenured active customers. Avg active tenure: '+avgActive+' months. Avg churned tenure before leaving: '+avgChurn+' months.',followups:['Which long-tenured customers have flat MRR (expansion opportunity)?','Show me customers who joined in FY24','What is tenure distribution by segment?']};
+
+[PATTERN: BU MRR Trend — ALWAYS use bu_mrr_monthly, never segMap] — CRO, CFO, FP&A:
+// User asks: "show SME BU MRR" / "compare all BUs" / "India ENT BU trend"
+// RULE: bu_mrr_monthly already aggregates contract + module MRR correctly for each BU.
+// NEVER use customer_mrr_unified+segMap for BU totals — segMap misses module MRR.
+const buFilter='SME BU'; // replace with exact bu_name or omit &bu_name=... to get all BUs
+const d=await fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=bu_name,month_date,mrr_amount&order=month_date&limit=2000'+(buFilter?'&bu_name=eq.'+encodeURIComponent(buFilter):''),{headers:cmrrHdr()}).then(r=>r.json());
+// For single BU trend:
+const months=[...new Set(d.map(x=>x.month_date.slice(0,7)))].sort();
+const byBU={};d.forEach(x=>{if(!byBU[x.bu_name])byBU[x.bu_name]=[];byBU[x.bu_name].push({m:x.month_date.slice(0,7),v:+x.mrr_amount})});
+const datasets=Object.entries(byBU).map(([bu,pts])=>({label:bu,data:months.map(m=>{const p=pts.find(x=>x.m===m);return p?p.v:null;})}));
+return {type:'chart',chartType:'line',title:'MRR Trend by BU',labels:months,datasets,summary:'BU MRR trend using bu_mrr_monthly (contract + module). Latest: '+f(d.filter(x=>x.month_date===d[d.length-1]?.month_date).reduce((s,x)=>s+ +x.mrr_amount,0))+'.',followups:['Compare this BU to AOP targets','Show month-by-month as a table','Which customers in this BU drove growth?']};
+
+[PATTERN: All BUs MRR comparison table — single month] — FP&A, board:
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const mm=+LM.slice(5,7),yyyy=+LM.slice(0,4);
+const prevLM=(mm===1?yyyy-1+'-12':yyyy+'-'+(mm-1).toString().padStart(2,'0'))+'-01';
+const [curr,prev]=await Promise.all([LM,prevLM].map(m=>fetch(SUPABASE_URL+'/rest/v1/bu_mrr_monthly?select=bu_name,mrr_amount&month_date=eq.'+m+'&limit=100',{headers:cmrrHdr()}).then(r=>r.json())));
+const prevMap={};prev.forEach(x=>prevMap[x.bu_name]=+x.mrr_amount);
+const total=curr.reduce((s,x)=>s+ +x.mrr_amount,0);
+const rows=curr.sort((a,b)=>+b.mrr_amount- +a.mrr_amount).map(x=>{const p=prevMap[x.bu_name]||0,v=+x.mrr_amount,ch=p?((v-p)/p*100).toFixed(1)+'%':'New';return[x.bu_name,f(v),f(v*12),(v/total*100).toFixed(1)+'%',ch]});
+return {columns:['BU','MRR – '+LM.slice(0,7)+' (₹)','ARR (₹)','% of Total','MoM Change'],rows,summary:'All BU MRR as of '+LM.slice(0,7)+'. Total MRR: '+f(total)+'. Source: bu_mrr_monthly (includes both contract and module MRR).',followups:['Show MRR trend for the top BU','Which BU is furthest from AOP target?','Show customer count by BU']};`;
 
 /* ── Name resolver (pre-flight disambiguation) ───────────────── */
 const AI_NAME_STOP = new Set([
