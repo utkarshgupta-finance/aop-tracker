@@ -2378,6 +2378,49 @@ for(let i=12;i<months.length;i++){
 }
 return {type:'chart',chartType:'line',title:'Rolling 12-Month NRR Trend',labels:pts.map(x=>x.m),datasets:[{label:'NRR (%)',data:pts.map(x=>x.v)}],summary:'Rolling NRR of '+pts[pts.length-1]?.v+'% as of latest month. Benchmark: 100%=neutral, >110%=world-class, <90%=at risk.',followups:['Break NRR by segment — which segment is dragging it down?','Show logo retention alongside NRR','Who are the customers churning most?']};
 
+[PATTERN: Segment or BU NRR — rolling 12-month for a specific segment/BU] — CRO, board:
+// "Enterprise NRR for Mar 2026" / "SME retention" / "NRR by segment"
+// SEGMENT names (exact, case-sensitive): 'SME', 'Mid_Market', 'Enterprise', 'ERTM India'
+// User says Enterprise → TARGET_SEG='Enterprise'; SME → 'SME'; Mid Market → 'Mid_Market'; ERTM → 'ERTM India'
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const lmD=new Date(LM),bmD=new Date(lmD);bmD.setMonth(bmD.getMonth()-12);
+const BM=bmD.getFullYear()+'-'+(bmD.getMonth()+1).toString().padStart(2,'0')+'-01';
+const [curr,base,lines]=await Promise.all([
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+LM+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+BM+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name),bu_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())
+]);
+const segMap={};lines.forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]={seg:x.segment_master?.name||'Other',bu:x.bu_master?.name||'Other'}});
+const TARGET_SEG='Enterprise'; // ← replace with actual segment name based on question
+const baseFilt=base.filter(x=>segMap[x.zoho_name]?.seg===TARGET_SEG);
+const baseMap={};baseFilt.forEach(x=>baseMap[x.zoho_name]=+x.mrr_amount);
+const currMap={};curr.forEach(x=>currMap[x.zoho_name]=+x.mrr_amount);
+const startMRR=Object.values(baseMap).reduce((s,v)=>s+v,0);
+const endMRR=Object.keys(baseMap).reduce((s,k)=>s+(currMap[k]||0),0);
+const nrr=(endMRR/startMRR*100).toFixed(1);
+const retained=Object.keys(baseMap).filter(k=>currMap[k]>0).length;
+const logoRet=(retained/baseFilt.length*100).toFixed(1);
+const churned=Object.keys(baseMap).filter(k=>!currMap[k]);
+const expanders=Object.keys(baseMap).filter(k=>currMap[k]>baseMap[k]).sort((a,b)=>(currMap[b]-baseMap[b])-(currMap[a]-baseMap[a]));
+const flag=+nrr>=100?'Expanding — net positive':'below 100% — net contraction';
+return {title:TARGET_SEG+' NRR – '+BM.slice(0,7)+' → '+LM.slice(0,7),columns:['Metric','Value','Detail'],rows:[['NRR (12-month)',nrr+'%',flag],['Starting MRR ('+BM.slice(0,7)+')',f(startMRR),baseFilt.length+' customers in cohort'],['Ending MRR ('+LM.slice(0,7)+')',f(endMRR),'Same cohort tracked'],['Net MRR Δ',f(endMRR-startMRR),(endMRR>=startMRR?'+':'')+((endMRR-startMRR)/startMRR*100).toFixed(1)+'%'],['Logo Retention',logoRet+'%',retained+' of '+baseFilt.length+' still active'],['Churned Logos',churned.length,churned.slice(0,3).join(', ')+(churned.length>3?' +more':'')],['Top Expander',expanders.length?expanders[0]:'—',expanders.length?f(currMap[expanders[0]]-baseMap[expanders[0]])+' expansion':'']],summary:TARGET_SEG+' NRR: '+nrr+'% for the 12 months to '+LM.slice(0,7)+'. Starting cohort '+baseFilt.length+' customers ('+f(startMRR)+'). Ending: '+f(endMRR)+'. Logo retention: '+logoRet+'%. '+(churned.length?churned.length+' churned: '+churned.slice(0,2).join(', ')+(churned.length>2?' and more.':'.'): 'Zero churns — full logo retention.'),followups:['Show the NRR trend for '+TARGET_SEG+' over the last 12 months','Which '+TARGET_SEG+' customers are at risk of churning?','Compare '+TARGET_SEG+' NRR vs other segments']};
+
+[PATTERN: NRR compared across ALL segments] — CRO, board summary:
+const [{month_date:LM}]=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1',{headers:cmrrHdr()}).then(r=>r.json());
+const bmD=new Date(LM);bmD.setMonth(bmD.getMonth()-12);
+const BM=bmD.getFullYear()+'-'+(bmD.getMonth()+1).toString().padStart(2,'0')+'-01';
+const [curr,base,lines]=await Promise.all([
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+LM+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,mrr_amount&month_date=eq.'+BM+'&limit=2000',{headers:cmrrHdr()}).then(r=>r.json()),
+  fetch(SUPABASE_URL+'/rest/v1/customer_mrr_lines?select=zoho_name,segment_master!left(name)&limit=2000',{headers:cmrrHdr()}).then(r=>r.json())
+]);
+const segMap={};lines.forEach(x=>{if(x.zoho_name&&!segMap[x.zoho_name])segMap[x.zoho_name]=x.segment_master?.name||'Other'});
+const currMap={};curr.forEach(x=>currMap[x.zoho_name]=+x.mrr_amount);
+const bySeg={};
+base.forEach(x=>{const s=segMap[x.zoho_name]||'Other';if(!bySeg[s])bySeg[s]={start:0,end:0,logos:0,retained:0};bySeg[s].start+= +x.mrr_amount;bySeg[s].end+=(currMap[x.zoho_name]||0);bySeg[s].logos++;if(currMap[x.zoho_name]>0)bySeg[s].retained++;});
+const rows=Object.entries(bySeg).sort((a,b)=>b[1].start-a[1].start).map(([seg,v])=>[seg,f(v.start),f(v.end),(v.end/v.start*100).toFixed(1)+'%',(v.retained/v.logos*100).toFixed(1)+'%',v.logos]);
+return {title:'NRR by Segment – '+BM.slice(0,7)+' → '+LM.slice(0,7),columns:['Segment','Starting MRR (₹)','Ending MRR (₹)','NRR (%)','Logo Retention (%)','Cohort Size'],rows,summary:'Segment NRR comparison for 12 months to '+LM.slice(0,7)+'. Segments above 100% are net expanders; below 100% means churn exceeds expansion.',followups:['Which segment has the most churn logos?','Show Enterprise customer list with MRR change','Which segment is furthest from AOP?']};
+
 [PATTERN: At-Risk Detection] — COO, CRO early-warning signal:
 const r=await fetch(SUPABASE_URL+'/rest/v1/customer_mrr_unified?select=zoho_name,month_date,mrr_amount&month_date=gte.2025-11-01&month_date=lte.2026-03-01&limit=5000',{headers:cmrrHdr()});
 const d=await r.json();
@@ -2552,7 +2595,10 @@ const AI_NAME_STOP = new Set([
   'fy27','net','gross','expansion','contraction','active','inactive','live',
   // common English words that match customer names starting with them
   'new','old','best','first','last','high','low','big','top','key','max','min',
-  'bridge','logo','logos','trend','rate','mix','gap','run','base','core','plus'
+  'bridge','logo','logos','trend','rate','mix','gap','run','base','core','plus',
+  // BU / segment alias terms — users say these to mean segments, never specific customers
+  'enterprise','enterprises','midmarket','sme','ertm','bat','mea','sea','kam',
+  'small','medium','market','national','international','global','regional'
 ]);
 
 // Words that, when they follow a token, mark that token as a BU/segment identifier
