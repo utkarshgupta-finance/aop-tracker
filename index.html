@@ -177,10 +177,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cust-opt:hover,.cust-opt.hl{background:#eff6ff;color:var(--navy2)}
 .cmrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3);padding-bottom:.5rem}
 .cmrr-info{display:flex;flex-wrap:wrap;gap:.4rem .6rem;margin-bottom:.7rem}
-.cmrr-metric{display:flex;flex-direction:column;gap:.18rem;padding:.55rem .95rem;border-radius:8px;border:1px solid var(--brd2);background:#fff;min-width:130px}
+.cmrr-metric{display:flex;flex-direction:column;gap:.18rem;padding:.55rem .95rem;border-radius:8px;border:1px solid var(--brd2);background:#fff;min-width:130px;position:relative;cursor:default}
 .cmrr-metric-lbl{font-size:9.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--txt3);white-space:nowrap}
 .cmrr-metric-val{font-size:18px;font-family:var(--mono);font-weight:700;color:var(--txt);line-height:1}
 .cmrr-metric-val.pos{color:#166534}.cmrr-metric-val.neg{color:#991b1b}
+.cmrr-mtip{display:none;position:absolute;bottom:calc(100% + 7px);left:0;background:#111827;color:#e5e7eb;font-family:var(--mono);font-size:10.5px;line-height:1.65;padding:.65rem .85rem;border-radius:7px;white-space:pre;z-index:200;min-width:230px;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:none}
+.cmrr-mtip::after{content:'';position:absolute;top:100%;left:18px;border:6px solid transparent;border-top-color:#111827}
+.cmrr-metric:hover .cmrr-mtip{display:block}
 .cmrr-pill{display:inline-flex;align-items:center;font-size:11.5px;font-family:var(--sans);padding:.22rem .7rem;border-radius:20px;border:1px solid var(--brd2);background:#fff;color:var(--txt2);white-space:nowrap}
 .cmrr-pill b{color:var(--txt);font-weight:500;margin-right:.3rem}
 .cmrr-chart-box{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1.1rem 1.1rem .8rem;margin-bottom:1.25rem}
@@ -1099,7 +1102,7 @@ let CUST_NAMES   = [];   // sorted distinct zoho_names
 let cmrrDdItems  = [];   // names currently visible in dropdown
 let cmrrDdIdx    = -1;   // keyboard-highlighted index
 let custChartObj = null; // Chart.js instance
-let _custInited  = false;
+let CMRR_GLOBAL_END = null; // latest month in DB, set during initCustMRR
 let _cmrrCurName = null;   // customer currently loaded
 let _cmrrWfLoaded = false; // whether workflow data is fetched for _cmrrCurName
 
@@ -1118,8 +1121,13 @@ async function initCustMRR() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   };
-  const [p1, p2] = await Promise.all([fetchPage(0), fetchPage(1000)]);
+  const [p1, p2, maxR] = await Promise.all([
+    fetchPage(0),
+    fetchPage(1000),
+    fetch(`${SUPABASE_URL}/rest/v1/customer_mrr_unified?select=month_date&order=month_date.desc&limit=1`, { headers: cmrrHdr() }).then(r => r.json())
+  ]);
   CUST_LINES = [...p1, ...p2];
+  if (maxR && maxR[0]) CMRR_GLOBAL_END = maxR[0].month_date.slice(0, 7);
   const seen = new Set();
   for (const row of CUST_LINES) {
     if (row.zoho_name && !seen.has(row.zoho_name)) {
@@ -1248,67 +1256,99 @@ function cmrrRenderMetrics(byMonth) {
     const [y, m] = ym.split('-');
     return new Date(Date.UTC(+y, +m-1, 1)).toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' });
   }
+  function fLbl(v) { return v ? '₹' + (v/1e5).toFixed(2) + 'L' : '—'; }
+  function tip(html) { return `<div class="cmrr-mtip">${html}</div>`; }
 
-  const end   = keys[keys.length - 1];
-  const endV  = byMonth[end];
+  // Anchor to global DB end (Mar '26), not customer's last month
+  const end = CMRR_GLOBAL_END || keys[keys.length - 1];
+  const endV = byMonth[end] || 0;
 
-  // Find the month 12 months before end
+  // 12m start = exactly 12 months before global end
   let [ey, em] = end.split('-').map(Number);
   em -= 12; if (em <= 0) { em += 12; ey--; }
   const start12Key = `${ey}-${String(em).padStart(2, '0')}`;
-  const start12V   = byMonth[start12Key];
+  const start12V   = byMonth[start12Key] || 0;
 
-  // Collect the 12 month window ending at end
+  // Walk the 12-month window (start12Key+1 … end) collecting MoM rates
   const window12 = [];
   let cur = end;
   for (let i = 0; i < 12; i++) {
     const prev = prevKey(cur);
     const pv = byMonth[prev], cv = byMonth[cur];
-    if (pv && cv && pv > 0) window12.unshift({ rate: cv / pv - 1 });
+    if (pv > 0 && cv > 0) {
+      window12.unshift({ month: cur, pKey: prev, pv, cv, rate: cv / pv - 1 });
+    }
     cur = prev;
   }
 
-  // 1. 12M Trailing Net Retention %
-  let nrrHtml = '—', nrrCls = '';
-  if (start12V && start12V > 0) {
-    const nrr = endV / start12V * 100;
-    nrrCls = nrr >= 100 ? 'pos' : 'neg';
-    nrrHtml = nrr.toFixed(1) + '%';
-  }
+  // Last MRR: customer's own latest available data point
+  const lastKey  = keys[keys.length - 1];
+  const lastV    = byMonth[lastKey];
 
-  // 2. 12M Rolling CAGR (annualised, based on 12m window = 1 year)
-  let cagrHtml = '—', cagrCls = '';
-  if (start12V && start12V > 0) {
-    const cagr = (endV / start12V - 1) * 100;
-    cagrCls = cagr >= 0 ? 'pos' : 'neg';
-    cagrHtml = (cagr >= 0 ? '+' : '') + cagr.toFixed(1) + '%';
+  // 1. 12M Net Retention %
+  const hasNrr = endV > 0 && start12V > 0;
+  let nrrVal = 0, nrrHtml = '—', nrrCls = '';
+  if (hasNrr) {
+    nrrVal  = endV / start12V * 100;
+    nrrCls  = nrrVal >= 100 ? 'pos' : 'neg';
+    nrrHtml = nrrVal.toFixed(1) + '%';
   }
+  const nrrTip = hasNrr
+    ? `MRR ${mLbl(end)} = ${fLbl(endV)}\nMRR ${mLbl(start12Key)} = ${fLbl(start12V)}\n\n${fLbl(endV)} ÷ ${fLbl(start12V)} × 100\n= ${nrrVal.toFixed(1)}%`
+    : `No data for ${mLbl(end)} or ${mLbl(start12Key)}`;
 
-  // 3. 12M Rolling Average CMGR (arithmetic mean of MoM growth rates)
+  // 2. 12M CAGR (12m window = 1 year, so CAGR = simple growth rate)
+  let cagrVal = 0, cagrHtml = '—', cagrCls = '';
+  if (hasNrr) {
+    cagrVal  = (endV / start12V - 1) * 100;
+    cagrCls  = cagrVal >= 0 ? 'pos' : 'neg';
+    cagrHtml = (cagrVal >= 0 ? '+' : '') + cagrVal.toFixed(1) + '%';
+  }
+  const cagrTip = hasNrr
+    ? `MRR ${mLbl(end)} = ${fLbl(endV)}\nMRR ${mLbl(start12Key)} = ${fLbl(start12V)}\n\n(${fLbl(endV)} ÷ ${fLbl(start12V)}) − 1\n= ${cagrHtml}`
+    : `No data for ${mLbl(end)} or ${mLbl(start12Key)}`;
+
+  // 3. Avg CMGR — arithmetic mean of MoM growth rates in the window
   let cmgrHtml = '—', cmgrCls = '';
+  let cmgrTipLines = `MoM growth rates (${mLbl(start12Key)} → ${mLbl(end)}):\n`;
   if (window12.length > 0) {
     const avg = window12.reduce((s, r) => s + r.rate, 0) / window12.length * 100;
-    cmgrCls = avg >= 0 ? 'pos' : 'neg';
+    cmgrCls  = avg >= 0 ? 'pos' : 'neg';
     cmgrHtml = (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%';
+    cmgrTipLines += window12.map(r =>
+      `  ${mLbl(r.month)}: ${fLbl(r.pv)} → ${fLbl(r.cv)} (${(r.rate*100 >= 0 ? '+' : '')}${(r.rate*100).toFixed(1)}%)`
+    ).join('\n');
+    cmgrTipLines += `\n\nSum ÷ ${window12.length} = ${cmgrHtml}/month`;
+  } else {
+    cmgrTipLines += '  No overlapping MoM pairs found';
   }
 
-  const period = start12V ? `${mLbl(start12Key)} – ${mLbl(end)}` : `trailing ${mLbl(end)}`;
+  const period = `${mLbl(start12Key)} – ${mLbl(end)}`;
 
   el.innerHTML = `
+    <div class="cmrr-metric">
+      <div class="cmrr-metric-lbl">Last MRR</div>
+      <div class="cmrr-metric-val">${fLbl(lastV)}</div>
+      <div class="cmrr-metric-lbl" style="margin-top:.1rem">${mLbl(lastKey)}</div>
+      ${tip(`Last available MRR\n\nMonth : ${mLbl(lastKey)}\nAmount: ${fLbl(lastV)}`)}
+    </div>
     <div class="cmrr-metric">
       <div class="cmrr-metric-lbl">12M Net Retention</div>
       <div class="cmrr-metric-val ${nrrCls}">${nrrHtml}</div>
       <div class="cmrr-metric-lbl" style="margin-top:.1rem">${period}</div>
+      ${tip(nrrTip)}
     </div>
     <div class="cmrr-metric">
       <div class="cmrr-metric-lbl">12M CAGR</div>
       <div class="cmrr-metric-val ${cagrCls}">${cagrHtml}</div>
       <div class="cmrr-metric-lbl" style="margin-top:.1rem">${period}</div>
+      ${tip(cagrTip)}
     </div>
     <div class="cmrr-metric">
       <div class="cmrr-metric-lbl">Avg CMGR (${window12.length}m)</div>
       <div class="cmrr-metric-val ${cmgrCls}">${cmgrHtml}</div>
       <div class="cmrr-metric-lbl" style="margin-top:.1rem">per month avg</div>
+      ${tip(cmgrTipLines)}
     </div>`;
   el.style.display = 'flex';
 }
