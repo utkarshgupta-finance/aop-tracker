@@ -5,6 +5,19 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function fetchActiveContext(supaUrl: string, supaKey: string): Promise<string> {
+  try {
+    const r = await fetch(
+      `${supaUrl}/rest/v1/ai_context?is_active=eq.true&select=content&limit=1`,
+      { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+    );
+    const rows = await r.json();
+    return rows?.[0]?.content ?? '';
+  } catch {
+    return '';
+  }
+}
+
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
@@ -79,8 +92,16 @@ Deno.serve(async (req) => {
   const { system, messages, supabaseUrl = '', supabaseKey = '' } = body;
   if (!messages?.length) return json({ error: 'Missing messages' }, 400);
 
+  const liveContext = await fetchActiveContext(supabaseUrl, supabaseKey);
   const systemBlocks = system
-    ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
+    ? [
+        ...(liveContext ? [{
+          type: 'text',
+          text: `# BIZOM LIVE CONTEXT DOCUMENT\nThis document contains current business rules, definitions, and known data issues. It overrides any conflicting information in the instructions below.\n\n${liveContext}`,
+          cache_control: { type: 'ephemeral' },
+        }] : []),
+        { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+      ]
     : undefined;
 
   const msgs: { role: string; content: unknown }[] = [...messages];
