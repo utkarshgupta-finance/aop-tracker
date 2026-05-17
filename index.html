@@ -245,6 +245,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ai-deepdive-content.open{display:block}
 .ai-thinking{align-self:flex-start;color:var(--txt3);font-size:11.5px;font-family:var(--mono);padding:.4rem 0;animation:blink 1.2s infinite}
 @keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
+/* ── Context admin tab ─────────────────────────────────────── */
+.ctx-editor{width:100%;height:calc(100vh - 320px);min-height:400px;font-family:var(--mono);font-size:12px;line-height:1.6;border:1px solid var(--brd2);border-radius:6px;padding:1rem;background:#fff;color:var(--txt);resize:vertical;outline:none}
+.ctx-editor:focus{border-color:var(--navy3);box-shadow:0 0 0 2px rgba(42,95,158,.15)}
+.ctx-version-row{display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.4rem}
 /* ── Overall MRR tab ───────────────────────────────────────── */
 .omrr-bar{padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .omrr-status{font-size:11px;font-family:var(--mono);color:var(--txt3)}
@@ -266,6 +270,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
   <button class="tbtn" onclick="showAIQueryTab(this)">Ask AI</button>
   <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
+  <button class="tbtn" onclick="showContextTab(this)" style="margin-left:auto;opacity:.7">⚙ Context</button>
 </nav>
 <main>
   <div id="aop-plan" class="pane">
@@ -376,6 +381,48 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Top 10 customers by MRR in March 2026')">Top 10 Mar 26</button>
         <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Which customers had MRR go up by 5% or more in Feb 2026?')">MRR up 5%+ Feb 26</button>
         <button class="nret-tog2" style="font-size:10.5px" onclick="aiSetQ('Glaxo MRR for every January')">Glaxo all Januaries</button>
+      </div>
+    </div>
+  </div>
+  <!-- ── Context Admin Pane ──────────────────────────────────── -->
+  <div id="context-admin" class="pane">
+    <!-- Password gate -->
+    <div id="ctx-gate">
+      <div style="max-width:360px;margin:3rem auto;text-align:center">
+        <div class="slabel" style="margin-bottom:.5rem">Context Admin</div>
+        <p style="font-size:12px;color:var(--txt3);margin-bottom:1.25rem">Edit the living context document that is injected into every AI query. Changes take effect immediately — no code deployment needed.</p>
+        <input type="password" id="ctx-pwd" class="cust-input"
+          placeholder="Enter admin password"
+          style="margin-bottom:.75rem;text-align:center"
+          onkeydown="if(event.key==='Enter')ctxUnlock()">
+        <button class="modal-csv" onclick="ctxUnlock()" style="width:100%">Unlock</button>
+        <div id="ctx-gate-err" style="color:#a32d2d;font-size:12px;margin-top:.5rem"></div>
+      </div>
+    </div>
+    <!-- Admin panel (shown after password) -->
+    <div id="ctx-panel" class="hidden">
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+        <div>
+          <span class="slabel" style="margin:0">AI Context Document</span>
+          <span id="ctx-version-badge" style="font-family:var(--mono);font-size:11px;color:var(--txt3);margin-left:.5rem"></span>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="rbtn" onclick="ctxLoadVersions()">Version History</button>
+          <button class="modal-csv" onclick="ctxSave()">Save New Version</button>
+        </div>
+      </div>
+      <!-- Change note -->
+      <input type="text" id="ctx-change-note" class="cust-input"
+        placeholder="Change note — what are you updating? (required to save)"
+        style="font-size:12px;margin-bottom:.6rem">
+      <!-- Editor -->
+      <textarea id="ctx-editor" class="ctx-editor" spellcheck="false"></textarea>
+      <div id="ctx-status" style="font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:.4rem"></div>
+      <!-- Version history panel -->
+      <div id="ctx-versions" class="hidden" style="margin-top:1.5rem">
+        <div class="slabel" style="margin-bottom:.5rem">Version History</div>
+        <div id="ctx-versions-list"></div>
       </div>
     </div>
   </div>
@@ -3532,6 +3579,139 @@ function aiPickName(resolvedName, tok, origQ) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─── CONTEXT ADMIN ──────────────────────────────────────────────── */
+const CTX_ADMIN_URL = `${SUPABASE_URL}/functions/v1/context-admin`;
+let _ctxPassword = '';
+let _ctxEditorListening = false;
+
+function showContextTab(btn) {
+  showTab('context-admin', btn);
+}
+
+async function ctxUnlock() {
+  const pwd = document.getElementById('ctx-pwd').value;
+  const err = document.getElementById('ctx-gate-err');
+  if (!pwd) { err.textContent = 'Password required'; return; }
+  err.textContent = 'Checking…';
+  const r = await fetch(CTX_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    body: JSON.stringify({ password: pwd, operation: 'list_versions' }),
+  });
+  const j = await r.json();
+  if (!r.ok || j.error) {
+    err.textContent = j.error === 'Unauthorized' ? 'Incorrect password' : (j.error || 'Error');
+    return;
+  }
+  _ctxPassword = pwd;
+  document.getElementById('ctx-gate').classList.add('hidden');
+  document.getElementById('ctx-panel').classList.remove('hidden');
+  err.textContent = '';
+  await ctxLoadActive();
+}
+
+async function ctxLoadActive() {
+  const status = document.getElementById('ctx-status');
+  status.textContent = 'Loading…';
+  status.style.color = 'var(--txt3)';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ai_context?is_active=eq.true&select=id,version,content,updated_at,change_note&limit=1`,
+      { headers: cmrrHdr() }
+    );
+    const rows = await r.json();
+    if (!rows.length) { status.textContent = 'No active context found.'; return; }
+    const row = rows[0];
+    const editor = document.getElementById('ctx-editor');
+    editor.value = row.content;
+    document.getElementById('ctx-version-badge').textContent =
+      `v${row.version} · ${new Date(row.updated_at).toLocaleString('en-IN')} · ${row.change_note || ''}`;
+    status.textContent = '';
+    // Only attach input listener once (replaces itself on reload)
+    if (!_ctxEditorListening) {
+      _ctxEditorListening = true;
+      editor.addEventListener('input', () => {
+        status.textContent = '● Unsaved changes';
+        status.style.color = '#854f0b';
+      });
+    }
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function ctxSave() {
+  const content     = document.getElementById('ctx-editor').value.trim();
+  const change_note = document.getElementById('ctx-change-note').value.trim();
+  const status      = document.getElementById('ctx-status');
+  if (!content)     { status.textContent = 'Content cannot be empty.'; status.style.color = '#a32d2d'; return; }
+  if (!change_note) { status.textContent = 'Please enter a change note before saving.'; status.style.color = '#a32d2d'; return; }
+  status.textContent = 'Saving…'; status.style.color = 'var(--txt3)';
+  const r = await fetch(CTX_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    body: JSON.stringify({ password: _ctxPassword, operation: 'save_version', content, change_note }),
+  });
+  const j = await r.json();
+  if (!r.ok || !j.ok) {
+    status.textContent = 'Save failed: ' + (j.error || 'unknown error');
+    status.style.color = '#a32d2d';
+    return;
+  }
+  document.getElementById('ctx-change-note').value = '';
+  status.textContent = `✓ Saved as v${j.version}`;
+  status.style.color = '#3b6d11';
+  await ctxLoadActive();
+  // Refresh version history if open
+  const vWrap = document.getElementById('ctx-versions');
+  if (!vWrap.classList.contains('hidden')) await ctxLoadVersions(true);
+}
+
+async function ctxLoadVersions(forceRefresh) {
+  const wrap = document.getElementById('ctx-versions');
+  const list = document.getElementById('ctx-versions-list');
+  if (!forceRefresh) wrap.classList.toggle('hidden');
+  if (wrap.classList.contains('hidden')) return;
+  list.innerHTML = '<div style="color:var(--txt3);font-size:12px">Loading…</div>';
+  const r = await fetch(CTX_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    body: JSON.stringify({ password: _ctxPassword, operation: 'list_versions' }),
+  });
+  const j = await r.json();
+  if (!j.ok) { list.innerHTML = '<div style="color:#a32d2d;font-size:12px">Error: ' + (j.error || '?') + '</div>'; return; }
+  list.innerHTML = j.versions.map(v => `
+    <div class="ctx-version-row" style="background:${v.is_active ? '#f0f7ff' : '#fff'}">
+      <span style="font-family:var(--mono);font-size:12px;font-weight:600;min-width:28px">v${v.version}</span>
+      <span style="font-size:11.5px;flex:1;color:var(--txt2)">${escHtml(v.change_note || '—')}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--txt3);white-space:nowrap">${new Date(v.updated_at).toLocaleString('en-IN')}</span>
+      ${v.is_active
+        ? '<span style="font-size:10px;background:#dcfce7;color:#166534;padding:.15rem .5rem;border-radius:10px;font-weight:600">ACTIVE</span>'
+        : `<button class="rbtn" style="font-size:11px" onclick="ctxRollback(${v.id},${v.version})">Rollback</button>`}
+    </div>`).join('');
+}
+
+async function ctxRollback(id, version) {
+  if (!confirm(`Roll back to v${version}? The current active version will be deactivated.`)) return;
+  const status = document.getElementById('ctx-status');
+  status.textContent = 'Rolling back…'; status.style.color = 'var(--txt3)';
+  const r = await fetch(CTX_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    body: JSON.stringify({ password: _ctxPassword, operation: 'rollback', version_id: id }),
+  });
+  const j = await r.json();
+  if (!j.ok) {
+    status.textContent = 'Rollback failed: ' + (j.error || '?');
+    status.style.color = '#a32d2d';
+    return;
+  }
+  status.textContent = `✓ Rolled back to v${version}`;
+  status.style.color = '#3b6d11';
+  await ctxLoadActive();
+  await ctxLoadVersions(true);
 }
 </script>
 </body>
