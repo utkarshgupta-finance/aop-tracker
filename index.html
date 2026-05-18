@@ -455,7 +455,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;background:#f8f9fb;border:1px solid var(--brd);border-radius:8px;padding:.6rem 1rem">
       <span style="font-size:12px;color:var(--txt3);font-weight:600">GBP/INR Rate</span>
-      <input type="month" id="ar-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff">
+      <input type="month" id="ar-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff"
+        onchange="arFxMonthChanged()">
       <input type="number" id="ar-fx-rate" placeholder="e.g. 107.50" min="1" step="0.01"
         style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;width:110px;background:#fff">
       <button class="modal-csv" onclick="saveArFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
@@ -4375,16 +4376,25 @@ function showARSubTab(tab) {
 
 async function loadArBuMap() {
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/customer_mrr_lines?select=zoho_name,bu_master!left(name)&order=zoho_name`,
-      { headers: cmrrHdr() }
-    );
-    if (!r.ok) return;
-    const rows = await r.json();
+    const PAGE = 1000;
+    let offset = 0, allRows = [];
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
+        `?select=zoho_name,bu_master!left(name)&order=id&limit=${PAGE}&offset=${offset}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) { console.warn('loadArBuMap HTTP', r.status); break; }
+      const pg = await r.json();
+      allRows = allRows.concat(pg);
+      if (pg.length < PAGE) break;
+      offset += PAGE;
+    }
     _arBuMap = {};
-    for (const row of rows) {
+    for (const row of allRows) {
       const key = (row.zoho_name || '').toLowerCase().trim();
-      if (key && row.bu_master?.name && !_arBuMap[key]) _arBuMap[key] = row.bu_master.name;
+      const bu  = Array.isArray(row.bu_master) ? row.bu_master[0]?.name : row.bu_master?.name;
+      if (key && bu && !_arBuMap[key]) _arBuMap[key] = bu;
     }
     if (_arLastRows.length) renderARInvoiceList(_arLastRows);
   } catch(e) { console.warn('loadArBuMap:', e); }
@@ -4434,20 +4444,34 @@ function arSortClick(col) {
 
 async function loadFxRates() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates?select=year_month,rate&currency=eq.GBP`, { headers: cmrrHdr() });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates?select=year_month,rate&currency=eq.GBP&order=year_month.desc`, { headers: cmrrHdr() });
     if (!r.ok) return;
     const rows = await r.json();
+    if (!rows.length) return; // don't blank out in-memory rates if DB returns nothing
     _arFxRates = {};
     for (const row of rows) _arFxRates[row.year_month] = Number(row.rate);
     // Pre-fill month input with current month
-    const mi = document.getElementById('ar-fx-month');
-    if (mi && !mi.value) mi.value = new Date().toISOString().slice(0, 7);
-    // Show current month's rate in input if stored
     const curMonth = new Date().toISOString().slice(0, 7);
-    const ri = document.getElementById('ar-fx-rate');
-    if (ri && _arFxRates[curMonth]) ri.value = _arFxRates[curMonth];
+    const mi = document.getElementById('ar-fx-month');
+    if (mi && !mi.value) mi.value = curMonth;
+    // Pre-fill rate input: use stored rate for the selected/current month, else the most recent
+    arFxMonthChanged();
     renderAR(); // re-render with rates
   } catch(e) { console.warn('loadFxRates:', e); }
+}
+
+function arFxMonthChanged() {
+  const mi = document.getElementById('ar-fx-month');
+  const ri = document.getElementById('ar-fx-rate');
+  if (!mi || !ri) return;
+  const month = mi.value;
+  if (month && _arFxRates[month]) {
+    ri.value = _arFxRates[month];
+  } else {
+    // show most recently saved rate as placeholder hint
+    const latest = Object.keys(_arFxRates).sort().pop();
+    ri.value = latest ? _arFxRates[latest] : '';
+  }
 }
 
 async function _saveFxRate(month, rate) {
