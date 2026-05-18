@@ -256,6 +256,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .omrr-bu{position:sticky;left:0;z-index:2;background:#f5f5f5;font-family:var(--sans);font-size:11px;font-weight:500;padding:.38rem .75rem;white-space:nowrap;border-right:2px solid #bbb;min-width:100px}
 .omrr-tot-bu{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .75rem;white-space:nowrap;border-right:2px solid #aaa}
 .omrr-hbu{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:100px;padding:.38rem .75rem;font-size:11px;font-weight:600}
+/* ── AR Tab ──────────────────────────────────────────────────── */
+.ar-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
+@media(max-width:900px){.ar-cards{grid-template-columns:repeat(2,1fr)}}
+.ar-card{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem}
+.ar-card-val{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:.15rem;font-family:var(--mono)}
+.ar-card-lbl{font-size:11px;color:var(--txt3);margin-bottom:.1rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.ar-card-sub{font-size:11px;color:var(--txt2)}
 /* ── Login screen ───────────────────────────────────────────── */
 #login-screen{position:fixed;inset:0;background:#f0f4f9;display:flex;align-items:center;justify-content:center;z-index:9999}
 .login-box{background:#fff;border-radius:12px;padding:2.5rem;max-width:380px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.10)}
@@ -382,6 +389,51 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div class="twrap" id="nret-wrap">
       <div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>
+    </div>
+  </div>
+  <!-- ── AR Tab ──────────────────────────────────────────────── -->
+  <div id="ar" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <span class="slabel" style="margin:0">Accounts Receivable</span>
+      <button class="modal-csv" id="ar-sync-btn" onclick="syncAR()" style="margin-left:auto">Sync AR</button>
+      <span id="ar-status" style="font-size:11.5px;color:var(--txt3)"></span>
+    </div>
+    <div class="ar-cards">
+      <div class="ar-card" id="ar-card-total"></div>
+      <div class="ar-card" id="ar-card-overdue"></div>
+      <div class="ar-card" id="ar-card-current"></div>
+      <div class="ar-card" id="ar-card-synced"></div>
+    </div>
+    <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+      <select class="nret-sel" id="ar-f-status" onchange="renderAR()" style="font-size:12px">
+        <option value="">All Statuses</option>
+        <option value="sent">Sent</option>
+        <option value="overdue">Overdue</option>
+        <option value="partially_paid">Partially Paid</option>
+      </select>
+      <select class="nret-sel" id="ar-f-rev" onchange="renderAR()" style="font-size:12px">
+        <option value="">All Types</option>
+        <option value="MRR">MRR</option>
+        <option value="NRR">NRR</option>
+      </select>
+      <input type="text" class="cust-input" id="ar-search" placeholder="Search customer…"
+        style="font-size:12px;max-width:220px;padding:.35rem .75rem" oninput="renderAR()">
+    </div>
+    <p class="slabel" style="margin-bottom:.5rem">AR Aging</p>
+    <div class="twrap" style="margin-bottom:1.5rem">
+      <table style="width:100%;min-width:380px;border-collapse:collapse">
+        <thead><tr style="background:#f5f7fb">
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Bucket</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)"># Invoices</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Outstanding Balance</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">% of Total</th>
+        </tr></thead>
+        <tbody id="ar-aging-body"></tbody>
+      </table>
+    </div>
+    <p class="slabel" style="margin-bottom:.5rem">Open Invoices</p>
+    <div class="twrap" id="ar-invoice-wrap">
+      <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync AR to load invoices from Zoho Books.</div>
     </div>
   </div>
   <div id="ai-query" class="pane">
@@ -2340,6 +2392,7 @@ const ALL_TABS_CFG = [
   { id: 'cust-mrr',    label: 'Customer MRR',  fn: 'showCustMRRTab(this)' },
   { id: 'overall-mrr', label: 'Overall MRR',   fn: 'showOverallMRRTab(this)' },
   { id: 'nret',        label: 'Net Retention', fn: 'showNretTab(this)' },
+  { id: 'ar',          label: 'AR',            fn: 'showARTab(this)' },
   { id: 'ask-ai',      label: 'Ask AI',         fn: 'showAIQueryTab(this)' },
   { id: 'aop-plan',    label: 'AOP Plan',       fn: "showTab('aop-plan',this)" },
 ];
@@ -3995,6 +4048,159 @@ async function ctxRollback(id, version) {
   status.style.color = '#3b6d11';
   await ctxLoadActive();
   await ctxLoadVersions(true);
+}
+
+/* ─── AR (Accounts Receivable) ──────────────────────────────── */
+const AR_SYNC_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
+let _arInited   = false;
+let _arAllRows  = [];
+
+function showARTab(btn) {
+  showTab('ar', btn);
+  if (!_arInited) { _arInited = true; loadAR(); }
+}
+
+async function loadAR() {
+  const status = document.getElementById('ar-status');
+  status.textContent = 'Loading…'; status.style.color = 'var(--txt3)';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_invoices?select=*&order=due_date.asc&limit=3000`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _arAllRows = await r.json();
+    status.textContent = '';
+    renderAR();
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#a32d2d'; }
+}
+
+function arOverdueDays(dueDateStr) {
+  if (!dueDateStr) return 0;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.floor((today - new Date(dueDateStr)) / 86400000);
+}
+
+function arAgeBucket(dueDateStr) {
+  const d = arOverdueDays(dueDateStr);
+  if (d <= 0)  return 'current';
+  if (d <= 30) return '1_30';
+  if (d <= 60) return '31_60';
+  if (d <= 90) return '61_90';
+  return '90plus';
+}
+
+function renderAR() {
+  const sf = document.getElementById('ar-f-status')?.value || '';
+  const rf = document.getElementById('ar-f-rev')?.value    || '';
+  const sq = (document.getElementById('ar-search')?.value  || '').toLowerCase();
+  const rows = _arAllRows.filter(r =>
+    (!sf || r.status === sf) &&
+    (!rf || r.revenue_type === rf) &&
+    (!sq || r.customer_name.toLowerCase().includes(sq))
+  );
+  renderARSummary(rows);
+  renderARAgingTable(rows);
+  renderARInvoiceList(rows);
+}
+
+function renderARSummary(rows) {
+  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const totalBal   = rows.reduce((s, r) => s + (r.balance || 0), 0);
+  const overdue    = rows.filter(r => r.status === 'overdue');
+  const overdueBal = overdue.reduce((s, r) => s + (r.balance || 0), 0);
+  const current    = rows.filter(r => r.status !== 'overdue');
+  const currentBal = current.reduce((s, r) => s + (r.balance || 0), 0);
+  const synced     = _arAllRows[0]?.synced_at;
+  document.getElementById('ar-card-total').innerHTML =
+    `<div class="ar-card-val">${cr(totalBal)}</div><div class="ar-card-lbl">Total Outstanding</div><div class="ar-card-sub">${rows.length} invoices</div>`;
+  document.getElementById('ar-card-overdue').innerHTML =
+    `<div class="ar-card-val" style="color:#b91c1c">${cr(overdueBal)}</div><div class="ar-card-lbl">Overdue</div><div class="ar-card-sub">${overdue.length} invoices</div>`;
+  document.getElementById('ar-card-current').innerHTML =
+    `<div class="ar-card-val" style="color:#15803d">${cr(currentBal)}</div><div class="ar-card-lbl">Current</div><div class="ar-card-sub">${current.length} invoices</div>`;
+  document.getElementById('ar-card-synced').innerHTML = synced
+    ? `<div class="ar-card-val" style="font-size:12px">${new Date(synced).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</div><div class="ar-card-lbl">Last Synced</div>`
+    : `<div class="ar-card-val" style="font-size:12px;color:var(--txt3)">Never synced</div><div class="ar-card-lbl">Last Synced</div><div class="ar-card-sub">Click Sync AR above</div>`;
+}
+
+const AR_BUCKETS = [
+  { key: 'current', label: 'Current (not overdue)', color: '#15803d' },
+  { key: '1_30',    label: '1–30 days overdue',     color: '#b45309' },
+  { key: '31_60',   label: '31–60 days overdue',    color: '#c2410c' },
+  { key: '61_90',   label: '61–90 days overdue',    color: '#b91c1c' },
+  { key: '90plus',  label: '90+ days overdue',      color: '#7f1d1d' },
+];
+
+function renderARAgingTable(rows) {
+  const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, { count: 0, balance: 0 }]));
+  const total = rows.reduce((s, r) => { buckets[arAgeBucket(r.due_date)].count++; buckets[arAgeBucket(r.due_date)].balance += r.balance || 0; return s + (r.balance || 0); }, 0);
+  const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+  let html = AR_BUCKETS.map(b => {
+    const { count, balance } = buckets[b.key];
+    return `<tr><td style="padding:.42rem .75rem;font-size:12.5px;font-weight:500;color:${b.color}">${b.label}</td>
+      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">${count}</td>
+      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;font-family:var(--mono)">${cr(balance)}</td>
+      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;color:var(--txt3)">${pct(balance)}</td></tr>`;
+  }).join('');
+  html += `<tr style="border-top:2px solid var(--brd2);font-weight:700">
+    <td style="padding:.42rem .75rem;font-size:12.5px">Total</td>
+    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">${rows.length}</td>
+    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;font-family:var(--mono)">${cr(total)}</td>
+    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">100%</td></tr>`;
+  document.getElementById('ar-aging-body').innerHTML = html;
+}
+
+function renderARInvoiceList(rows) {
+  const wrap = document.getElementById('ar-invoice-wrap');
+  if (!rows.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No invoices match the current filters.</div>'; return; }
+  const sorted = [...rows].sort((a, b) => arOverdueDays(b.due_date) - arOverdueDays(a.due_date));
+  const trs = sorted.map(r => {
+    const days = arOverdueDays(r.due_date);
+    const daysCell = days > 0 ? `<span style="color:#b91c1c;font-weight:600">${days}d overdue</span>`
+      : days === 0 ? `<span style="color:#b45309;font-weight:600">Due today</span>`
+      : `<span style="color:var(--txt3)">In ${-days}d</span>`;
+    const badge = r.status === 'overdue'
+      ? `<span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.1rem .45rem;border-radius:10px;font-weight:600">OVERDUE</span>`
+      : r.status === 'partially_paid'
+      ? `<span style="font-size:9.5px;background:#fef3c7;color:#b45309;padding:.1rem .45rem;border-radius:10px;font-weight:600">PARTIAL</span>`
+      : `<span style="font-size:9.5px;background:#e0f2fe;color:#0369a1;padding:.1rem .45rem;border-radius:10px;font-weight:600">SENT</span>`;
+    const rev = r.revenue_type ? `<span style="font-size:9px;background:#f0fdf4;color:#166534;padding:.1rem .35rem;border-radius:4px;font-weight:600">${r.revenue_type}</span>` : '';
+    return `<tr>
+      <td style="padding:.38rem .75rem;font-size:12px">${escHtml(r.customer_name)}</td>
+      <td style="padding:.38rem .75rem;font-size:11.5px;font-family:var(--mono);white-space:nowrap">${escHtml(r.invoice_number || '')}</td>
+      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${r.invoice_date || '—'}</td>
+      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${r.due_date || '—'}</td>
+      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${daysCell}</td>
+      <td style="padding:.38rem .75rem;font-size:12px;text-align:right;font-family:var(--mono);white-space:nowrap">₹${f(r.balance)}</td>
+      <td style="padding:.38rem .75rem;font-size:11.5px;text-align:right;font-family:var(--mono);white-space:nowrap;color:var(--txt3)">₹${f(r.total)}</td>
+      <td style="padding:.38rem .75rem">${rev}</td>
+      <td style="padding:.38rem .75rem">${badge}</td>
+    </tr>`;
+  }).join('');
+  const th = t => `<th style="padding:.42rem .75rem;font-size:11px;text-align:${t.r?'right':'left'};font-weight:600;border-bottom:1px solid var(--brd2);white-space:nowrap">${t.l}</th>`;
+  wrap.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:#f5f7fb">
+      ${[{l:'Customer'},{l:'Invoice #'},{l:'Date'},{l:'Due Date'},{l:'Due/Overdue'},{l:'Balance',r:1},{l:'Total',r:1},{l:'Type'},{l:'Status'}].map(th).join('')}
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table>`;
+}
+
+async function syncAR() {
+  const btn    = document.getElementById('ar-sync-btn');
+  const status = document.getElementById('ar-status');
+  btn.disabled = true; btn.textContent = 'Syncing…';
+  status.textContent = 'Fetching from Zoho Books…'; status.style.color = 'var(--txt3)';
+  try {
+    const r = await fetch(AR_SYNC_URL, { method: 'POST', headers: { 'content-type': 'application/json', ...cmrrHdr() } });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Sync failed');
+    status.textContent = `✓ Synced ${j.synced} invoices`; status.style.color = '#3b6d11';
+    _arInited = false;
+    await loadAR();
+  } catch(e) { status.textContent = 'Sync error: ' + e.message; status.style.color = '#a32d2d'; }
+  finally { btn.disabled = false; btn.textContent = 'Sync AR'; }
 }
 
 initAuth();
