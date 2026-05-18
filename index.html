@@ -421,6 +421,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
       <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)">UK: forward QB email to Postmark to sync</span>
     </div>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;background:#f8f9fb;border:1px solid var(--brd);border-radius:8px;padding:.6rem 1rem">
+      <span style="font-size:12px;color:var(--txt3);font-weight:600">GBP/INR Rate</span>
+      <input type="month" id="ar-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff">
+      <input type="number" id="ar-fx-rate" placeholder="e.g. 107.50" min="1" step="0.01"
+        style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;width:110px;background:#fff">
+      <button class="modal-csv" onclick="saveArFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
+      <span id="ar-fx-status" style="font-size:11.5px;color:var(--txt3)"></span>
+    </div>
     <div class="ar-cards">
       <div class="ar-card" id="ar-card-total"></div>
       <div class="ar-card" id="ar-card-overdue"></div>
@@ -4213,10 +4221,59 @@ async function qbDisconnect() {
 const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
 let _arInited   = false;
 let _arAllRows  = [];
+let _arFxRates  = {}; // { 'YYYY-MM': rate }
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); }
+}
+
+// Returns INR value for a row, applying GBP fx rate for UK invoices
+function arInr(r) {
+  if (r.entity === 'UK') {
+    const month = (r.due_date || r.invoice_date || '').slice(0, 7);
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const rate = _arFxRates[month] || _arFxRates[curMonth] || r.exchange_rate || null;
+    return rate ? r.balance * rate : (r.balance_inr ?? r.balance ?? 0);
+  }
+  return r.balance_inr ?? r.balance ?? 0;
+}
+
+async function loadFxRates() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates?select=year_month,rate&currency=eq.GBP`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _arFxRates = {};
+    for (const row of rows) _arFxRates[row.year_month] = Number(row.rate);
+    // Pre-fill month input with current month
+    const mi = document.getElementById('ar-fx-month');
+    if (mi && !mi.value) mi.value = new Date().toISOString().slice(0, 7);
+    // Show current month's rate in input if stored
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const ri = document.getElementById('ar-fx-rate');
+    if (ri && _arFxRates[curMonth]) ri.value = _arFxRates[curMonth];
+    renderAR(); // re-render with rates
+  } catch(e) { console.warn('loadFxRates:', e); }
+}
+
+async function saveArFxRate() {
+  const month  = document.getElementById('ar-fx-month')?.value;
+  const rate   = parseFloat(document.getElementById('ar-fx-rate')?.value);
+  const status = document.getElementById('ar-fx-status');
+  if (!month || !rate || rate <= 0) { status.textContent = 'Enter a valid month and rate'; status.style.color = '#a32d2d'; return; }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify({ year_month: month, currency: 'GBP', rate, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _arFxRates[month] = rate;
+    status.textContent = `Saved ${month}: ₹${rate}/GBP`;
+    status.style.color = '#3b6d11';
+    renderAR();
+  } catch(e) { status.textContent = 'Save failed: ' + e.message; status.style.color = '#a32d2d'; }
 }
 
 async function loadAR() {
@@ -4266,7 +4323,7 @@ function renderAR() {
 
 function renderARSummary(rows) {
   const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
-  const inr = r => r.balance_inr ?? r.balance ?? 0;
+  const inr = r => arInr(r);
   const totalBal   = rows.reduce((s, r) => s + inr(r), 0);
   const overdue    = rows.filter(r => r.status === 'overdue');
   const overdueBal = overdue.reduce((s, r) => s + inr(r), 0);
@@ -4298,7 +4355,7 @@ const AR_BUCKETS = [
 ];
 
 function renderARAgingTable(rows) {
-  const inr = r => r.balance_inr ?? r.balance ?? 0;
+  const inr = r => arInr(r);
   const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, { count: 0, balance: 0 }]));
   rows.forEach(r => { const bk = arAgeBucket(r.due_date); buckets[bk].count++; buckets[bk].balance += inr(r); });
   const total = rows.reduce((s, r) => s + inr(r), 0);
@@ -4331,8 +4388,10 @@ function renderARInvoiceList(rows) {
       ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener">${escHtml(r.invoice_number || '')}</a>`
       : escHtml(r.invoice_number || '');
     const balStyle = days > 0 ? 'color:#b91c1c' : '';
-    const balINR  = r.balance_inr ?? r.balance ?? 0;
-    const totINR  = r.total_inr   ?? r.total   ?? 0;
+    const balINR  = arInr(r);
+    const totINR  = r.entity === 'UK'
+      ? (() => { const m=(r.due_date||r.invoice_date||'').slice(0,7); const cm=new Date().toISOString().slice(0,7); const rt=_arFxRates[m]||_arFxRates[cm]||r.exchange_rate||null; return rt?r.total*rt:(r.total_inr??r.total??0); })()
+      : (r.total_inr ?? r.total ?? 0);
     const isFx    = r.currency_code && r.currency_code !== 'INR';
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
