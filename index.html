@@ -3424,9 +3424,15 @@ async function doLogin() {
   const btn      = document.getElementById('login-btn');
   if (!email || !password) { err.textContent = 'Email and password required'; return; }
   btn.disabled = true; btn.textContent = 'Signing in…'; err.textContent = '';
-  const { error } = await SUPABASE_CLIENT.auth.signInWithPassword({ email, password });
-  btn.disabled = false; btn.textContent = 'Sign In';
-  if (error) { err.textContent = error.message; }
+  try {
+    if (!SUPABASE_CLIENT) throw new Error('Auth not ready — reload the page');
+    const { error } = await SUPABASE_CLIENT.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  } catch(e) {
+    err.textContent = e.message || 'Sign in failed';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
 }
 
 async function doLogout() {
