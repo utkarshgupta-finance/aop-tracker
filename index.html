@@ -2322,8 +2322,6 @@ function nretRenderRolling(matrix, mrrMonthSet) {
   wrap.innerHTML = html;
 }
 
-initAuth();
-
 /* ─── AI QUERY ───────────────────────────────────────────── */
 /* ── Ask AI — conversational interface ───────────────────────── */
 const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-proxy';
@@ -3991,6 +3989,8 @@ async function ctxRollback(id, version) {
   await ctxLoadActive();
   await ctxLoadVersions(true);
 }
+
+initAuth();
 </script>
 </body>
 </html>
