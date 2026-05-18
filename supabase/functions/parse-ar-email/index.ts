@@ -65,7 +65,7 @@ function parseExcel(buffer: ArrayBuffer): { rows: InvoiceRow[]; entity: string |
       total,
       balance,
       currency_code:  'GBP',
-      entity,
+      entity:         'UK',
       synced_at:      syncedAt,
     });
   }
