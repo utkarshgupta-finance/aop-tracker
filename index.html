@@ -521,6 +521,29 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="slabel" style="margin-bottom:.5rem">Version History</div>
         <div id="ctx-versions-list"></div>
       </div>
+      <!-- QuickBooks OAuth Settings -->
+      <div style="margin-top:2rem;border-top:1px solid var(--brd);padding-top:1.5rem">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+          <span class="slabel" style="margin:0">QuickBooks Integration</span>
+          <span id="qb-status-badge" style="font-size:11px;padding:.2rem .65rem;border-radius:20px;font-weight:600;display:none"></span>
+        </div>
+        <div id="qb-settings-form" style="display:grid;gap:.75rem;max-width:480px">
+          <div>
+            <div class="flabel">Client ID</div>
+            <input type="text" id="qb-client-id" class="cust-input" placeholder="QB OAuth2 Client ID" autocomplete="off">
+          </div>
+          <div>
+            <div class="flabel">Client Secret</div>
+            <input type="password" id="qb-client-secret" class="cust-input" placeholder="QB OAuth2 Client Secret" autocomplete="new-password">
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+            <button class="modal-csv" id="qb-connect-btn" onclick="qbConnect()">Save &amp; Connect QuickBooks</button>
+            <button class="rbtn" id="qb-disconnect-btn" onclick="qbDisconnect()" style="display:none;color:#a32d2d">Disconnect</button>
+          </div>
+        </div>
+        <div id="qb-connection-info" style="display:none;margin-top:.75rem;font-size:12px;color:var(--txt2);font-family:var(--mono)"></div>
+        <div id="qb-status-msg" style="font-family:var(--mono);font-size:11px;color:var(--txt3);margin-top:.4rem"></div>
+      </div>
     </div>
   </div>
   <div id="manage-users" class="pane">
@@ -3970,6 +3993,7 @@ async function ctxUnlock() {
   document.getElementById('ctx-panel').classList.remove('hidden');
   err.textContent = '';
   await ctxLoadActive();
+  await qbLoadStatus();
 }
 
 async function ctxLoadActive() {
@@ -4072,6 +4096,111 @@ async function ctxRollback(id, version) {
   status.style.color = '#3b6d11';
   await ctxLoadActive();
   await ctxLoadVersions(true);
+}
+
+/* ─── QuickBooks OAuth Settings ─────────────────────────────── */
+const QB_SETTINGS_URL  = `${SUPABASE_URL}/functions/v1/quickbooks-oauth-settings`;
+const QB_CALLBACK_URL  = `${SUPABASE_URL}/functions/v1/quickbooks-oauth-callback`;
+
+async function qbAdminPost(body) {
+  const r = await fetch(QB_SETTINGS_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    body: JSON.stringify({ password: _ctxPassword, ...body }),
+  });
+  return r.json();
+}
+
+function qbSetStatus(msg, color) {
+  const el = document.getElementById('qb-status-msg');
+  el.textContent = msg;
+  el.style.color = color || 'var(--txt3)';
+}
+
+function qbRenderStatus(data) {
+  const badge = document.getElementById('qb-status-badge');
+  const info  = document.getElementById('qb-connection-info');
+  const discBtn = document.getElementById('qb-disconnect-btn');
+  badge.style.display = 'inline';
+
+  if (data.status === 'connected') {
+    badge.textContent = 'Connected';
+    badge.style.background = '#dcfce7';
+    badge.style.color = '#166534';
+    info.style.display = 'block';
+    info.textContent = `Realm ID: ${data.realm_id || '—'} · Connected: ${data.connected_at ? new Date(data.connected_at).toLocaleString('en-IN') : '—'}`;
+    discBtn.style.display = 'inline-flex';
+  } else if (data.status === 'error') {
+    badge.textContent = 'Error';
+    badge.style.background = '#fee2e2';
+    badge.style.color = '#991b1b';
+    info.style.display = data.error_message ? 'block' : 'none';
+    info.textContent = data.error_message || '';
+    discBtn.style.display = 'none';
+  } else {
+    badge.textContent = 'Not Connected';
+    badge.style.background = '#f1f5f9';
+    badge.style.color = '#64748b';
+    info.style.display = 'none';
+    discBtn.style.display = 'none';
+  }
+
+  if (data.client_id) document.getElementById('qb-client-id').value = data.client_id;
+}
+
+async function qbLoadStatus() {
+  qbSetStatus('Loading…');
+  const j = await qbAdminPost({ operation: 'get_status' });
+  if (j.error) { qbSetStatus('Failed to load status: ' + j.error, '#a32d2d'); return; }
+  qbRenderStatus(j);
+  qbSetStatus('');
+}
+
+async function qbConnect() {
+  const clientId     = document.getElementById('qb-client-id').value.trim();
+  const clientSecret = document.getElementById('qb-client-secret').value.trim();
+  if (!clientId || !clientSecret) { qbSetStatus('Client ID and Client Secret are required.', '#a32d2d'); return; }
+
+  qbSetStatus('Saving credentials…');
+  const save = await qbAdminPost({ operation: 'save_credentials', client_id: clientId, client_secret: clientSecret });
+  if (!save.ok) { qbSetStatus('Save failed: ' + (save.error || '?'), '#a32d2d'); return; }
+
+  qbSetStatus('Generating authorization URL…');
+  const urlResp = await qbAdminPost({ operation: 'get_auth_url', redirect_uri: QB_CALLBACK_URL });
+  if (!urlResp.ok || !urlResp.auth_url) { qbSetStatus('Failed to get auth URL: ' + (urlResp.error || '?'), '#a32d2d'); return; }
+
+  qbSetStatus('Opening QuickBooks authorization…');
+  const popup = window.open(urlResp.auth_url, 'qb_oauth', 'width=600,height=700,left=200,top=100');
+
+  const onMsg = async (evt) => {
+    if (!evt.data?.qb_oauth) return;
+    window.removeEventListener('message', onMsg);
+    if (evt.data.qb_oauth === 'connected') {
+      qbSetStatus('✓ Connected successfully!', '#3b6d11');
+      await qbLoadStatus();
+    } else {
+      qbSetStatus('Authorization failed — check popup for details.', '#a32d2d');
+      await qbLoadStatus();
+    }
+  };
+  window.addEventListener('message', onMsg);
+
+  const timer = setInterval(() => {
+    if (popup?.closed) {
+      clearInterval(timer);
+      window.removeEventListener('message', onMsg);
+      qbLoadStatus();
+    }
+  }, 800);
+}
+
+async function qbDisconnect() {
+  if (!confirm('Disconnect QuickBooks? Stored tokens will be cleared.')) return;
+  qbSetStatus('Disconnecting…');
+  const j = await qbAdminPost({ operation: 'disconnect' });
+  if (!j.ok) { qbSetStatus('Disconnect failed: ' + (j.error || '?'), '#a32d2d'); return; }
+  qbSetStatus('Disconnected.', 'var(--txt3)');
+  await qbLoadStatus();
 }
 
 /* ─── AR (Accounts Receivable) ──────────────────────────────── */
