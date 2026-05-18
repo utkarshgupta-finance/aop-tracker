@@ -95,6 +95,7 @@ Deno.serve(async (req) => {
             invoice_date:     inv.date      || null,
             due_date:         inv.due_date  || null,
             status:           inv.status,
+            entity:           'IN',
             currency_code:    inv.currency_code || 'INR',
             exchange_rate:    exchangeRate,
             total:            total,
@@ -127,12 +128,13 @@ Deno.serve(async (req) => {
         if (error) { send('error', { message: 'Upsert failed: ' + error.message }); close(); return; }
       }
 
-      // Remove invoices that are no longer open (not in this sync batch)
+      // Remove India invoices that are no longer open (scoped to entity=IN only)
       if (rows.length > 0) {
         const ids = rows.map(r => r.invoice_id as string);
         const { error: delErr } = await supabase
           .from('ar_invoices')
           .delete()
+          .eq('entity', 'IN')
           .not('invoice_id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
         if (delErr) {
           send('progress', { step: 3, total: 3, message: `Note: cleanup of closed invoices failed: ${delErr.message}` });
