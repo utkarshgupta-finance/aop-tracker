@@ -39,7 +39,7 @@ function sseStream() {
   return { response, send, close };
 }
 
-async function runSync(notify: (event: string, data: unknown) => void) {
+async function runSync(notify: (event: string, data: unknown) => void, writeSnapshot = false) {
   const tok = await getAccessToken();
   if ('error' in tok) { notify('error', { message: `Zoho auth failed: ${tok.error}`, detail: tok.detail }); return null; }
 
@@ -105,32 +105,35 @@ async function runSync(notify: (event: string, data: unknown) => void) {
     if (delErr) notify('progress', { step: 3, total: 3, message: `Cleanup warning: ${delErr.message}` });
   }
 
-  // Write historical snapshot
-  const snapshotDate = new Date().toISOString().slice(0, 10);
-  const snapshotRows = rows.map(r => ({
-    snapshot_date:  snapshotDate,
-    entity:         'IN',
-    invoice_id:     r.invoice_id,
-    invoice_number: r.invoice_number,
-    customer_name:  r.customer_name,
-    invoice_date:   r.invoice_date,
-    due_date:       r.due_date,
-    status:         r.status,
-    total:          r.total,
-    balance:        r.balance,
-    currency_code:  r.currency_code,
-    exchange_rate:  r.exchange_rate,
-    total_inr:      r.total_inr,
-    balance_inr:    r.balance_inr,
-  }));
-  for (let i = 0; i < snapshotRows.length; i += 500) {
-    const { error: snapErr } = await supabase
-      .from('ar_invoice_snapshots')
-      .upsert(snapshotRows.slice(i, i + 500), { onConflict: 'invoice_id,snapshot_date,entity' });
-    if (snapErr) notify('progress', { step: 3, total: 3, message: `Snapshot warning: ${snapErr.message}` });
+  // Write end-of-day snapshot only when requested (last cron run of the day)
+  if (writeSnapshot) {
+    const snapshotDate = new Date().toISOString().slice(0, 10);
+    const snapshotRows = rows.map(r => ({
+      snapshot_date:  snapshotDate,
+      entity:         'IN',
+      invoice_id:     r.invoice_id,
+      invoice_number: r.invoice_number,
+      customer_name:  r.customer_name,
+      invoice_date:   r.invoice_date,
+      due_date:       r.due_date,
+      status:         r.status,
+      total:          r.total,
+      balance:        r.balance,
+      currency_code:  r.currency_code,
+      exchange_rate:  r.exchange_rate,
+      total_inr:      r.total_inr,
+      balance_inr:    r.balance_inr,
+    }));
+    for (let i = 0; i < snapshotRows.length; i += 500) {
+      const { error: snapErr } = await supabase
+        .from('ar_invoice_snapshots')
+        .upsert(snapshotRows.slice(i, i + 500), { onConflict: 'invoice_id,snapshot_date,entity' });
+      if (snapErr) notify('progress', { step: 3, total: 3, message: `Snapshot warning: ${snapErr.message}` });
+    }
+    notify('progress', { step: 3, total: 3, message: `End-of-day snapshot saved for ${snapshotDate}` });
   }
 
-  return { synced: rows.length, pages: page };
+  return { synced: rows.length, pages: page, snapshot_written: writeSnapshot };
 }
 
 Deno.serve(async (req) => {
@@ -152,11 +155,13 @@ Deno.serve(async (req) => {
 
   // ?cron=1 — synchronous JSON mode for scheduled runs
   if (url.searchParams.get('cron') === '1') {
+    // Write snapshot only on the last run of the day: 18:30 UTC = midnight IST
+    const isEndOfDay = new Date().getUTCHours() === 18;
     const log: unknown[] = [];
     const notify = (_: string, data: unknown) => log.push(data);
     try {
       notify('progress', { step: 1, total: 3, message: 'Authenticating with Zoho Books…' });
-      const result = await runSync(notify);
+      const result = await runSync(notify, isEndOfDay);
       if (!result) return json({ ok: false, log }, 500);
       return json({ ok: true, ...result, log });
     } catch (e) {
