@@ -85,16 +85,21 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: CORS });
   if (!ANTHROPIC_API_KEY) return json({ error: 'ANTHROPIC_API_KEY secret not set in Supabase dashboard' }, 500);
 
-  let body: { system?: string; messages?: { role: string; content: unknown }[]; supabaseUrl?: string; supabaseKey?: string };
+  let body: { system?: string; messages?: { role: string; content: unknown }[]; supabaseUrl?: string; supabaseKey?: string; allowedBus?: string[] };
   try { body = await req.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  const { system, messages, supabaseUrl = '', supabaseKey = '' } = body;
+  const { system, messages, supabaseUrl = '', supabaseKey = '', allowedBus = [] } = body;
   if (!messages?.length) return json({ error: 'Missing messages' }, 400);
 
   const liveContext = await fetchActiveContext(supabaseUrl, supabaseKey);
   const systemBlocks = system
     ? [
+        ...(allowedBus.length > 0 ? [{
+          type: 'text',
+          text: `BU ACCESS RESTRICTION — CRITICAL:\nThis user is scoped exclusively to: ${allowedBus.join(', ')}.\n\nMANDATORY RULES — NO EXCEPTIONS:\n1. Every query_database call MUST include bu_name=eq.${allowedBus[0]}${allowedBus.length > 1 ? ` (or bu_name=in.(${allowedBus.join(',')})) if multiple` : ''} — never query without this filter.\n2. NEVER answer questions about other BUs or overall/total company metrics. These require cross-BU data this user cannot access.\n3. If asked about restricted data, respond ONLY: "I can only show ${allowedBus.join('/')} data for your access level. Contact your admin for company-wide metrics."\n4. Do not acknowledge other BUs or reveal their existence or MRR values.`,
+          cache_control: { type: 'ephemeral' },
+        }] : []),
         ...(liveContext ? [{
           type: 'text',
           text: `# BIZOM LIVE CONTEXT DOCUMENT\nThis document contains current business rules, definitions, and known data issues. It overrides any conflicting information in the instructions below.\n\n${liveContext}`,
