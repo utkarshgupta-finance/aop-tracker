@@ -277,6 +277,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-tbl .td-days{white-space:nowrap;font-size:12px}
 .ar-tbl .td-amt{text-align:right!important;font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap}
 .ar-tbl .td-tot{text-align:right!important;font-family:var(--mono);font-size:12px;color:#94a3b8;white-space:nowrap}
+.ar-tbl .td-fx{display:block;font-size:10px;color:#94a3b8;font-family:var(--mono);margin-top:1px}
 .ar-aging-tbl{width:100%;border-collapse:collapse;max-width:560px}
 .ar-aging-tbl thead th{background:#f8fafc;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.55rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left}
 .ar-aging-tbl thead th.r{text-align:right}
@@ -4129,11 +4130,12 @@ function renderAR() {
 
 function renderARSummary(rows) {
   const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
-  const totalBal   = rows.reduce((s, r) => s + (r.balance || 0), 0);
+  const inr = r => r.balance_inr ?? r.balance ?? 0;
+  const totalBal   = rows.reduce((s, r) => s + inr(r), 0);
   const overdue    = rows.filter(r => r.status === 'overdue');
-  const overdueBal = overdue.reduce((s, r) => s + (r.balance || 0), 0);
+  const overdueBal = overdue.reduce((s, r) => s + inr(r), 0);
   const current    = rows.filter(r => r.status !== 'overdue');
-  const currentBal = current.reduce((s, r) => s + (r.balance || 0), 0);
+  const currentBal = current.reduce((s, r) => s + inr(r), 0);
   const synced     = _arAllRows[0]?.synced_at;
   document.getElementById('ar-card-total').innerHTML =
     `<div class="ar-card-val">${cr(totalBal)}</div><div class="ar-card-lbl">Total Outstanding</div><div class="ar-card-sub">${rows.length} invoices</div>`;
@@ -4155,9 +4157,10 @@ const AR_BUCKETS = [
 ];
 
 function renderARAgingTable(rows) {
+  const inr = r => r.balance_inr ?? r.balance ?? 0;
   const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, { count: 0, balance: 0 }]));
-  rows.forEach(r => { const bk = arAgeBucket(r.due_date); buckets[bk].count++; buckets[bk].balance += r.balance || 0; });
-  const total = rows.reduce((s, r) => s + (r.balance || 0), 0);
+  rows.forEach(r => { const bk = arAgeBucket(r.due_date); buckets[bk].count++; buckets[bk].balance += inr(r); });
+  const total = rows.reduce((s, r) => s + inr(r), 0);
   const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
   const trs = AR_BUCKETS.map(b => {
@@ -4187,14 +4190,19 @@ function renderARInvoiceList(rows) {
       ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener">${escHtml(r.invoice_number || '')}</a>`
       : escHtml(r.invoice_number || '');
     const balStyle = days > 0 ? 'color:#b91c1c' : '';
+    const balINR  = r.balance_inr ?? r.balance ?? 0;
+    const totINR  = r.total_inr   ?? r.total   ?? 0;
+    const isFx    = r.currency_code && r.currency_code !== 'INR';
+    const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
+    const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
     return `<tr>
       <td class="td-cust">${escHtml(r.customer_name)}</td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
       <td class="td-days">${daysCell}</td>
-      <td class="td-amt" style="${balStyle}">₹${f(r.balance)}</td>
-      <td class="td-tot">₹${f(r.total)}</td>
+      <td class="td-amt" style="${balStyle}">₹${f(balINR)}${fxBal}</td>
+      <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
       <td>${badge}</td>
     </tr>`;
@@ -4202,7 +4210,7 @@ function renderARInvoiceList(rows) {
   wrap.innerHTML = `<table class="ar-tbl">
     <thead><tr>
       <th>Customer</th><th>Invoice #</th><th>Inv Date</th><th>Due Date</th>
-      <th>Due / Overdue</th><th class="r">Balance</th><th class="r">Total</th>
+      <th>Due / Overdue</th><th class="r">Balance (INR)</th><th class="r">Total (INR)</th>
       <th>Type</th><th>Status</th>
     </tr></thead>
     <tbody>${trs}</tbody>
