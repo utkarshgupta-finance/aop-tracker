@@ -4191,16 +4191,61 @@ async function syncAR() {
   const btn    = document.getElementById('ar-sync-btn');
   const status = document.getElementById('ar-status');
   btn.disabled = true; btn.textContent = 'Syncing…';
-  status.textContent = 'Fetching from Zoho Books…'; status.style.color = 'var(--txt3)';
+  status.style.color = 'var(--txt3)';
+
   try {
-    const r = await fetch(AR_SYNC_URL, { method: 'POST', headers: { 'content-type': 'application/json', ...cmrrHdr() } });
-    const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Sync failed');
-    status.textContent = `✓ Synced ${j.synced} invoices`; status.style.color = '#3b6d11';
-    _arInited = false;
-    await loadAR();
-  } catch(e) { status.textContent = 'Sync error: ' + e.message; status.style.color = '#a32d2d'; }
-  finally { btn.disabled = false; btn.textContent = 'Sync AR'; }
+    const resp = await fetch(AR_SYNC_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...cmrrHdr() },
+    });
+
+    if (!resp.ok && !resp.headers.get('content-type')?.includes('event-stream')) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j.error || 'HTTP ' + resp.status);
+    }
+
+    // Consume SSE stream line by line
+    const reader = resp.body.getReader();
+    const dec    = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop(); // keep incomplete last chunk
+      for (const block of parts) {
+        let evName = 'message', dataStr = '';
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event: ')) evName = line.slice(7).trim();
+          if (line.startsWith('data: '))  dataStr = line.slice(6).trim();
+        }
+        if (!dataStr) continue;
+        let ev;
+        try { ev = JSON.parse(dataStr); } catch { continue; }
+
+        if (evName === 'progress') {
+          status.textContent = `[${ev.step}/${ev.total}] ${ev.message}`;
+          status.style.color = 'var(--txt3)';
+        } else if (evName === 'done') {
+          status.textContent = `✓ Synced ${ev.synced} invoices across ${ev.pages} pages`;
+          status.style.color = '#3b6d11';
+          _arInited = false;
+          loadAR();
+        } else if (evName === 'error') {
+          const detail = ev.detail ? ' — ' + JSON.stringify(ev.detail) : '';
+          status.textContent = 'Sync error: ' + ev.message + detail;
+          status.style.color = '#a32d2d';
+        }
+      }
+    }
+  } catch(e) {
+    status.textContent = 'Sync error: ' + e.message;
+    status.style.color = '#a32d2d';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sync AR';
+  }
 }
 
 initAuth();
