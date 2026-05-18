@@ -1,0 +1,1 @@
+ALTER TABLE ar_invoices ADD COLUMN IF NOT EXISTS invoice_url TEXT;

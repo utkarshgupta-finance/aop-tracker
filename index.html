@@ -263,6 +263,27 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-card-val{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:.15rem;font-family:var(--mono)}
 .ar-card-lbl{font-size:11px;color:var(--txt3);margin-bottom:.1rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
 .ar-card-sub{font-size:11px;color:var(--txt2)}
+/* ── AR modern table ─────────────────────────────────────────── */
+.ar-tbl{width:100%;border-collapse:collapse}
+.ar-tbl thead th{background:#f8fafc;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left;white-space:nowrap}
+.ar-tbl thead th.r{text-align:right}
+.ar-tbl tbody tr{border-bottom:1px solid #f1f5f9;transition:background .1s}
+.ar-tbl tbody tr:hover{background:#f8fafc}
+.ar-tbl td{padding:.55rem .9rem;vertical-align:middle;text-align:left}
+.ar-tbl .td-cust{font-weight:500;font-size:13px;color:#0f172a;max-width:220px}
+.ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--navy3);text-decoration:none}
+.ar-tbl .td-inv a:hover{text-decoration:underline}
+.ar-tbl .td-date{font-size:12px;color:#64748b;white-space:nowrap}
+.ar-tbl .td-days{white-space:nowrap;font-size:12px}
+.ar-tbl .td-amt{text-align:right!important;font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap}
+.ar-tbl .td-tot{text-align:right!important;font-family:var(--mono);font-size:12px;color:#94a3b8;white-space:nowrap}
+.ar-aging-tbl{width:100%;border-collapse:collapse;max-width:560px}
+.ar-aging-tbl thead th{background:#f8fafc;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.55rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left}
+.ar-aging-tbl thead th.r{text-align:right}
+.ar-aging-tbl tbody tr{border-bottom:1px solid #f1f5f9}
+.ar-aging-tbl tbody tr:last-child{border-top:1.5px solid #e2e8f0;border-bottom:none;font-weight:700}
+.ar-aging-tbl td{padding:.5rem .9rem;font-size:12.5px;text-align:left}
+.ar-aging-tbl .r{text-align:right!important;font-family:var(--mono)}
 /* ── Login screen ───────────────────────────────────────────── */
 #login-screen{position:fixed;inset:0;background:#f0f4f9;display:flex;align-items:center;justify-content:center;z-index:9999}
 .login-box{background:#fff;border-radius:12px;padding:2.5rem;max-width:380px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.10)}
@@ -870,8 +891,9 @@ async function loadData(){
 function showTab(id,btn){
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  btn.classList.add('active');
+  document.getElementById(id)?.classList.add('active');
+  if(btn) btn.classList.add('active');
+  localStorage.setItem('biz_tab', id);
 }
 
 /* ─── TABLE HEADER HELPER ───────────────────────────────── */
@@ -3495,23 +3517,24 @@ function renderNav() {
   const allowed = USER_ACCESS.allowed_tabs.length === 0
     ? ALL_TABS_CFG.map(t => t.id)
     : USER_ACCESS.allowed_tabs;
-  let first = true;
   const nav = document.getElementById('main-nav');
   nav.innerHTML = ALL_TABS_CFG
     .filter(t => allowed.includes(t.id))
-    .map(t => {
-      const cls = 'tbtn' + (first ? (first = false, ' active') : '');
-      return '<button class="' + cls + '" onclick="' + t.fn + '">' + t.label + '</button>';
-    }).join('');
+    .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
+    .join('');
   if (USER_ACCESS.is_admin) {
-    nav.innerHTML += '<button class="tbtn" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
-    nav.innerHTML += '<button class="tbtn" onclick="showContextTab(this)" style="opacity:.7">⚙ Context</button>';
+    nav.innerHTML += '<button class="tbtn" data-tab="manage-users" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
+    nav.innerHTML += '<button class="tbtn" data-tab="context-admin" onclick="showContextTab(this)" style="opacity:.7">⚙ Context</button>';
   }
-  const firstId = allowed[0];
-  if (firstId) {
-    const paneId = firstId === 'ask-ai' ? 'ai-query' : firstId;
+  // Restore last-used tab, fall back to first allowed
+  const saved   = localStorage.getItem('biz_tab');
+  const allIds  = [...allowed, ...(USER_ACCESS.is_admin ? ['manage-users','context-admin'] : [])];
+  const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
+  if (activeId) {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-    document.getElementById(paneId)?.classList.add('active');
+    document.getElementById(activeId)?.classList.add('active');
+    nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); }
   }
 }
 
@@ -4133,22 +4156,16 @@ const AR_BUCKETS = [
 
 function renderARAgingTable(rows) {
   const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, { count: 0, balance: 0 }]));
-  const total = rows.reduce((s, r) => { buckets[arAgeBucket(r.due_date)].count++; buckets[arAgeBucket(r.due_date)].balance += r.balance || 0; return s + (r.balance || 0); }, 0);
+  rows.forEach(r => { const bk = arAgeBucket(r.due_date); buckets[bk].count++; buckets[bk].balance += r.balance || 0; });
+  const total = rows.reduce((s, r) => s + (r.balance || 0), 0);
   const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
-  let html = AR_BUCKETS.map(b => {
+  const trs = AR_BUCKETS.map(b => {
     const { count, balance } = buckets[b.key];
-    return `<tr><td style="padding:.42rem .75rem;font-size:12.5px;font-weight:500;color:${b.color}">${b.label}</td>
-      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">${count}</td>
-      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;font-family:var(--mono)">${cr(balance)}</td>
-      <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;color:var(--txt3)">${pct(balance)}</td></tr>`;
-  }).join('');
-  html += `<tr style="border-top:2px solid var(--brd2);font-weight:700">
-    <td style="padding:.42rem .75rem;font-size:12.5px">Total</td>
-    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">${rows.length}</td>
-    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right;font-family:var(--mono)">${cr(total)}</td>
-    <td style="padding:.42rem .75rem;font-size:12.5px;text-align:right">100%</td></tr>`;
-  document.getElementById('ar-aging-body').innerHTML = html;
+    return `<tr><td style="font-weight:500;color:${b.color}">${b.label}</td>
+      <td class="r">${count}</td><td class="r">${cr(balance)}</td><td class="r" style="color:#94a3b8">${pct(balance)}</td></tr>`;
+  }).join('') + `<tr><td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td></tr>`;
+  document.getElementById('ar-aging-body').innerHTML = trs;
 }
 
 function renderARInvoiceList(rows) {
@@ -4159,29 +4176,34 @@ function renderARInvoiceList(rows) {
     const days = arOverdueDays(r.due_date);
     const daysCell = days > 0 ? `<span style="color:#b91c1c;font-weight:600">${days}d overdue</span>`
       : days === 0 ? `<span style="color:#b45309;font-weight:600">Due today</span>`
-      : `<span style="color:var(--txt3)">In ${-days}d</span>`;
+      : `<span style="color:#64748b">In ${-days}d</span>`;
     const badge = r.status === 'overdue'
-      ? `<span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.1rem .45rem;border-radius:10px;font-weight:600">OVERDUE</span>`
+      ? `<span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.15rem .5rem;border-radius:10px;font-weight:700">OVERDUE</span>`
       : r.status === 'partially_paid'
-      ? `<span style="font-size:9.5px;background:#fef3c7;color:#b45309;padding:.1rem .45rem;border-radius:10px;font-weight:600">PARTIAL</span>`
-      : `<span style="font-size:9.5px;background:#e0f2fe;color:#0369a1;padding:.1rem .45rem;border-radius:10px;font-weight:600">SENT</span>`;
-    const rev = r.revenue_type ? `<span style="font-size:9px;background:#f0fdf4;color:#166534;padding:.1rem .35rem;border-radius:4px;font-weight:600">${r.revenue_type}</span>` : '';
+      ? `<span style="font-size:9.5px;background:#fef3c7;color:#92400e;padding:.15rem .5rem;border-radius:10px;font-weight:700">PARTIAL</span>`
+      : `<span style="font-size:9.5px;background:#eff6ff;color:#1d4ed8;padding:.15rem .5rem;border-radius:10px;font-weight:700">SENT</span>`;
+    const rev = r.revenue_type ? `<span style="font-size:9px;background:#f0fdf4;color:#15803d;padding:.15rem .4rem;border-radius:4px;font-weight:700">${r.revenue_type}</span>` : '';
+    const invLink = r.invoice_url
+      ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener">${escHtml(r.invoice_number || '')}</a>`
+      : escHtml(r.invoice_number || '');
+    const balStyle = days > 0 ? 'color:#b91c1c' : '';
     return `<tr>
-      <td style="padding:.38rem .75rem;font-size:12px">${escHtml(r.customer_name)}</td>
-      <td style="padding:.38rem .75rem;font-size:11.5px;font-family:var(--mono);white-space:nowrap">${escHtml(r.invoice_number || '')}</td>
-      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${r.invoice_date || '—'}</td>
-      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${r.due_date || '—'}</td>
-      <td style="padding:.38rem .75rem;font-size:11.5px;white-space:nowrap">${daysCell}</td>
-      <td style="padding:.38rem .75rem;font-size:12px;text-align:right;font-family:var(--mono);white-space:nowrap">₹${f(r.balance)}</td>
-      <td style="padding:.38rem .75rem;font-size:11.5px;text-align:right;font-family:var(--mono);white-space:nowrap;color:var(--txt3)">₹${f(r.total)}</td>
-      <td style="padding:.38rem .75rem">${rev}</td>
-      <td style="padding:.38rem .75rem">${badge}</td>
+      <td class="td-cust">${escHtml(r.customer_name)}</td>
+      <td class="td-inv">${invLink}</td>
+      <td class="td-date">${r.invoice_date || '—'}</td>
+      <td class="td-date">${r.due_date || '—'}</td>
+      <td class="td-days">${daysCell}</td>
+      <td class="td-amt" style="${balStyle}">₹${f(r.balance)}</td>
+      <td class="td-tot">₹${f(r.total)}</td>
+      <td>${rev}</td>
+      <td>${badge}</td>
     </tr>`;
   }).join('');
-  const th = t => `<th style="padding:.42rem .75rem;font-size:11px;text-align:${t.r?'right':'left'};font-weight:600;border-bottom:1px solid var(--brd2);white-space:nowrap">${t.l}</th>`;
-  wrap.innerHTML = `<table style="width:100%;border-collapse:collapse">
-    <thead><tr style="background:#f5f7fb">
-      ${[{l:'Customer'},{l:'Invoice #'},{l:'Date'},{l:'Due Date'},{l:'Due/Overdue'},{l:'Balance',r:1},{l:'Total',r:1},{l:'Type'},{l:'Status'}].map(th).join('')}
+  wrap.innerHTML = `<table class="ar-tbl">
+    <thead><tr>
+      <th>Customer</th><th>Invoice #</th><th>Inv Date</th><th>Due Date</th>
+      <th>Due / Overdue</th><th class="r">Balance</th><th class="r">Total</th>
+      <th>Type</th><th>Status</th>
     </tr></thead>
     <tbody>${trs}</tbody>
   </table>`;
