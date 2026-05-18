@@ -430,6 +430,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <span id="ctx-version-badge" style="font-family:var(--mono);font-size:11px;color:var(--txt3);margin-left:.5rem"></span>
         </div>
         <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="rbtn" onclick="ctxCancel()">Cancel</button>
           <button class="rbtn" onclick="ctxLoadVersions()">Version History</button>
           <button class="modal-csv" onclick="ctxSave()">Save New Version</button>
         </div>
@@ -3864,6 +3865,12 @@ let _ctxEditorListening = false;
 
 function showContextTab(btn) {
   showTab('context-admin', btn);
+}
+
+function ctxCancel() {
+  // Navigate back to the first visible tab in the nav
+  const firstBtn = document.querySelector('#main-nav .tbtn');
+  if (firstBtn) firstBtn.click();
 }
 
 async function ctxUnlock() {
