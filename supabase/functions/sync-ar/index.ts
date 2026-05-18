@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       { headers: { Authorization: 'Zoho-oauthtoken ' + tok.token } }
     );
     const data = await r.json();
-    return json({ stage: 'books_api', http_status: r.status, zoho_code: data.code, message: data.message, page_context: data.page_context, sample_count: data.invoices?.length });
+    return json({ stage: 'books_api', http_status: r.status, zoho_code: data.code, message: data.message, page_context: data.page_context, sample_count: data.invoices?.length, sample: data.invoices?.slice(0,1) });
   }
 
   // Streaming SSE sync
@@ -85,6 +85,9 @@ Deno.serve(async (req) => {
           close(); return;
         }
         for (const inv of data.invoices ?? []) {
+          const total        = Number(inv.total         ?? 0);
+          const balance      = Number(inv.balance       ?? 0);
+          const exchangeRate = Number(inv.exchange_rate ?? 1) || 1;
           rows.push({
             invoice_id:       inv.invoice_id,
             invoice_number:   inv.invoice_number,
@@ -92,13 +95,18 @@ Deno.serve(async (req) => {
             invoice_date:     inv.date      || null,
             due_date:         inv.due_date  || null,
             status:           inv.status,
-            total:            Number(inv.total   ?? 0),
-            balance:          Number(inv.balance ?? 0),
+            currency_code:    inv.currency_code || 'INR',
+            exchange_rate:    exchangeRate,
+            total:            total,
+            balance:          balance,
+            total_inr:        Math.round(total   * exchangeRate * 100) / 100,
+            balance_inr:      Math.round(balance * exchangeRate * 100) / 100,
             revenue_type:     inv.cf_revenue_type     || null,
             service_from:     inv.cf_new_service_from || null,
             service_to:       inv.cf_new_service_to   || null,
             reference_number: inv.reference_number    || null,
             salesperson_name: inv.salesperson_name    || null,
+            invoice_url:      inv.invoice_url         || null,
             synced_at:        syncedAt,
           });
         }
@@ -110,12 +118,25 @@ Deno.serve(async (req) => {
 
       send('progress', { step: 3, total: 3, message: `Saving ${rows.length} invoices to database…` });
       const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
-      const { error: delErr } = await supabase.from('ar_invoices').delete().neq('invoice_id', '');
-      if (delErr) { send('error', { message: 'Delete failed: ' + delErr.message }); close(); return; }
 
+      // Upsert in batches — idempotent, no data loss on repeated syncs
       for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await supabase.from('ar_invoices').insert(rows.slice(i, i + 500));
-        if (error) { send('error', { message: 'Insert failed: ' + error.message }); close(); return; }
+        const { error } = await supabase
+          .from('ar_invoices')
+          .upsert(rows.slice(i, i + 500), { onConflict: 'invoice_id' });
+        if (error) { send('error', { message: 'Upsert failed: ' + error.message }); close(); return; }
+      }
+
+      // Remove invoices that are no longer open (not in this sync batch)
+      if (rows.length > 0) {
+        const ids = rows.map(r => r.invoice_id as string);
+        const { error: delErr } = await supabase
+          .from('ar_invoices')
+          .delete()
+          .not('invoice_id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
+        if (delErr) {
+          send('progress', { step: 3, total: 3, message: `Note: cleanup of closed invoices failed: ${delErr.message}` });
+        }
       }
 
       send('done', { synced: rows.length, pages: page });
