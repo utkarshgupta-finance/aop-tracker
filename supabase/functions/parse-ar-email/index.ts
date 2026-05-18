@@ -12,7 +12,6 @@ const CORS = {
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-// Parse "DD/MM/YYYY" → "YYYY-MM-DD" (or null if invalid)
 function parseDate(val: unknown): string | null {
   if (!val || typeof val !== 'string') return null;
   const parts = val.trim().split('/');
@@ -41,7 +40,6 @@ function parseExcel(buffer: ArrayBuffer): InvoiceRow[] {
   const ws  = wb.Sheets[wb.SheetNames[0]];
   const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-  // Row 1 = entity name, Row 4 = headers, Row 5+ = data
   const syncedAt = new Date().toISOString();
   const rows: InvoiceRow[] = [];
 
@@ -105,21 +103,37 @@ Deno.serve(async (req) => {
 
   if (rows.length === 0) return json({ ok: true, inserted: 0, message: 'No invoice rows found in file' });
 
-  // Use the email's Date header as the snapshot date, fall back to today
+  // Derive snapshot date from email's Date header, fall back to today
   const emailDate = typeof body.Date === 'string' ? body.Date : null;
   const snapshotDate = emailDate
     ? new Date(emailDate).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
+  const snapshotMonth = snapshotDate.slice(0, 7); // 'YYYY-MM'
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // 1. Upsert current open invoices
+  // Look up GBP/INR rate for this month
+  const { data: fxRow } = await supabase
+    .from('fx_rates')
+    .select('rate')
+    .eq('year_month', snapshotMonth)
+    .eq('currency', 'GBP')
+    .maybeSingle();
+  const gbpRate: number = fxRow?.rate ?? null;
+
+  // Upsert current open invoices (INR fields computed if rate is known)
+  const invoiceRows = rows.map(r => ({
+    ...r,
+    total_inr:   gbpRate ? Math.round(r.total   * gbpRate * 100) / 100 : null,
+    balance_inr: gbpRate ? Math.round(r.balance * gbpRate * 100) / 100 : null,
+    exchange_rate: gbpRate ?? null,
+  }));
   const { error: upsertErr } = await supabase
     .from('ar_invoices')
-    .upsert(rows, { onConflict: 'invoice_id' });
+    .upsert(invoiceRows, { onConflict: 'invoice_id' });
   if (upsertErr) return json({ error: 'Upsert failed: ' + upsertErr.message }, 500);
 
-  // 2. Remove invoices no longer open (paid/closed since last email)
+  // Remove UK invoices no longer in the open list
   const ids = rows.map(r => r.invoice_id);
   const { error: delErr } = await supabase
     .from('ar_invoices')
@@ -128,7 +142,7 @@ Deno.serve(async (req) => {
     .eq('entity', 'UK');
   if (delErr) console.warn('Cleanup warning:', delErr.message);
 
-  // 3. Insert historical snapshot (idempotent via unique constraint)
+  // Write historical snapshot with INR values if rate is available
   const snapshotRows = rows.map(r => ({
     snapshot_date:  snapshotDate,
     entity:         'UK',
@@ -140,15 +154,15 @@ Deno.serve(async (req) => {
     status:         r.status,
     total:          r.total,
     balance:        r.balance,
-    currency_code:  r.currency_code,
-    exchange_rate:  1,
-    total_inr:      null,
-    balance_inr:    null,
+    currency_code:  'GBP',
+    exchange_rate:  gbpRate ?? null,
+    total_inr:      gbpRate ? Math.round(r.total   * gbpRate * 100) / 100 : null,
+    balance_inr:    gbpRate ? Math.round(r.balance * gbpRate * 100) / 100 : null,
   }));
   const { error: snapErr } = await supabase
     .from('ar_invoice_snapshots')
     .upsert(snapshotRows, { onConflict: 'invoice_id,snapshot_date,entity' });
   if (snapErr) console.warn('Snapshot insert warning:', snapErr.message);
 
-  return json({ ok: true, inserted: rows.length, snapshot_date: snapshotDate });
+  return json({ ok: true, inserted: rows.length, snapshot_date: snapshotDate, gbp_rate: gbpRate });
 });
