@@ -95,12 +95,13 @@ Deno.serve(async (req) => {
     return name.endsWith('.xlsx') || ct.includes('spreadsheetml') || ct.includes('excel');
   });
 
+  // Always acknowledge receipt — no .xlsx just means nothing to process
   if (!xlsxAtt) {
-    return json({ error: 'No .xlsx attachment found in email', attachments: attachments.map(a => a.Name) }, 400);
+    return json({ ok: true, skipped: true, message: 'No .xlsx attachment — nothing to process', attachments: attachments.map(a => a.Name) });
   }
 
   const b64 = String(xlsxAtt.Content ?? xlsxAtt.content ?? '');
-  if (!b64) return json({ error: 'Attachment content is empty' }, 400);
+  if (!b64) return json({ ok: true, skipped: true, message: 'Attachment content is empty' });
 
   // Decode base64 → ArrayBuffer
   const binary = atob(b64);
