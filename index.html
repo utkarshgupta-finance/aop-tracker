@@ -417,8 +417,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div id="ar" class="pane">
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <span class="slabel" style="margin:0">Accounts Receivable</span>
-      <button class="modal-csv" id="ar-sync-btn" onclick="syncAR()" style="margin-left:auto">Sync AR</button>
-      <span id="ar-status" style="font-size:11.5px;color:var(--txt3)"></span>
+      <button class="modal-csv" id="ar-sync-btn-in" onclick="syncARIndia()" style="margin-left:auto">⟳ Sync India</button>
+      <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
+      <button class="modal-csv" id="ar-sync-btn-uk" onclick="syncARUK()">⟳ Sync UK</button>
+      <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)"></span>
     </div>
     <div class="ar-cards">
       <div class="ar-card" id="ar-card-total"></div>
@@ -427,6 +429,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div class="ar-card" id="ar-card-synced"></div>
     </div>
     <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+      <select class="nret-sel" id="ar-f-entity" onchange="renderAR()" style="font-size:12px">
+        <option value="">All Entities</option>
+        <option value="IN">India (Zoho Books)</option>
+        <option value="UK">UK (QuickBooks)</option>
+      </select>
       <select class="nret-sel" id="ar-f-status" onchange="renderAR()" style="font-size:12px">
         <option value="">All Statuses</option>
         <option value="sent">Sent</option>
@@ -455,7 +462,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <p class="slabel" style="margin-bottom:.5rem">Open Invoices</p>
     <div class="twrap" id="ar-invoice-wrap">
-      <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync AR to load invoices from Zoho Books.</div>
+      <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or Sync UK to load invoices.</div>
     </div>
   </div>
   <div id="ai-query" class="pane">
@@ -4075,7 +4082,8 @@ async function ctxRollback(id, version) {
 }
 
 /* ─── AR (Accounts Receivable) ──────────────────────────────── */
-const AR_SYNC_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
+const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
+const AR_SYNC_UK_URL = `${SUPABASE_URL}/functions/v1/sync-qb`;
 let _arInited   = false;
 let _arAllRows  = [];
 
@@ -4115,10 +4123,12 @@ function arAgeBucket(dueDateStr) {
 }
 
 function renderAR() {
+  const ef = document.getElementById('ar-f-entity')?.value || '';
   const sf = document.getElementById('ar-f-status')?.value || '';
   const rf = document.getElementById('ar-f-rev')?.value    || '';
   const sq = (document.getElementById('ar-search')?.value  || '').toLowerCase();
   const rows = _arAllRows.filter(r =>
+    (!ef || r.entity === ef) &&
     (!sf || r.status === sf) &&
     (!rf || r.revenue_type === rf) &&
     (!sq || r.customer_name.toLowerCase().includes(sq))
@@ -4136,16 +4146,21 @@ function renderARSummary(rows) {
   const overdueBal = overdue.reduce((s, r) => s + inr(r), 0);
   const current    = rows.filter(r => r.status !== 'overdue');
   const currentBal = current.reduce((s, r) => s + inr(r), 0);
-  const synced     = _arAllRows[0]?.synced_at;
+  const fmt = ts => ts ? new Date(ts).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}) : 'Never';
+  const inRows = _arAllRows.filter(r => r.entity === 'IN');
+  const ukRows = _arAllRows.filter(r => r.entity === 'UK');
+  const syncedIN = inRows[0]?.synced_at;
+  const syncedUK = ukRows[0]?.synced_at;
   document.getElementById('ar-card-total').innerHTML =
     `<div class="ar-card-val">${cr(totalBal)}</div><div class="ar-card-lbl">Total Outstanding</div><div class="ar-card-sub">${rows.length} invoices</div>`;
   document.getElementById('ar-card-overdue').innerHTML =
     `<div class="ar-card-val" style="color:#b91c1c">${cr(overdueBal)}</div><div class="ar-card-lbl">Overdue</div><div class="ar-card-sub">${overdue.length} invoices</div>`;
   document.getElementById('ar-card-current').innerHTML =
     `<div class="ar-card-val" style="color:#15803d">${cr(currentBal)}</div><div class="ar-card-lbl">Current</div><div class="ar-card-sub">${current.length} invoices</div>`;
-  document.getElementById('ar-card-synced').innerHTML = synced
-    ? `<div class="ar-card-val" style="font-size:12px">${new Date(synced).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</div><div class="ar-card-lbl">Last Synced</div>`
-    : `<div class="ar-card-val" style="font-size:12px;color:var(--txt3)">Never synced</div><div class="ar-card-lbl">Last Synced</div><div class="ar-card-sub">Click Sync AR above</div>`;
+  document.getElementById('ar-card-synced').innerHTML =
+    `<div class="ar-card-lbl" style="margin-bottom:.3rem">Last Synced</div>
+     <div style="font-size:11px;color:var(--txt2)"><span style="font-weight:600">IN:</span> ${fmt(syncedIN)}</div>
+     <div style="font-size:11px;color:var(--txt2)"><span style="font-weight:600">UK:</span> ${fmt(syncedUK)}</div>`;
 }
 
 const AR_BUCKETS = [
@@ -4195,8 +4210,12 @@ function renderARInvoiceList(rows) {
     const isFx    = r.currency_code && r.currency_code !== 'INR';
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
+    const entityBadge = r.entity === 'UK'
+      ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:.15rem .45rem;border-radius:4px;font-weight:700">UK</span>`
+      : `<span style="font-size:9px;background:#ecfdf5;color:#065f46;padding:.15rem .45rem;border-radius:4px;font-weight:700">IN</span>`;
     return `<tr>
       <td class="td-cust">${escHtml(r.customer_name)}</td>
+      <td>${entityBadge}</td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
@@ -4209,7 +4228,7 @@ function renderARInvoiceList(rows) {
   }).join('');
   wrap.innerHTML = `<table class="ar-tbl">
     <thead><tr>
-      <th>Customer</th><th>Invoice #</th><th>Inv Date</th><th>Due Date</th>
+      <th>Customer</th><th>Entity</th><th>Invoice #</th><th>Inv Date</th><th>Due Date</th>
       <th>Due / Overdue</th><th class="r">Balance (INR)</th><th class="r">Total (INR)</th>
       <th>Type</th><th>Status</th>
     </tr></thead>
@@ -4217,14 +4236,14 @@ function renderARInvoiceList(rows) {
   </table>`;
 }
 
-async function syncAR() {
-  const btn    = document.getElementById('ar-sync-btn');
-  const status = document.getElementById('ar-status');
+async function _runARSync(url, btnId, statusId, label) {
+  const btn    = document.getElementById(btnId);
+  const status = document.getElementById(statusId);
   btn.disabled = true; btn.textContent = 'Syncing…';
   status.style.color = 'var(--txt3)';
 
   try {
-    const resp = await fetch(AR_SYNC_URL, {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...cmrrHdr() },
     });
@@ -4234,7 +4253,6 @@ async function syncAR() {
       throw new Error(j.error || 'HTTP ' + resp.status);
     }
 
-    // Consume SSE stream line by line
     const reader = resp.body.getReader();
     const dec    = new TextDecoder();
     let buf = '';
@@ -4244,7 +4262,7 @@ async function syncAR() {
       if (done) break;
       buf += dec.decode(value, { stream: true });
       const parts = buf.split('\n\n');
-      buf = parts.pop(); // keep incomplete last chunk
+      buf = parts.pop();
       for (const block of parts) {
         let evName = 'message', dataStr = '';
         for (const line of block.split('\n')) {
@@ -4259,24 +4277,27 @@ async function syncAR() {
           status.textContent = `[${ev.step}/${ev.total}] ${ev.message}`;
           status.style.color = 'var(--txt3)';
         } else if (evName === 'done') {
-          status.textContent = `✓ Synced ${ev.synced} invoices across ${ev.pages} pages`;
+          status.textContent = `✓ Synced ${ev.synced} invoices`;
           status.style.color = '#3b6d11';
           _arInited = false;
           loadAR();
         } else if (evName === 'error') {
           const detail = ev.detail ? ' — ' + JSON.stringify(ev.detail) : '';
-          status.textContent = 'Sync error: ' + ev.message + detail;
+          status.textContent = 'Error: ' + ev.message + detail;
           status.style.color = '#a32d2d';
         }
       }
     }
   } catch(e) {
-    status.textContent = 'Sync error: ' + e.message;
+    status.textContent = 'Error: ' + e.message;
     status.style.color = '#a32d2d';
   } finally {
-    btn.disabled = false; btn.textContent = 'Sync AR';
+    btn.disabled = false; btn.textContent = label;
   }
 }
+
+function syncARIndia() { _runARSync(AR_SYNC_IN_URL, 'ar-sync-btn-in', 'ar-status-in', '⟳ Sync India'); }
+function syncARUK()    { _runARSync(AR_SYNC_UK_URL, 'ar-sync-btn-uk', 'ar-status-uk', '⟳ Sync UK'); }
 
 initAuth();
 </script>
