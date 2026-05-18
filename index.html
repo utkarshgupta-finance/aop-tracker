@@ -270,7 +270,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-tbl tbody tr{border-bottom:1px solid #f1f5f9;transition:background .1s}
 .ar-tbl tbody tr:hover{background:#f8fafc}
 .ar-tbl td{padding:.55rem .9rem;vertical-align:middle;text-align:left}
-.ar-tbl .td-cust{font-weight:500;font-size:13px;color:#0f172a;max-width:220px}
+.ar-tbl .td-cust{font-weight:500;font-size:11.5px;color:#0f172a;max-width:200px;white-space:normal;word-break:break-word;line-height:1.35}
 .ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--navy3);text-decoration:none}
 .ar-tbl .td-inv a:hover{text-decoration:underline}
 .ar-tbl .td-date{font-size:12px;color:#64748b;white-space:nowrap}
@@ -4376,27 +4376,38 @@ function showARSubTab(tab) {
 
 async function loadArBuMap() {
   try {
+    // Step 1: fetch bu_master id→name map
+    const buR = await fetch(
+      `${SUPABASE_URL}/rest/v1/bu_master?select=id,name`,
+      { headers: cmrrHdr() }
+    );
+    if (!buR.ok) { console.warn('loadArBuMap: bu_master HTTP', buR.status); return; }
+    const buById = {};
+    for (const b of await buR.json()) buById[b.id] = b.name;
+
+    // Step 2: fetch customer_mrr_lines zoho_name + bu_id, paginated
     const PAGE = 1000;
     let offset = 0, allRows = [];
     while (true) {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-        `?select=zoho_name,bu_master!left(name)&order=id&limit=${PAGE}&offset=${offset}`,
+        `?select=zoho_name,bu_id&bu_id=not.is.null&order=id&limit=${PAGE}&offset=${offset}`,
         { headers: cmrrHdr() }
       );
-      if (!r.ok) { console.warn('loadArBuMap HTTP', r.status); break; }
+      if (!r.ok) { console.warn('loadArBuMap: CML HTTP', r.status); break; }
       const pg = await r.json();
       allRows = allRows.concat(pg);
       if (pg.length < PAGE) break;
       offset += PAGE;
     }
+
     _arBuMap = {};
     for (const row of allRows) {
       const key = (row.zoho_name || '').toLowerCase().trim();
-      const bu  = Array.isArray(row.bu_master) ? row.bu_master[0]?.name : row.bu_master?.name;
+      const bu  = buById[row.bu_id];
       if (key && bu && !_arBuMap[key]) _arBuMap[key] = bu;
     }
-    if (_arLastRows.length) renderARInvoiceList(_arLastRows);
+    renderAR(); // always re-render now that map is ready
   } catch(e) { console.warn('loadArBuMap:', e); }
 }
 
