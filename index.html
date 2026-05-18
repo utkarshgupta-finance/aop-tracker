@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -255,23 +256,44 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .omrr-bu{position:sticky;left:0;z-index:2;background:#f5f5f5;font-family:var(--sans);font-size:11px;font-weight:500;padding:.38rem .75rem;white-space:nowrap;border-right:2px solid #bbb;min-width:100px}
 .omrr-tot-bu{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .75rem;white-space:nowrap;border-right:2px solid #aaa}
 .omrr-hbu{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:100px;padding:.38rem .75rem;font-size:11px;font-weight:600}
+/* ── Login screen ───────────────────────────────────────────── */
+#login-screen{position:fixed;inset:0;background:#f0f4f9;display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-box{background:#fff;border-radius:12px;padding:2.5rem;max-width:380px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.10)}
+/* ── Manage Users tab ────────────────────────────────────────── */
+.user-row{display:flex;align-items:flex-start;gap:.75rem;padding:.8rem 1rem;border:1px solid var(--brd);border-radius:7px;margin-bottom:.45rem;background:#fff}
+.user-chip{display:inline-block;font-size:10px;background:#e8eef7;color:var(--navy2);border-radius:4px;padding:.1rem .42rem;margin:.15rem .15rem 0 0;white-space:nowrap}
+.um-check-label{display:flex;align-items:center;gap:.35rem;font-size:12px;cursor:pointer;padding:.28rem .6rem;border:1px solid var(--brd);border-radius:5px;user-select:none}
+.um-check-label:hover{background:#f5f7fb}
 </style>
 </head>
 <body>
-<header>
+<div id="login-screen">
+  <div class="login-box">
+    <div style="font-size:19px;font-weight:700;color:var(--navy);margin-bottom:.2rem">Bizom Revenue</div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:1.75rem">Revenue Intelligence · FY 2026–27</div>
+    <div style="margin-bottom:.7rem">
+      <div class="flabel">Email</div>
+      <input type="email" id="login-email" class="cust-input" placeholder="you@bizom.in" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div style="margin-bottom:1.2rem">
+      <div class="flabel">Password</div>
+      <input type="password" id="login-password" class="cust-input" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="modal-csv" id="login-btn" onclick="doLogin()" style="width:100%">Sign In</button>
+    <div id="login-err" style="color:#a32d2d;font-size:12px;margin-top:.55rem;text-align:center;min-height:1rem"></div>
+  </div>
+</div>
+<header style="position:relative">
   <div class="eyebrow">Revenue Intelligence · FY 2026–27</div>
   <div class="htitle">Bizom Revenue</div>
   <div class="hsub" id="sub"></div>
+  <div id="logout-area" style="display:none;position:absolute;right:1.25rem;top:50%;transform:translateY(-50%);align-items:center;gap:.65rem">
+    <span id="logout-name" style="font-size:11px;color:rgba(255,255,255,.65)"></span>
+    <button class="rbtn" onclick="doLogout()" style="font-size:11px;padding:.28rem .75rem;background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.25)">Sign out</button>
+  </div>
 </header>
 
-<nav>
-  <button class="tbtn active" onclick="showCustMRRTab(this)">Customer MRR</button>
-  <button class="tbtn" onclick="showOverallMRRTab(this)">Overall MRR</button>
-  <button class="tbtn" onclick="showNretTab(this)">Net Retention</button>
-  <button class="tbtn" onclick="showAIQueryTab(this)">Ask AI</button>
-  <button class="tbtn" onclick="showTab('aop-plan',this)">AOP Plan</button>
-  <button class="tbtn" onclick="showContextTab(this)" style="margin-left:auto;opacity:.7">⚙ Context</button>
-</nav>
+<nav id="main-nav"></nav>
 <main>
   <div id="aop-plan" class="pane">
     <p class="slabel">AOP Plan FY 2026–27 — Targets by BU <span class="crm-badge"><span class="crm-dot" style="background:#854f0b"></span>From AOP Sheet</span></p>
@@ -426,6 +448,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
+  <div id="manage-users" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <span class="slabel" style="margin:0">Manage Users</span>
+      <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto">+ Add User</button>
+    </div>
+    <div id="users-list"></div>
+  </div>
 </main>
 <div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
   <div class="modal">
@@ -438,6 +467,35 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div class="modal-body" id="drill-body">
       <div class="modal-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+<div id="user-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeUserModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hdr">
+      <span class="modal-title" id="um-title">Add User</span>
+      <button class="modal-close" onclick="closeUserModal()">&#215;</button>
+    </div>
+    <div class="modal-body" style="padding:1.25rem;max-height:80vh;overflow-y:auto">
+      <div style="display:grid;gap:.8rem">
+        <div><div class="flabel">Display Name</div><input type="text" id="um-name" class="cust-input" placeholder="e.g. Vikram Sharma"></div>
+        <div><div class="flabel">Email</div><input type="email" id="um-email" class="cust-input" placeholder="user@bizom.in"></div>
+        <div id="um-pwd-row"><div class="flabel" id="um-pwd-lbl">Password</div><input type="password" id="um-pwd" class="cust-input" placeholder="Min 8 characters"></div>
+        <div>
+          <div class="flabel" style="margin-bottom:.4rem">Tab Access <span style="font-weight:400;opacity:.65">(none checked = full access)</span></div>
+          <div id="um-tabs-wrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
+        </div>
+        <div>
+          <div class="flabel" style="margin-bottom:.4rem">BU Access <span style="font-weight:400;opacity:.65">(none checked = all BUs)</span></div>
+          <div id="um-bus-wrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:12.5px">
+          <input type="checkbox" id="um-is-admin" style="width:15px;height:15px">
+          Admin (access to Manage Users &amp; Context tabs)
+        </label>
+        <div id="um-err" style="color:#a32d2d;font-size:12px;min-height:1rem"></div>
+        <button class="modal-csv" id="um-save-btn" onclick="saveUser()" style="width:100%">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -491,6 +549,7 @@ const FB_NRR = {
 let CRM_ACTUAL_MRR = {};
 for (const bu of BUS) CRM_ACTUAL_MRR[bu] = {};
 let MRR = {}, NRR = {};
+let _custInited = false;
 
 /* ─── FETCH ACTUALS FROM SUPABASE ───────────────────────────
    Reads crm_actuals (populated nightly by fetch-zoho-actuals
@@ -784,7 +843,7 @@ function buildMRR(){
   r1+=`<th class="th-fy" colspan="5">FY27</th></tr>`;
   r2+=subHdrs('s-qaop','s-qaopg','s-qact','s-qactg','s-qvarv','s-qvarg','MRR')+`</tr>`;
   let body='<tbody>';
-  BUS.forEach((bu,bi)=>{
+  allowedBUS().forEach((bu,bi)=>{
     const alt=bi%2===1?' alt':'';
     let row=`<tr class="${alt}"><td class="bu">${bu}</td><td class="cpast">${f(MRR[bu][0])}</td>`;
     let fyAOP=MRR[bu][0];
@@ -1175,7 +1234,8 @@ let _cmrrCurName = null;   // customer currently loaded
 let _cmrrWfLoaded = false; // whether workflow data is fetched for _cmrrCurName
 
 function cmrrHdr() {
-  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY };
+  const token = USER_JWT || SUPABASE_ANON_KEY;
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + token };
 }
 
 async function initCustMRR() {
@@ -1201,6 +1261,9 @@ async function initCustMRR() {
   } catch(e) {
     inp.placeholder = 'Error – ' + e.message;
     return;
+  }
+  if (USER_ACCESS?.allowed_bus?.length) {
+    CUST_LINES = CUST_LINES.filter(r => USER_ACCESS.allowed_bus.includes(r.bu_master?.name));
   }
   const seen = new Set();
   for (const row of CUST_LINES) {
@@ -1787,6 +1850,7 @@ async function loadOverallMRR() {
     }
     const buMap = {}, monthSet = new Set(), buSet = new Set();
     for (const row of rows) {
+      if (USER_ACCESS?.allowed_bus?.length && !USER_ACCESS.allowed_bus.includes(row.bu_name)) continue;
       const m = row.month_date.slice(0, 7);
       monthSet.add(m); buSet.add(row.bu_name);
       if (!buMap[row.bu_name]) buMap[row.bu_name] = {};
@@ -1979,6 +2043,10 @@ async function nretInit() {
       offset += PAGE;
     }
   } catch(e) { status.textContent = 'Error: '+e.message; return; }
+
+  if (USER_ACCESS?.allowed_bus?.length) {
+    _nretAllLines = _nretAllLines.filter(r => USER_ACCESS.allowed_bus.includes(r.bu_master?.name));
+  }
 
   const segs = [...new Set(_nretAllLines.map(l => l.segment_master?.name).filter(Boolean))].sort();
   const bus  = [...new Set(_nretAllLines.map(l => l.bu_master?.name).filter(Boolean))].sort();
@@ -2254,12 +2322,7 @@ function nretRenderRolling(matrix, mrrMonthSet) {
   wrap.innerHTML = html;
 }
 
-loadData();
-initAOPPlan();
-_custInited = true;
-initCustMRR().catch(e => {
-  document.getElementById('cust-input').placeholder = 'Error – ' + e.message;
-});
+initAuth();
 
 /* ─── AI QUERY ───────────────────────────────────────────── */
 /* ── Ask AI — conversational interface ───────────────────────── */
@@ -2267,6 +2330,20 @@ const AI_PROXY_URL = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/ai-p
 let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
 let AI_CHARTS = []; // Chart.js instances to destroy on clear
 let AI_ACTIVE_AC = null; // AbortController for in-flight request — allows X to cancel it
+
+/* ─── AUTH + ACCESS CONTROL ─────────────────────────────────── */
+let SUPABASE_CLIENT = null;
+let CURRENT_USER    = null;   // { id, email }
+let USER_ACCESS     = null;   // { allowed_tabs, allowed_bus, is_admin, display_name }
+let USER_JWT        = null;   // Bearer token for all API calls
+const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
+const ALL_TABS_CFG = [
+  { id: 'cust-mrr',    label: 'Customer MRR',  fn: 'showCustMRRTab(this)' },
+  { id: 'overall-mrr', label: 'Overall MRR',   fn: 'showOverallMRRTab(this)' },
+  { id: 'nret',        label: 'Net Retention', fn: 'showNretTab(this)' },
+  { id: 'ask-ai',      label: 'Ask AI',         fn: 'showAIQueryTab(this)' },
+  { id: 'aop-plan',    label: 'AOP Plan',       fn: "showTab('aop-plan',this)" },
+];
 
 const AI_SYSTEM = `You are a senior revenue analytics assistant embedded in Bizom's dashboard. You have a tool to query the live database. Respond like an FP&A analyst, RevOps lead, and business advisor — analytical, opinionated, interpretive.
 
@@ -3287,6 +3364,200 @@ function aiRenderTable(cols, rows) {
   return h;
 }
 
+function allowedBUS() {
+  if (!USER_ACCESS?.allowed_bus?.length) return BUS;
+  return BUS.filter(b => USER_ACCESS.allowed_bus.includes(b));
+}
+
+async function initAuth() {
+  const { createClient } = supabase;
+  SUPABASE_CLIENT = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  SUPABASE_CLIENT.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) await onSignIn(session);
+    if (event === 'SIGNED_OUT') { USER_JWT = null; CURRENT_USER = null; USER_ACCESS = null; showLoginScreen(); }
+    if (event === 'TOKEN_REFRESHED' && session) USER_JWT = session.access_token;
+  });
+  const { data: { session } } = await SUPABASE_CLIENT.auth.getSession();
+  if (session) await onSignIn(session);
+  else showLoginScreen();
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-err').textContent = '';
+}
+
+async function onSignIn(session) {
+  USER_JWT = session.access_token;
+  CURRENT_USER = session.user;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_access?user_id=eq.${CURRENT_USER.id}&limit=1`,
+      { headers: cmrrHdr() }
+    );
+    const rows = await r.json();
+    if (!r.ok || !rows.length) {
+      await SUPABASE_CLIENT.auth.signOut();
+      document.getElementById('login-err').textContent = 'No access configured for this account. Contact admin.';
+      return;
+    }
+    USER_ACCESS = rows[0];
+  } catch(e) {
+    document.getElementById('login-err').textContent = 'Error loading access profile: ' + e.message;
+    return;
+  }
+  document.getElementById('login-screen').style.display = 'none';
+  renderNav();
+  document.getElementById('logout-area').style.display = 'flex';
+  document.getElementById('logout-name').textContent = USER_ACCESS.display_name || CURRENT_USER.email;
+  loadData();
+  initAOPPlan();
+  if (!_custInited) { _custInited = true; initCustMRR().catch(e => { document.getElementById('cust-input').placeholder = 'Error – ' + e.message; }); }
+}
+
+async function doLogin() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err      = document.getElementById('login-err');
+  const btn      = document.getElementById('login-btn');
+  if (!email || !password) { err.textContent = 'Email and password required'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…'; err.textContent = '';
+  const { error } = await SUPABASE_CLIENT.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Sign In';
+  if (error) { err.textContent = error.message; }
+}
+
+async function doLogout() {
+  await SUPABASE_CLIENT.auth.signOut();
+}
+
+function renderNav() {
+  const allowed = USER_ACCESS.allowed_tabs.length === 0
+    ? ALL_TABS_CFG.map(t => t.id)
+    : USER_ACCESS.allowed_tabs;
+  let first = true;
+  const nav = document.getElementById('main-nav');
+  nav.innerHTML = ALL_TABS_CFG
+    .filter(t => allowed.includes(t.id))
+    .map(t => {
+      const cls = 'tbtn' + (first ? (first = false, ' active') : '');
+      return '<button class="' + cls + '" onclick="' + t.fn + '">' + t.label + '</button>';
+    }).join('');
+  if (USER_ACCESS.is_admin) {
+    nav.innerHTML += '<button class="tbtn" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
+    nav.innerHTML += '<button class="tbtn" onclick="showContextTab(this)" style="opacity:.7">⚙ Context</button>';
+  }
+  const firstId = allowed[0];
+  if (firstId) {
+    const paneId = firstId === 'ask-ai' ? 'ai-query' : firstId;
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(paneId)?.classList.add('active');
+  }
+}
+
+/* ─── MANAGE USERS ───────────────────────────────────────────── */
+function showManageUsersTab(btn) { showTab('manage-users', btn); loadUsersPanel(); }
+
+async function userAdminCall(operation, payload) {
+  if (payload === undefined) payload = {};
+  const r = await fetch(USER_ADMIN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + USER_JWT, 'apikey': SUPABASE_ANON_KEY },
+    body: JSON.stringify(Object.assign({ operation: operation }, payload)),
+  });
+  return { ok: r.ok, data: await r.json() };
+}
+
+async function loadUsersPanel() {
+  const list = document.getElementById('users-list');
+  list.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem">Loading…</div>';
+  const { ok, data } = await userAdminCall('list_users');
+  if (!ok || !data.ok) { list.innerHTML = '<div style="color:#a32d2d;font-size:12px">Error: ' + (data.error || '?') + '</div>'; return; }
+  if (!data.users.length) { list.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem">No users yet.</div>'; return; }
+  list.innerHTML = data.users.map(function(u) {
+    const tabs = u.allowed_tabs.length ? u.allowed_tabs : ['All tabs'];
+    const bus  = u.allowed_bus.length  ? u.allowed_bus  : ['All BUs'];
+    const userJson = escHtml(JSON.stringify(u));
+    return '<div class="user-row">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:13px">' + escHtml(u.display_name) + '</div>' +
+        '<div style="font-size:11px;color:var(--txt3);margin-top:.1rem">' + escHtml(u.email || '') + '</div>' +
+        '<div style="margin-top:.4rem">' +
+          (u.is_admin ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin</span>' : '') +
+          tabs.map(function(t){ return '<span class="user-chip">' + escHtml(t) + '</span>'; }).join('') +
+          bus.map(function(b){ return '<span class="user-chip" style="background:#f0fdf4;color:#166534">' + escHtml(b) + '</span>'; }).join('') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:.35rem;flex-shrink:0">' +
+        '<button class="rbtn" style="font-size:11px" onclick=\'openUserModal(' + userJson + ')\'>Edit</button>' +
+        '<button class="rbtn" style="font-size:11px;color:#a32d2d" onclick="deleteUser(\'' + u.user_id + '\',\'' + escHtml(u.display_name) + '\')">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+let _editingUserId = null;
+
+function openUserModal(user) {
+  _editingUserId = user && user.user_id ? user.user_id : null;
+  document.getElementById('um-title').textContent = _editingUserId ? 'Edit User' : 'Add User';
+  document.getElementById('um-name').value = (user && user.display_name) ? user.display_name : '';
+  const emailEl = document.getElementById('um-email');
+  emailEl.value = (user && user.email) ? user.email : '';
+  emailEl.disabled = !!_editingUserId;
+  document.getElementById('um-pwd-lbl').textContent = _editingUserId ? 'New Password (leave blank to keep)' : 'Password';
+  document.getElementById('um-pwd').value = '';
+  document.getElementById('um-is-admin').checked = (user && user.is_admin) ? user.is_admin : false;
+  document.getElementById('um-err').textContent = '';
+  const allowedTabs = (user && user.allowed_tabs) ? user.allowed_tabs : [];
+  document.getElementById('um-tabs-wrap').innerHTML = ALL_TABS_CFG.map(function(t) {
+    return '<label class="um-check-label"><input type="checkbox" value="' + t.id + '"' + (allowedTabs.includes(t.id) ? ' checked' : '') + '> ' + t.label + '</label>';
+  }).join('');
+  const allowedBus = (user && user.allowed_bus) ? user.allowed_bus : [];
+  document.getElementById('um-bus-wrap').innerHTML = BUS.map(function(b) {
+    return '<label class="um-check-label"><input type="checkbox" value="' + b + '"' + (allowedBus.includes(b) ? ' checked' : '') + '> ' + b + '</label>';
+  }).join('');
+  document.getElementById('user-modal').classList.remove('hidden');
+}
+
+function closeUserModal() { document.getElementById('user-modal').classList.add('hidden'); _editingUserId = null; }
+
+async function saveUser() {
+  const name = document.getElementById('um-name').value.trim();
+  const email = document.getElementById('um-email').value.trim();
+  const pwd = document.getElementById('um-pwd').value;
+  const isAdmin = document.getElementById('um-is-admin').checked;
+  const err = document.getElementById('um-err');
+  const btn = document.getElementById('um-save-btn');
+  const allowedTabs = Array.from(document.querySelectorAll('#um-tabs-wrap input:checked')).map(function(c){ return c.value; });
+  const allowedBus  = Array.from(document.querySelectorAll('#um-bus-wrap input:checked')).map(function(c){ return c.value; });
+  if (!name) { err.textContent = 'Display name required'; return; }
+  if (!_editingUserId && !email) { err.textContent = 'Email required'; return; }
+  if (!_editingUserId && pwd.length < 8) { err.textContent = 'Password must be at least 8 characters'; return; }
+  err.textContent = ''; btn.disabled = true; btn.textContent = 'Saving…';
+  const op = _editingUserId ? 'update_user' : 'create_user';
+  let payload;
+  if (_editingUserId) {
+    payload = { user_id: _editingUserId, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin };
+    if (pwd) payload.password = pwd;
+  } else {
+    payload = { email: email, password: pwd, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin };
+  }
+  const { ok, data } = await userAdminCall(op, payload);
+  btn.disabled = false; btn.textContent = 'Save';
+  if (!ok || !data.ok) { err.textContent = data.error || 'Save failed'; return; }
+  closeUserModal(); await loadUsersPanel();
+}
+
+async function deleteUser(userId, name) {
+  if (!confirm('Delete user "' + name + '"? This cannot be undone.')) return;
+  const { ok, data } = await userAdminCall('delete_user', { user_id: userId });
+  if (!ok || !data.ok) { alert('Delete failed: ' + (data.error || '?')); return; }
+  await loadUsersPanel();
+}
+
 /* ── Main runner ─────────────────────────────────────────────── */
 async function runAIQuery(skipDisambig) {
   const inp = document.getElementById('ai-q-input');
@@ -3351,6 +3622,7 @@ async function runAIQuery(skipDisambig) {
           messages: AI_HISTORY,
           supabaseUrl: SUPABASE_URL,
           supabaseKey: SUPABASE_ANON_KEY,
+          allowedBus: USER_ACCESS?.allowed_bus || [],
         }),
         signal: ac.signal,
       });
