@@ -4222,8 +4222,7 @@ function showARTab(btn) {
 }
 
 async function loadAR() {
-  const status = document.getElementById('ar-status');
-  status.textContent = 'Loading…'; status.style.color = 'var(--txt3)';
+  const status = document.getElementById('ar-status') || document.getElementById('ar-status-in');
   try {
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/ar_invoices?select=*&order=due_date.asc&limit=3000`,
