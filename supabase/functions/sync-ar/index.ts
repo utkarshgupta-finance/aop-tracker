@@ -108,6 +108,8 @@ async function runSync(notify: (event: string, data: unknown) => void, writeSnap
   // Write end-of-day snapshot only when requested (last cron run of the day)
   if (writeSnapshot) {
     const snapshotDate = new Date().toISOString().slice(0, 10);
+
+    // India snapshot
     const snapshotRows = rows.map(r => ({
       snapshot_date:  snapshotDate,
       entity:         'IN',
@@ -128,9 +130,40 @@ async function runSync(notify: (event: string, data: unknown) => void, writeSnap
       const { error: snapErr } = await supabase
         .from('ar_invoice_snapshots')
         .upsert(snapshotRows.slice(i, i + 500), { onConflict: 'invoice_id,snapshot_date,entity' });
-      if (snapErr) notify('progress', { step: 3, total: 3, message: `Snapshot warning: ${snapErr.message}` });
+      if (snapErr) notify('progress', { step: 3, total: 3, message: `IN snapshot warning: ${snapErr.message}` });
     }
-    notify('progress', { step: 3, total: 3, message: `End-of-day snapshot saved for ${snapshotDate}` });
+
+    // UK snapshot — read current UK rows from ar_invoices and copy them
+    const { data: ukRows, error: ukErr } = await supabase
+      .from('ar_invoices')
+      .select('*')
+      .eq('entity', 'UK');
+    if (ukErr) {
+      notify('progress', { step: 3, total: 3, message: `UK snapshot fetch warning: ${ukErr.message}` });
+    } else if (ukRows && ukRows.length > 0) {
+      const ukSnapshotRows = ukRows.map((r: Record<string, unknown>) => ({
+        snapshot_date:  snapshotDate,
+        entity:         'UK',
+        invoice_id:     r.invoice_id,
+        invoice_number: r.invoice_number,
+        customer_name:  r.customer_name,
+        invoice_date:   r.invoice_date,
+        due_date:       r.due_date,
+        status:         r.status,
+        total:          r.total,
+        balance:        r.balance,
+        currency_code:  r.currency_code,
+        exchange_rate:  r.exchange_rate,
+        total_inr:      r.total_inr,
+        balance_inr:    r.balance_inr,
+      }));
+      const { error: ukSnapErr } = await supabase
+        .from('ar_invoice_snapshots')
+        .upsert(ukSnapshotRows, { onConflict: 'invoice_id,snapshot_date,entity' });
+      if (ukSnapErr) notify('progress', { step: 3, total: 3, message: `UK snapshot warning: ${ukSnapErr.message}` });
+    }
+
+    notify('progress', { step: 3, total: 3, message: `End-of-day snapshot saved for ${snapshotDate} (IN: ${rows.length}, UK: ${ukRows?.length ?? 0})` });
   }
 
   return { synced: rows.length, pages: page, snapshot_written: writeSnapshot };
