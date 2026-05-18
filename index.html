@@ -419,8 +419,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <span class="slabel" style="margin:0">Accounts Receivable</span>
       <button class="modal-csv" id="ar-sync-btn-in" onclick="syncARIndia()" style="margin-left:auto">⟳ Sync India</button>
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
-      <button class="modal-csv" id="ar-sync-btn-uk" onclick="syncARUK()">⟳ Sync UK</button>
-      <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)"></span>
+      <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)">UK: forward QB email to Postmark to sync</span>
     </div>
     <div class="ar-cards">
       <div class="ar-card" id="ar-card-total"></div>
@@ -462,7 +461,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <p class="slabel" style="margin-bottom:.5rem">Open Invoices</p>
     <div class="twrap" id="ar-invoice-wrap">
-      <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or Sync UK to load invoices.</div>
+      <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or forward a UK AR email to Postmark to load invoices.</div>
     </div>
   </div>
   <div id="ai-query" class="pane">
@@ -4212,7 +4211,6 @@ async function qbDisconnect() {
 
 /* ─── AR (Accounts Receivable) ──────────────────────────────── */
 const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
-const AR_SYNC_UK_URL = `${SUPABASE_URL}/functions/v1/sync-qb`;
 let _arInited   = false;
 let _arAllRows  = [];
 
@@ -4425,7 +4423,6 @@ async function _runARSync(url, btnId, statusId, label) {
 }
 
 function syncARIndia() { _runARSync(AR_SYNC_IN_URL, 'ar-sync-btn-in', 'ar-status-in', '⟳ Sync India'); }
-function syncARUK()    { _runARSync(AR_SYNC_UK_URL, 'ar-sync-btn-uk', 'ar-status-uk', '⟳ Sync UK'); }
 
 initAuth();
 </script>
