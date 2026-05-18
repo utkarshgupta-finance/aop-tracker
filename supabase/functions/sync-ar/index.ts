@@ -141,6 +141,31 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Write historical snapshot (idempotent — unique on invoice_id + snapshot_date + entity)
+      const snapshotDate = new Date().toISOString().slice(0, 10);
+      const snapshotRows = rows.map(r => ({
+        snapshot_date:  snapshotDate,
+        entity:         'IN',
+        invoice_id:     r.invoice_id,
+        invoice_number: r.invoice_number,
+        customer_name:  r.customer_name,
+        invoice_date:   r.invoice_date,
+        due_date:       r.due_date,
+        status:         r.status,
+        total:          r.total,
+        balance:        r.balance,
+        currency_code:  r.currency_code,
+        exchange_rate:  r.exchange_rate,
+        total_inr:      r.total_inr,
+        balance_inr:    r.balance_inr,
+      }));
+      for (let i = 0; i < snapshotRows.length; i += 500) {
+        const { error: snapErr } = await supabase
+          .from('ar_invoice_snapshots')
+          .upsert(snapshotRows.slice(i, i + 500), { onConflict: 'invoice_id,snapshot_date,entity' });
+        if (snapErr) send('progress', { step: 3, total: 3, message: `Snapshot warning: ${snapErr.message}` });
+      }
+
       send('done', { synced: rows.length, pages: page });
     } catch (e) {
       send('error', { message: String(e) });
