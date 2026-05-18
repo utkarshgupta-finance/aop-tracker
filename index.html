@@ -4376,18 +4376,15 @@ function showARSubTab(tab) {
 
 async function loadArBuMap() {
   try {
-    // Step 1: fetch bu_master id→name map
-    const buR = await fetch(
-      `${SUPABASE_URL}/rest/v1/bu_master?select=id,name`,
-      { headers: cmrrHdr() }
-    );
+    // Step 1: bu_master id → name
+    const buR = await fetch(`${SUPABASE_URL}/rest/v1/bu_master?select=id,name`, { headers: cmrrHdr() });
     if (!buR.ok) { console.warn('loadArBuMap: bu_master HTTP', buR.status); return; }
     const buById = {};
     for (const b of await buR.json()) buById[b.id] = b.name;
 
-    // Step 2: fetch customer_mrr_lines zoho_name + bu_id, paginated
+    // Step 2: customer_mrr_lines zoho_name → bu_name (paginated)
     const PAGE = 1000;
-    let offset = 0, allRows = [];
+    let offset = 0, cmlRows = [];
     while (true) {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
@@ -4396,18 +4393,36 @@ async function loadArBuMap() {
       );
       if (!r.ok) { console.warn('loadArBuMap: CML HTTP', r.status); break; }
       const pg = await r.json();
-      allRows = allRows.concat(pg);
+      cmlRows = cmlRows.concat(pg);
       if (pg.length < PAGE) break;
       offset += PAGE;
     }
-
-    _arBuMap = {};
-    for (const row of allRows) {
+    const zohoToBu = {};
+    for (const row of cmlRows) {
       const key = (row.zoho_name || '').toLowerCase().trim();
       const bu  = buById[row.bu_id];
-      if (key && bu && !_arBuMap[key]) _arBuMap[key] = bu;
+      if (key && bu && !zohoToBu[key]) zohoToBu[key] = bu;
     }
-    renderAR(); // always re-render now that map is ready
+
+    // Step 3: customer_master maps AR customer_name → zoho_name
+    // billing_name matches Zoho Books (IN); qb_name matches QuickBooks (UK)
+    const cmR = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_master?select=billing_name,qb_name,zoho_name&limit=5000`,
+      { headers: cmrrHdr() }
+    );
+    _arBuMap = { ...zohoToBu }; // fallback: direct zoho_name match still works
+    if (cmR.ok) {
+      for (const row of await cmR.json()) {
+        const zk  = (row.zoho_name    || '').toLowerCase().trim();
+        const bu  = zohoToBu[zk];
+        if (!bu) continue;
+        const bk  = (row.billing_name || '').toLowerCase().trim();
+        const qk  = (row.qb_name      || '').toLowerCase().trim();
+        if (bk && !_arBuMap[bk]) _arBuMap[bk] = bu;
+        if (qk && !_arBuMap[qk]) _arBuMap[qk] = bu;
+      }
+    }
+    renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
 }
 
