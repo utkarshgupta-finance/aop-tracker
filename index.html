@@ -2598,6 +2598,9 @@ function nretRenderFyRolling() {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data loaded.</div>'; return;
   }
 
+  const isPct   = _nretViewMode === '%';
+  const isCount = _nretViewMode === 'count';
+
   // Collect all March months present in data
   const allMonthsSet = new Set();
   for (const zn of Object.keys(zohoMrrByMonth))
@@ -2619,7 +2622,9 @@ function nretRenderFyRolling() {
       .map(nextMonth => {
         const retMrr   = activeCusts.reduce((s, zn) => s + (zohoMrrByMonth[zn][nextMonth] || 0), 0);
         const retCount = activeCusts.filter(zn => (zohoMrrByMonth[zn][nextMonth] || 0) > 0).length;
-        return { month: nextMonth, mrr: retMrr, count: retCount, pct: baseMrr ? retMrr / baseMrr * 100 : 0 };
+        return { month: nextMonth, mrr: retMrr, count: retCount,
+                 mrrPct:   baseMrr ? retMrr / baseMrr * 100 : 0,
+                 cntPct:   activeCusts.length ? retCount / activeCusts.length * 100 : 0 };
       });
     cohorts.push({ baseMonth, baseMrr, count: activeCusts.length, retentions });
   }
@@ -2632,9 +2637,13 @@ function nretRenderFyRolling() {
     const t = Math.min(1, Math.max(0, (pct - 50) / 80));
     return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
   }
+  function cntBg(pct) { return pctBg(pct); }
 
-  // FY label: Mar 2025 → FY26 (Indian FY ends Mar)
-  const fyLabel = ym => `FY${String(parseInt(ym.split('-')[0]) + 1).slice(2)}`;
+  // Mar 2026 → FY26 (Indian FY ends in March; 2026-03 = end of FY26)
+  const fyLabel = ym => `FY${String(parseInt(ym.split('-')[0])).slice(2)}`;
+
+  // Max retention span (years) across all cohorts
+  const maxSpan = Math.max(...cohorts.map(c => c.retentions.length), 0);
 
   const th = (txt, opts = '') =>
     `<th style="padding:.5rem .7rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;white-space:nowrap;font-family:var(--sans);font-size:11px;${opts}">${txt}</th>`;
@@ -2644,9 +2653,16 @@ function nretRenderFyRolling() {
     ${th('#')}`;
   for (const m of marchMonths)
     head += th(`${fyLabel(m)}<br><span style="font-weight:400;font-size:9px;color:#888">${nretFmtM(m)}</span>`);
-  head += th('1yr%', 'background:#e8edf5') + th('2yr%', 'background:#e8edf5') + th('3yr%', 'background:#e8edf5') + '</tr>';
+  // Dynamic Nyr% summary columns — always show % retention, visually separated
+  for (let yr = 1; yr <= maxSpan; yr++) {
+    const sep = yr === 1 ? 'background:#e8edf5;border-left:2px solid #aaa' : 'background:#e8edf5';
+    head += th(`${yr}yr%`, sep);
+  }
+  head += '</tr>';
 
   const tdBase = 'padding:.42rem .7rem;text-align:right;font-size:10.5px';
+  const tdSep  = `${tdBase};border-left:2px solid #aaa`;
+
   let body = '<tbody>';
   for (const cohort of cohorts) {
     let tr = `<tr>
@@ -2659,26 +2675,36 @@ function nretRenderFyRolling() {
       if (mm < cohort.baseMonth) {
         tr += `<td style="${tdBase};color:#e4e8ee">·</td>`;
       } else if (mm === cohort.baseMonth) {
-        tr += `<td style="${tdBase};font-weight:600;background:#e8edf5">${(cohort.baseMrr/1e5).toFixed(1)}L</td>`;
+        // Base cell — value depends on view mode
+        const baseVal = isPct ? '100%' : isCount ? cohort.count : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
+        tr += `<td style="${tdBase};font-weight:600;background:#e8edf5">${baseVal}</td>`;
       } else {
         const ret = cohort.retentions.find(r => r.month === mm);
         if (ret) {
-          tr += `<td style="${tdBase};${pctBg(ret.pct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
+          if (isPct) {
+            tr += `<td style="${tdBase};${pctBg(ret.mrrPct)}">${ret.mrrPct.toFixed(0)}%</td>`;
+          } else if (isCount) {
+            tr += `<td style="${tdBase};${cntBg(ret.cntPct)}">${ret.count}<br><span style="font-size:9px;opacity:.8">${ret.cntPct.toFixed(0)}%</span></td>`;
+          } else {
+            tr += `<td style="${tdBase};${pctBg(ret.mrrPct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
+          }
         } else {
           tr += `<td style="${tdBase};color:#e4e8ee">·</td>`;
         }
       }
     }
 
-    // 1yr / 2yr / 3yr % columns — anchored by exact year offset
-    for (let yr = 1; yr <= 3; yr++) {
-      const baseYear   = parseInt(cohort.baseMonth.split('-')[0]);
+    // Nyr% summary columns — always % retention (MRR-based), anchored by exact year offset
+    for (let yr = 1; yr <= maxSpan; yr++) {
+      const baseYear    = parseInt(cohort.baseMonth.split('-')[0]);
       const targetMonth = `${baseYear + yr}-03`;
       const ret = cohort.retentions.find(r => r.month === targetMonth);
+      const s = yr === 1 ? tdSep : tdBase;
       if (ret) {
-        tr += `<td style="${tdBase};${pctBg(ret.pct)}">${ret.pct.toFixed(0)}%</td>`;
+        const pct = isCount ? ret.cntPct : ret.mrrPct;
+        tr += `<td style="${s};${pctBg(pct)}">${pct.toFixed(0)}%</td>`;
       } else {
-        tr += `<td style="${tdBase};color:#ccc">—</td>`;
+        tr += `<td style="${s};color:#ccc">—</td>`;
       }
     }
 
