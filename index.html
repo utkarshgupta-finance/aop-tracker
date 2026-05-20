@@ -201,9 +201,16 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-fy-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.75rem}
 /* ── Net Retention tab ─────────────────────────────────────── */
 .nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
-.nret-selwrap{display:flex;flex-direction:column;gap:.35rem}
+.nret-selwrap{display:flex;flex-direction:column;gap:.35rem;position:relative}
 .nret-sel{padding:.4rem .75rem;font-size:12.5px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:5px;color:var(--txt);background:#fff;outline:none;cursor:pointer;min-width:170px}
 .nret-sel:focus{border-color:var(--navy3);box-shadow:0 0 0 2px rgba(42,95,158,.15)}
+.nret-multisel-btn{display:flex;justify-content:space-between;align-items:center;gap:.4rem;text-align:left;width:100%}
+.nret-multisel-btn:hover{border-color:var(--navy3)}
+.nret-multisel-panel{position:absolute;z-index:400;top:calc(100% + 3px);left:0;min-width:200px;background:#fff;border:1px solid var(--brd2);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.14);padding:.35rem 0;max-height:260px;overflow-y:auto}
+.nret-multisel-all{display:flex;align-items:center;gap:.55rem;padding:.32rem .85rem;font-size:12px;font-family:var(--sans);color:var(--txt);cursor:pointer;border-bottom:1px solid #e5e7eb;margin-bottom:.2rem;user-select:none}
+.nret-multisel-opt{display:flex;align-items:center;gap:.55rem;padding:.28rem .85rem;font-size:12px;font-family:var(--sans);color:var(--txt);cursor:pointer;user-select:none}
+.nret-multisel-opt:hover,.nret-multisel-all:hover{background:#f3f4f6}
+.nret-multisel-opt input,.nret-multisel-all input{cursor:pointer;accent-color:var(--navy2)}
 .nret-status{font-size:11px;font-family:var(--mono);color:var(--txt3);padding-bottom:.5rem}
 .nret-gl{position:sticky;left:0;z-index:2;background:#f5f5f5;font-family:var(--sans);font-size:11px;font-weight:500;padding:.38rem .65rem;white-space:nowrap;border-right:2px solid #bbb;min-width:68px}
 .nret-tot-gl{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .65rem;white-space:nowrap;border-right:2px solid #aaa}
@@ -438,9 +445,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <div class="nret-selwrap">
         <div class="flabel">BU</div>
-        <select id="nret-bu" class="nret-sel" onchange="nretApply()">
-          <option value="">All BUs</option>
-        </select>
+        <button id="nret-bu-btn" class="nret-sel nret-multisel-btn" onclick="nretBuToggle(event)">
+          <span id="nret-bu-label">All BUs</span><span style="font-size:9px;color:#aaa;flex-shrink:0">▾</span>
+        </button>
+        <div id="nret-bu-panel" class="nret-multisel-panel" style="display:none">
+          <label class="nret-multisel-all"><input type="checkbox" id="nret-bu-all" checked onchange="nretBuAllChange()"> All BUs</label>
+          <div id="nret-bu-options"></div>
+        </div>
       </div>
       <div class="nret-togwrap">
         <button id="nret-tog-l" class="nret-tog active" onclick="nretSetView('L')">₹ Lakhs</button>
@@ -2258,6 +2269,7 @@ let _nretInited  = false;
 let _nretLoading = false;
 let _nretViewMode  = 'L';      // 'L' = Lakhs, '%' = % of go-live month, 'count' = customer count
 let _nretTableMode = 'cohort'; // 'cohort' | 'rolling'
+let _nretBuSelected = new Set(); // empty = all BUs
 let _nretMatrix    = null;
 let _nretMrrMonths = null;
 let _nretAllLines  = [];       // [{id, go_live_date, segment_master:{name}, bu_master:{name}}]
@@ -2270,6 +2282,41 @@ async function showNretTab(btn) {
   showTab('nret', btn);
   if (!_nretInited) { _nretInited = true; await nretInit(); }
 }
+
+function nretBuToggle(evt) {
+  evt.stopPropagation();
+  const p = document.getElementById('nret-bu-panel');
+  p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+function nretBuAllChange() {
+  if (document.getElementById('nret-bu-all').checked) {
+    _nretBuSelected.clear();
+    document.querySelectorAll('.nret-bu-opt').forEach(cb => cb.checked = false);
+    nretUpdateBuLabel();
+    nretApply();
+  }
+}
+function nretBuOptChange(bu, checked) {
+  if (checked) _nretBuSelected.add(bu);
+  else         _nretBuSelected.delete(bu);
+  if (_nretBuSelected.size === 0) document.getElementById('nret-bu-all').checked = true;
+  else                             document.getElementById('nret-bu-all').checked = false;
+  nretUpdateBuLabel();
+  nretApply();
+}
+function nretUpdateBuLabel() {
+  const lbl = document.getElementById('nret-bu-label');
+  if (!lbl) return;
+  if (_nretBuSelected.size === 0)      lbl.textContent = 'All BUs';
+  else if (_nretBuSelected.size === 1) lbl.textContent = [..._nretBuSelected][0];
+  else                                  lbl.textContent = `${_nretBuSelected.size} BUs selected`;
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#nret-bu-btn') && !e.target.closest('#nret-bu-panel')) {
+    const p = document.getElementById('nret-bu-panel');
+    if (p) p.style.display = 'none';
+  }
+});
 
 function nretSetView(mode) {
   _nretViewMode = mode;
@@ -2321,8 +2368,11 @@ async function nretInit() {
   const bus  = [...new Set(_nretAllLines.map(l => l.bu_master?.name).filter(Boolean))].sort();
   const segSel = document.getElementById('nret-seg');
   segs.forEach(s => { const o = document.createElement('option'); o.value = o.textContent = s; segSel.appendChild(o); });
-  const buSel = document.getElementById('nret-bu');
-  bus.forEach(b => { const o = document.createElement('option'); o.value = o.textContent = b; buSel.appendChild(o); });
+  const buOpts = document.getElementById('nret-bu-options');
+  if (buOpts) buOpts.innerHTML = bus.map(b => {
+    const safe = b.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    return `<label class="nret-multisel-opt"><input type="checkbox" class="nret-bu-opt" ${_nretBuSelected.has(b)?'checked':''} onchange="nretBuOptChange('${safe}',this.checked)"> ${safe}</label>`;
+  }).join('');
   status.textContent = '';
   await nretLoad();
 }
@@ -2333,13 +2383,12 @@ async function nretLoad() {
   if (_nretLoading) return;
   _nretLoading = true;
   const segFilter = document.getElementById('nret-seg').value;
-  const buFilter  = document.getElementById('nret-bu').value;
   const wrap   = document.getElementById('nret-wrap');
   const status = document.getElementById('nret-status');
 
   const lines = _nretAllLines.filter(l =>
     (!segFilter || l.segment_master?.name === segFilter) &&
-    (!buFilter  || l.bu_master?.name      === buFilter)
+    (_nretBuSelected.size === 0 || _nretBuSelected.has(l.bu_master?.name))
   );
   if (!lines.length) {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data for selected filters.</div>';
@@ -2551,7 +2600,8 @@ function nretRenderTable(matrix, mrrMonthSet) {
   let body = '<tbody>';
   for (const gm of goLiveMonths) {
     let rowTot = 0;
-    let tr = `<tr><td class="nret-gl">${nretFmtM(gm)}</td>`;
+    const baseMm = mrrMonths.find(mm => mm >= gm && (matrix[gm]?.[mm] || 0) > 0) || gm;
+    let tr = `<tr><td class="nret-gl" data-nret-cell="1" style="cursor:pointer" onmouseenter="nretCellEnter(event,'cohort','${gm}','${baseMm}')" onmouseleave="nretCellLeave()" onclick="nretCellClick(event,'cohort','${gm}','${baseMm}')">${nretFmtM(gm)}</td>`;
     for (const mm of mrrMonths) {
       const ca = `data-nret-cell="1" onmouseenter="nretCellEnter(event,'cohort','${gm}','${mm}')" onmouseleave="nretCellLeave()" onclick="nretCellClick(event,'cohort','${gm}','${mm}')" style="cursor:pointer;`;
       if (mm < gm) {
@@ -2697,7 +2747,7 @@ function nretRenderFyRolling() {
       ? `${cohort.count}<br><span style="font-size:9px;color:#aaa" title="Active in base March">(${cohort.baseCount})</span>`
       : cohort.count;
     let tr = `<tr>
-      <td style="${td};text-align:left;font-weight:600;font-family:var(--sans);font-size:11px;background:#f5f5f5;border-right:2px solid #bbb;min-width:80px">
+      <td data-nret-cell="1" style="${td};cursor:pointer;text-align:left;font-weight:600;font-family:var(--sans);font-size:11px;background:#f5f5f5;border-right:2px solid #bbb;min-width:80px" onmouseenter="nretCellEnter(event,'fyrolling','${cohort.fy}','${cohort.baseMonth}')" onmouseleave="nretCellLeave()" onclick="nretCellClick(event,'fyrolling','${cohort.fy}','${cohort.baseMonth}')">
         ${fyLabel(cohort.baseMonth)}<br><span style="font-weight:400;color:#888;font-size:9px">${nretFmtM(cohort.baseMonth)}</span>
       </td>
       <td style="${td};color:#555;line-height:1.3">${countCell}</td>`;
