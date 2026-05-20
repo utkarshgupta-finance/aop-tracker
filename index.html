@@ -2246,6 +2246,7 @@ let _nretMrrMonths = null;
 let _nretAllLines  = [];       // [{id, go_live_date, segment_master:{name}, bu_master:{name}}]
 let _nretCountMatrix = null;   // { go_live_month: { mrr_month: count } }
 let _nretZohoMrr    = null;    // { zoho_name: { mrr_month: total_mrr } } for FY rolling
+let _nretZohoGoLive = null;    // { zoho_name: earliest_go_live_month } for FY cohort grouping
 
 async function showNretTab(btn) {
   showTab('nret', btn);
@@ -2457,6 +2458,7 @@ async function nretLoad() {
 
     _nretCountMatrix = countMatrix;
     _nretZohoMrr    = zohoMrrByMonth;
+    _nretZohoGoLive = zohoGoLive;
     _nretMatrix    = matrix;
     _nretMrrMonths = mrrMonthSet;
     status.textContent = '';
@@ -2473,6 +2475,17 @@ function nretFmtM(ym) {
   return new Date(+y, +m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
 }
 
+// Shared retention heat-map: classy red→amber→green palette
+function nretRetBg(pct) {
+  if (pct >= 110) return 'background:#14532d;color:#dcfce7';
+  if (pct >= 100) return 'background:#166534;color:#f0fdf4';
+  if (pct >= 90)  return 'background:#15803d;color:#fff';
+  if (pct >= 80)  return 'background:#854d0e;color:#fef9c3';
+  if (pct >= 65)  return 'background:#9a3412;color:#ffedd5';
+  if (pct >= 50)  return 'background:#991b1b;color:#fee2e2';
+  return                  'background:#7f1d1d;color:#fecaca';
+}
+
 function nretRenderTable(matrix, mrrMonthSet) {
   const wrap        = document.getElementById('nret-wrap');
   const goLiveMonths = Object.keys(matrix).sort();
@@ -2484,32 +2497,12 @@ function nretRenderTable(matrix, mrrMonthSet) {
   const isPct   = _nretViewMode === '%';
   const isCount = _nretViewMode === 'count';
 
-  // Lakhs heat-map (blue scale, sqrt-normalised)
-  let maxVal = 0;
-  if (!isPct && !isCount) {
-    for (const gm of goLiveMonths)
-      for (const mm of mrrMonths)
-        maxVal = Math.max(maxVal, matrix[gm]?.[mm] || 0);
-  }
-  function heatBgL(val) {
-    if (!val) return '';
-    const t = Math.sqrt(val / maxVal);
-    const a = 0.15 + t * 0.75;
-    return `background:rgba(${Math.round(42+(15-42)*t)},${Math.round(95+(35-95)*t)},${Math.round(158+(64-158)*t)},${a.toFixed(2)});color:${t > 0.55 ? '#fff' : '#0f2340'}`;
-  }
-
-  // % heat-map (red→green, base=go-live month MRR)
+  // Row base MRR computed for all modes (used for color in Lakhs mode too)
   const rowBase = {};
-  if (isPct) {
-    for (const gm of goLiveMonths) {
-      for (const mm of mrrMonths) {
-        if (mm >= gm && matrix[gm]?.[mm]) { rowBase[gm] = matrix[gm][mm]; break; }
-      }
+  for (const gm of goLiveMonths) {
+    for (const mm of mrrMonths) {
+      if (mm >= gm && matrix[gm]?.[mm]) { rowBase[gm] = matrix[gm][mm]; break; }
     }
-  }
-  function heatBgPct(pct) {
-    const t = Math.min(1, Math.max(0, (pct - 50) / 80)); // 50%→0, 130%+→1
-    return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
   }
 
   // Count mode — base = first month count per cohort
@@ -2521,17 +2514,12 @@ function nretRenderTable(matrix, mrrMonthSet) {
       }
     }
   }
-  function heatBgCount(cnt, base) {
-    const pct = base ? cnt / base * 100 : 0;
-    const t = Math.min(1, Math.max(0, (pct - 20) / 80)); // 20%→red, 100%→green
-    return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
-  }
 
-  const lastColLabel = isPct ? 'Base' : isCount ? 'Base #' : 'Total';
+  const lastColLabel = isPct ? 'Base MRR' : isCount ? 'Cohort #' : 'Base MRR';
   let thead = `<tr><th class="nret-hgl">Go-Live</th>`;
   for (const mm of mrrMonths)
     thead += `<th style="min-width:54px;text-align:right;font-size:10px;padding:.38rem .4rem">${nretFmtM(mm)}</th>`;
-  thead += `<th style="min-width:64px;text-align:right;background:#f4f6f9;padding:.38rem .6rem;font-size:10px">${lastColLabel}</th></tr>`;
+  thead += `<th style="min-width:72px;text-align:right;background:#f4f6f9;padding:.38rem .6rem;font-size:10px;border-left:1px solid #dde2ea">${lastColLabel}</th></tr>`;
 
   const colTot = {}; let grandTotal = 0;
   let body = '<tbody>';
@@ -2544,7 +2532,9 @@ function nretRenderTable(matrix, mrrMonthSet) {
       } else if (isCount) {
         const cnt = _nretCountMatrix?.[gm]?.[mm] || 0;
         if (cnt) {
-          tr += `<td class="nret-cell" style="${heatBgCount(cnt, rowBaseCount[gm])}">${cnt}</td>`;
+          const base = rowBaseCount[gm];
+          const pct  = base ? cnt / base * 100 : null;
+          tr += `<td class="nret-cell" style="${pct != null ? nretRetBg(pct) : ''}">${cnt}</td>`;
         } else {
           tr += `<td class="nret-empty">·</td>`;
         }
@@ -2554,27 +2544,25 @@ function nretRenderTable(matrix, mrrMonthSet) {
           rowTot += val;
           colTot[mm] = (colTot[mm] || 0) + val;
           grandTotal += val;
+          const base = rowBase[gm];
+          const pct  = base ? val / base * 100 : null;
           if (isPct) {
-            const base = rowBase[gm];
-            const pct  = base ? val / base * 100 : null;
             tr += pct != null
-              ? `<td class="nret-cell" style="${heatBgPct(pct)}">${pct.toFixed(0)}%</td>`
+              ? `<td class="nret-cell" style="${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`
               : `<td class="nret-cell">—</td>`;
           } else {
-            tr += `<td class="nret-cell" style="${heatBgL(val)}">${(val/1e5).toFixed(1)}L</td>`;
+            tr += `<td class="nret-cell" style="${pct != null ? nretRetBg(pct) : ''}">${(val/1e5).toFixed(1)}L</td>`;
           }
         } else {
           tr += `<td class="nret-empty">·</td>`;
         }
       }
     }
-    if (isPct) {
-      const base = rowBase[gm];
-      tr += `<td class="nret-rowtot">${base ? (base/1e5).toFixed(1)+'L' : ''}</td></tr>`;
-    } else if (isCount) {
-      tr += `<td class="nret-rowtot">${rowBaseCount[gm] || ''}</td></tr>`;
+    const base = rowBase[gm];
+    if (isCount) {
+      tr += `<td class="nret-rowtot" style="border-left:1px solid #dde2ea">${rowBaseCount[gm] || ''}</td></tr>`;
     } else {
-      tr += `<td class="nret-rowtot">${rowTot ? (rowTot/1e5).toFixed(1)+'L' : ''}</td></tr>`;
+      tr += `<td class="nret-rowtot" style="border-left:1px solid #dde2ea">${base ? (base/1e5).toFixed(1)+'L' : ''}</td></tr>`;
     }
     body += tr;
   }
@@ -2593,8 +2581,7 @@ function nretRenderTable(matrix, mrrMonthSet) {
 
 function nretRenderFyRolling() {
   const wrap = document.getElementById('nret-wrap');
-  const zohoMrrByMonth = _nretZohoMrr;
-  if (!zohoMrrByMonth) {
+  if (!_nretZohoMrr || !_nretZohoGoLive) {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data loaded.</div>'; return;
   }
 
@@ -2603,108 +2590,120 @@ function nretRenderFyRolling() {
 
   // Collect all March months present in data
   const allMonthsSet = new Set();
-  for (const zn of Object.keys(zohoMrrByMonth))
-    for (const mm of Object.keys(zohoMrrByMonth[zn])) allMonthsSet.add(mm);
+  for (const zn of Object.keys(_nretZohoMrr))
+    for (const mm of Object.keys(_nretZohoMrr[zn])) allMonthsSet.add(mm);
   const marchMonths = [...allMonthsSet].sort().filter(m => m.endsWith('-03'));
 
   if (marchMonths.length < 2) {
-    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Need at least 2 March months of data for FY Rolling NRR.</div>'; return;
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Need at least 2 March months of data.</div>'; return;
   }
 
-  // Build cohort for each base March
+  // Group zoho_names by FY of their earliest go-live (Apr–Mar)
+  // FY year = year of the March end: Apr 2025–Mar 2026 = FY26 (year 2026)
+  function goLiveFY(ym) {
+    const [y, m] = ym.split('-').map(Number);
+    return m >= 4 ? y + 1 : y;
+  }
+
+  const fyToZohos = {};
+  for (const [zn, gl] of Object.entries(_nretZohoGoLive)) {
+    if (!_nretZohoMrr[zn]) continue;
+    const fy = goLiveFY(gl);
+    if (!fyToZohos[fy]) fyToZohos[fy] = [];
+    fyToZohos[fy].push(zn);
+  }
+
+  // Build cohorts: one per FY, base = March of that FY year
   const cohorts = [];
-  for (const baseMonth of marchMonths) {
-    const activeCusts = Object.keys(zohoMrrByMonth).filter(zn => (zohoMrrByMonth[zn][baseMonth] || 0) > 0);
-    if (!activeCusts.length) continue;
-    const baseMrr = activeCusts.reduce((s, zn) => s + (zohoMrrByMonth[zn][baseMonth] || 0), 0);
+  for (const [fyStr, custs] of Object.entries(fyToZohos).sort()) {
+    const fyYear    = parseInt(fyStr);
+    const baseMonth = `${fyYear}-03`;
+    const baseMrr   = custs.reduce((s, zn) => s + (_nretZohoMrr[zn]?.[baseMonth] || 0), 0);
     const retentions = marchMonths
       .filter(m => m > baseMonth)
       .map(nextMonth => {
-        const retMrr   = activeCusts.reduce((s, zn) => s + (zohoMrrByMonth[zn][nextMonth] || 0), 0);
-        const retCount = activeCusts.filter(zn => (zohoMrrByMonth[zn][nextMonth] || 0) > 0).length;
+        const retMrr   = custs.reduce((s, zn) => s + (_nretZohoMrr[zn]?.[nextMonth] || 0), 0);
+        const retCount = custs.filter(zn => (_nretZohoMrr[zn]?.[nextMonth] || 0) > 0).length;
         return { month: nextMonth, mrr: retMrr, count: retCount,
-                 mrrPct:   baseMrr ? retMrr / baseMrr * 100 : 0,
-                 cntPct:   activeCusts.length ? retCount / activeCusts.length * 100 : 0 };
+                 mrrPct: baseMrr ? retMrr / baseMrr * 100 : 0,
+                 cntPct: custs.length ? retCount / custs.length * 100 : 0 };
       });
-    cohorts.push({ baseMonth, baseMrr, count: activeCusts.length, retentions });
+    cohorts.push({ fy: fyYear, baseMonth, baseMrr, count: custs.length, retentions });
   }
 
   if (!cohorts.length) {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No cohort data.</div>'; return;
   }
 
-  function pctBg(pct) {
-    const t = Math.min(1, Math.max(0, (pct - 50) / 80));
-    return `background:rgba(${Math.round(220-t*190)},${Math.round(50+t*150)},50,0.82);color:#fff`;
-  }
-  function cntBg(pct) { return pctBg(pct); }
-
   // Mar 2026 → FY26 (Indian FY ends in March; 2026-03 = end of FY26)
   const fyLabel = ym => `FY${String(parseInt(ym.split('-')[0])).slice(2)}`;
 
-  // Max retention span (years) across all cohorts
+  // Max retention span across all cohorts — drives dynamic Nyr% columns
   const maxSpan = Math.max(...cohorts.map(c => c.retentions.length), 0);
 
-  const th = (txt, opts = '') =>
-    `<th style="padding:.5rem .7rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;white-space:nowrap;font-family:var(--sans);font-size:11px;${opts}">${txt}</th>`;
+  const thS = (opts = '') =>
+    `padding:.5rem .65rem;text-align:right;background:#f0f0f0;border-bottom:2px solid #bbb;white-space:nowrap;font-family:var(--sans);font-size:11px;${opts}`;
+  const th = (txt, opts = '') => `<th style="${thS(opts)}">${txt}</th>`;
+
+  // Dedicated separator column
+  const SEP_TH = `<th style="padding:0;width:12px;background:linear-gradient(to right,#c5cfe8,#8a9abf);border-bottom:2px solid #bbb;border-left:1px solid #aaa;border-right:1px solid #aaa"></th>`;
+  const SEP_TD = `<td style="padding:0;width:12px;background:linear-gradient(to right,#c5cfe8,#8a9abf);border-left:1px solid #aaa;border-right:1px solid #aaa"></td>`;
 
   let head = `<tr>
     ${th('FY Cohort', 'text-align:left;min-width:90px')}
     ${th('#')}`;
   for (const m of marchMonths)
     head += th(`${fyLabel(m)}<br><span style="font-weight:400;font-size:9px;color:#888">${nretFmtM(m)}</span>`);
-  // Dynamic Nyr% summary columns — always show % retention, visually separated
-  for (let yr = 1; yr <= maxSpan; yr++) {
-    const sep = yr === 1 ? 'background:#e8edf5;border-left:2px solid #aaa' : 'background:#e8edf5';
-    head += th(`${yr}yr%`, sep);
-  }
+  head += SEP_TH;
+  for (let yr = 1; yr <= maxSpan; yr++)
+    head += th(`${yr}yr%`, 'background:#e8edf5');
   head += '</tr>';
 
-  const tdBase = 'padding:.42rem .7rem;text-align:right;font-size:10.5px';
-  const tdSep  = `${tdBase};border-left:2px solid #aaa`;
+  const td = 'padding:.42rem .65rem;text-align:right;font-size:10.5px';
 
   let body = '<tbody>';
   for (const cohort of cohorts) {
     let tr = `<tr>
-      <td style="${tdBase};text-align:left;font-weight:600;font-family:var(--sans);background:#f5f5f5;border-right:2px solid #bbb">
+      <td style="${td};text-align:left;font-weight:600;font-family:var(--sans);font-size:11px;background:#f5f5f5;border-right:2px solid #bbb;min-width:80px">
         ${fyLabel(cohort.baseMonth)}<br><span style="font-weight:400;color:#888;font-size:9px">${nretFmtM(cohort.baseMonth)}</span>
       </td>
-      <td style="${tdBase};color:#555">${cohort.count}</td>`;
+      <td style="${td};color:#555">${cohort.count}</td>`;
 
     for (const mm of marchMonths) {
       if (mm < cohort.baseMonth) {
-        tr += `<td style="${tdBase};color:#e4e8ee">·</td>`;
+        tr += `<td style="${td};color:#e4e8ee">·</td>`;
       } else if (mm === cohort.baseMonth) {
-        // Base cell — value depends on view mode
         const baseVal = isPct ? '100%' : isCount ? cohort.count : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
-        tr += `<td style="${tdBase};font-weight:600;background:#e8edf5">${baseVal}</td>`;
+        tr += `<td style="${td};font-weight:700;background:#dbeafe;color:#1e3a5f">${baseVal}</td>`;
       } else {
         const ret = cohort.retentions.find(r => r.month === mm);
         if (ret) {
+          const pct = isCount ? ret.cntPct : ret.mrrPct;
           if (isPct) {
-            tr += `<td style="${tdBase};${pctBg(ret.mrrPct)}">${ret.mrrPct.toFixed(0)}%</td>`;
+            tr += `<td style="${td};${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`;
           } else if (isCount) {
-            tr += `<td style="${tdBase};${cntBg(ret.cntPct)}">${ret.count}<br><span style="font-size:9px;opacity:.8">${ret.cntPct.toFixed(0)}%</span></td>`;
+            tr += `<td style="${td};${nretRetBg(pct)}">${ret.count}<br><span style="font-size:9px;opacity:.85">${pct.toFixed(0)}%</span></td>`;
           } else {
-            tr += `<td style="${tdBase};${pctBg(ret.mrrPct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
+            tr += `<td style="${td};${nretRetBg(pct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
           }
         } else {
-          tr += `<td style="${tdBase};color:#e4e8ee">·</td>`;
+          tr += `<td style="${td};color:#e4e8ee">·</td>`;
         }
       }
     }
 
-    // Nyr% summary columns — always % retention (MRR-based), anchored by exact year offset
+    // Separator
+    tr += SEP_TD;
+
+    // Nyr% summary — anchored by exact year offset, % coloured by nretRetBg
     for (let yr = 1; yr <= maxSpan; yr++) {
-      const baseYear    = parseInt(cohort.baseMonth.split('-')[0]);
-      const targetMonth = `${baseYear + yr}-03`;
+      const targetMonth = `${cohort.fy + yr}-03`;
       const ret = cohort.retentions.find(r => r.month === targetMonth);
-      const s = yr === 1 ? tdSep : tdBase;
       if (ret) {
         const pct = isCount ? ret.cntPct : ret.mrrPct;
-        tr += `<td style="${s};${pctBg(pct)}">${pct.toFixed(0)}%</td>`;
+        tr += `<td style="${td};${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`;
       } else {
-        tr += `<td style="${s};color:#ccc">—</td>`;
+        tr += `<td style="${td};color:#ccc">—</td>`;
       }
     }
 
