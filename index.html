@@ -4615,14 +4615,20 @@ async function loadArBuMap() {
   if (_arBuMapLoading || Object.keys(_arBuMap).length > 0) return;
   _arBuMapLoading = true;
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/ar_customer_bu_map?select=customer_key,bu_name&limit=5000`,
-      { headers: cmrrHdr() }
-    );
-    if (!r.ok) { console.warn('loadArBuMap: HTTP', r.status); return; }
-    const rows = await r.json();
-    for (const row of rows) {
-      if (row.customer_key && row.bu_name) _arBuMap[row.customer_key] = row.bu_name;
+    const PAGE = 1000;
+    let offset = 0;
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_customer_bu_map?select=customer_key,bu_name&order=customer_key&limit=${PAGE}&offset=${offset}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) { console.warn('loadArBuMap: HTTP', r.status); break; }
+      const rows = await r.json();
+      for (const row of rows) {
+        if (row.customer_key && row.bu_name) _arBuMap[row.customer_key] = row.bu_name;
+      }
+      if (rows.length < PAGE) break;
+      offset += PAGE;
     }
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
