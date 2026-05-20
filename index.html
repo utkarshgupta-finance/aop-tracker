@@ -494,6 +494,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="ar-subtabs">
       <button class="ar-stbtn active" id="ar-st-invoices" onclick="showARSubTab('invoices')">Open Invoices</button>
       <button class="ar-stbtn" id="ar-st-aging" onclick="showARSubTab('aging')">AR Aging</button>
+      <button class="ar-stbtn" id="ar-st-summary" onclick="showARSubTab('summary')">AR Summary</button>
     </div>
     <!-- Open Invoices pane (default) -->
     <div id="ar-pane-invoices">
@@ -501,7 +502,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or forward a UK AR email to Postmark to load invoices.</div>
       </div>
     </div>
-    <!-- AR Aging pane (hidden by default) -->
+    <!-- AR Summary pane -->
+    <div id="ar-pane-summary" style="display:none">
+      <div class="twrap" id="ar-summary-wrap"></div>
+    </div>
+    <!-- AR Aging pane -->
     <div id="ar-pane-aging" style="display:none">
       <div class="twrap" style="margin-bottom:1rem;max-width:600px">
         <table style="width:100%;min-width:380px;border-collapse:collapse">
@@ -2619,6 +2624,8 @@ function nretRenderFyRolling() {
     const fyYear    = parseInt(fyStr);
     const baseMonth = `${fyYear}-03`;
     const baseMrr   = custs.reduce((s, zn) => s + (_nretZohoMrr[zn]?.[baseMonth] || 0), 0);
+    // baseCount: go-lives with MRR > 0 in base March (analogous to baseMrr for ₹L mode)
+    const baseCount = custs.filter(zn => (_nretZohoMrr[zn]?.[baseMonth] || 0) > 0).length;
     const retentions = marchMonths
       .filter(m => m > baseMonth)
       .map(nextMonth => {
@@ -2626,9 +2633,9 @@ function nretRenderFyRolling() {
         const retCount = custs.filter(zn => (_nretZohoMrr[zn]?.[nextMonth] || 0) > 0).length;
         return { month: nextMonth, mrr: retMrr, count: retCount,
                  mrrPct: baseMrr ? retMrr / baseMrr * 100 : 0,
-                 cntPct: custs.length ? retCount / custs.length * 100 : 0 };
+                 cntPct: baseCount ? retCount / baseCount * 100 : 0 };
       });
-    cohorts.push({ fy: fyYear, baseMonth, baseMrr, count: custs.length, retentions });
+    cohorts.push({ fy: fyYear, baseMonth, baseMrr, count: custs.length, baseCount, retentions });
   }
 
   if (!cohorts.length) {
@@ -2651,7 +2658,7 @@ function nretRenderFyRolling() {
 
   let head = `<tr>
     ${th('FY Cohort', 'text-align:left;min-width:90px')}
-    ${th('#')}`;
+    ${th('Go-lives<br><span style="font-weight:400;font-size:9px">(active)</span>', 'min-width:52px')}`;
   for (const m of marchMonths)
     head += th(`${fyLabel(m)}<br><span style="font-weight:400;font-size:9px;color:#888">${nretFmtM(m)}</span>`);
   head += SEP_TH;
@@ -2663,17 +2670,24 @@ function nretRenderFyRolling() {
 
   let body = '<tbody>';
   for (const cohort of cohorts) {
+    // # column: go-lives total | tooltip shows baseCount (active in base March)
+    const countCell = isCount
+      ? `${cohort.count}<br><span style="font-size:9px;color:#aaa" title="Active in base March">(${cohort.baseCount})</span>`
+      : cohort.count;
     let tr = `<tr>
       <td style="${td};text-align:left;font-weight:600;font-family:var(--sans);font-size:11px;background:#f5f5f5;border-right:2px solid #bbb;min-width:80px">
         ${fyLabel(cohort.baseMonth)}<br><span style="font-weight:400;color:#888;font-size:9px">${nretFmtM(cohort.baseMonth)}</span>
       </td>
-      <td style="${td};color:#555">${cohort.count}</td>`;
+      <td style="${td};color:#555;line-height:1.3">${countCell}</td>`;
 
     for (const mm of marchMonths) {
       if (mm < cohort.baseMonth) {
         tr += `<td style="${td};color:#e4e8ee">·</td>`;
       } else if (mm === cohort.baseMonth) {
-        const baseVal = isPct ? '100%' : isCount ? cohort.count : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
+        // Base cell is analogous across modes: L=baseMrr, %=100%, count=baseCount
+        const baseVal = isPct ? '100%'
+                      : isCount ? cohort.baseCount
+                      : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
         tr += `<td style="${td};font-weight:700;background:#dbeafe;color:#1e3a5f">${baseVal}</td>`;
       } else {
         const ret = cohort.retentions.find(r => r.month === mm);
@@ -4516,8 +4530,10 @@ function showARSubTab(tab) {
   _arSubTab = tab;
   document.getElementById('ar-pane-invoices').style.display = tab === 'invoices' ? '' : 'none';
   document.getElementById('ar-pane-aging').style.display    = tab === 'aging'    ? '' : 'none';
+  document.getElementById('ar-pane-summary').style.display  = tab === 'summary'  ? '' : 'none';
   document.getElementById('ar-st-invoices').classList.toggle('active', tab === 'invoices');
   document.getElementById('ar-st-aging').classList.toggle('active', tab === 'aging');
+  document.getElementById('ar-st-summary').classList.toggle('active', tab === 'summary');
 }
 
 async function loadArBuMap() {
@@ -4766,6 +4782,7 @@ function renderAR() {
   renderARSummary(rows);
   renderARAgingTable(rows);
   renderARInvoiceList(rows);
+  renderARBuSummary(rows);
 }
 
 function renderARSummary(rows) {
@@ -4814,6 +4831,82 @@ function renderARAgingTable(rows) {
       <td class="r">${count}</td><td class="r">${cr(balance)}</td><td class="r" style="color:#94a3b8">${pct(balance)}</td></tr>`;
   }).join('') + `<tr><td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td></tr>`;
   document.getElementById('ar-aging-body').innerHTML = trs;
+}
+
+function renderARBuSummary(rows) {
+  const wrap = document.getElementById('ar-summary-wrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>'; return;
+  }
+
+  // Group by BU
+  const buMap = {}; // bu_name → { invoices, balance, overdueInvoices, overdueBalance }
+  for (const r of rows) {
+    const bu  = arGetBu(r.customer_name) || 'Uncategorized';
+    const bal = arInr(r);
+    const ovd = r.status === 'overdue';
+    if (!buMap[bu]) buMap[bu] = { invoices: 0, balance: 0, overdueInvoices: 0, overdueBalance: 0 };
+    buMap[bu].invoices++;
+    buMap[bu].balance += bal;
+    if (ovd) { buMap[bu].overdueInvoices++; buMap[bu].overdueBalance += bal; }
+  }
+
+  // Sort: named BUs first (alphabetical), Uncategorized last
+  const buNames = Object.keys(buMap).sort((a, b) => {
+    if (a === 'Uncategorized') return 1;
+    if (b === 'Uncategorized') return -1;
+    return a.localeCompare(b);
+  });
+
+  const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const totBal = rows.reduce((s, r) => s + arInr(r), 0);
+  const pct = v => totBal > 0 ? (v / totBal * 100).toFixed(1) + '%' : '—';
+
+  const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:600;text-align:right;border-bottom:2px solid var(--brd2);background:#f5f7fb;white-space:nowrap';
+  const tdS = 'padding:.45rem .85rem;font-size:12px;text-align:right;border-bottom:1px solid var(--brd)';
+
+  let rows_html = buNames.map(bu => {
+    const d = buMap[bu];
+    const isUncat = bu === 'Uncategorized';
+    const ovdPct  = d.balance > 0 ? (d.overdueBalance / d.balance * 100).toFixed(0) : '0';
+    const ovdCol  = d.overdueBalance > 0 ? '#b91c1c' : 'var(--txt3)';
+    return `<tr>
+      <td style="${tdS};text-align:left;font-weight:${isUncat ? '400' : '500'};color:${isUncat ? 'var(--txt3)' : 'var(--navy2)'}">${bu}</td>
+      <td style="${tdS}">${d.invoices}</td>
+      <td style="${tdS};font-weight:500">${cr(d.balance)}</td>
+      <td style="${tdS};color:${ovdCol}">${d.overdueInvoices || '—'}</td>
+      <td style="${tdS};color:${ovdCol}">${d.overdueBalance > 0 ? cr(d.overdueBalance) : '—'}</td>
+      <td style="${tdS};color:${ovdCol}">${d.overdueBalance > 0 ? ovdPct + '%' : '—'}</td>
+      <td style="${tdS};color:#94a3b8">${pct(d.balance)}</td>
+    </tr>`;
+  }).join('');
+
+  // Totals row
+  const totOvdBal = rows.filter(r => r.status === 'overdue').reduce((s, r) => s + arInr(r), 0);
+  const totOvdCnt = rows.filter(r => r.status === 'overdue').length;
+  rows_html += `<tr style="background:#f5f7fb;font-weight:600">
+    <td style="${tdS};text-align:left;border-top:2px solid var(--brd2)">Total</td>
+    <td style="${tdS};border-top:2px solid var(--brd2)">${rows.length}</td>
+    <td style="${tdS};border-top:2px solid var(--brd2)">${cr(totBal)}</td>
+    <td style="${tdS};border-top:2px solid var(--brd2);color:#b91c1c">${totOvdCnt}</td>
+    <td style="${tdS};border-top:2px solid var(--brd2);color:#b91c1c">${cr(totOvdBal)}</td>
+    <td style="${tdS};border-top:2px solid var(--brd2);color:#b91c1c">${totBal > 0 ? (totOvdBal/totBal*100).toFixed(0)+'%' : '—'}</td>
+    <td style="${tdS};border-top:2px solid var(--brd2)">100%</td>
+  </tr>`;
+
+  wrap.innerHTML = `<table style="border-collapse:collapse;width:100%;max-width:820px;font-family:var(--sans)">
+    <thead><tr>
+      <th style="${thS};text-align:left;min-width:140px">Business Unit</th>
+      <th style="${thS}"># Invoices</th>
+      <th style="${thS}">Outstanding (₹)</th>
+      <th style="${thS};color:#b91c1c"># Overdue</th>
+      <th style="${thS};color:#b91c1c">Overdue Balance</th>
+      <th style="${thS};color:#b91c1c">Overdue %</th>
+      <th style="${thS}">% of Total AR</th>
+    </tr></thead>
+    <tbody>${rows_html}</tbody>
+  </table>`;
 }
 
 function renderARInvoiceList(rows) {
