@@ -308,6 +308,17 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-subtabs{display:flex;gap:0;margin-bottom:1.1rem;border-bottom:1.5px solid var(--brd)}
 .ar-stbtn{padding:.55rem 1.15rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s}
 .ar-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+/* ── AR invoice view toggle ───────────────────────────────────── */
+.ar-view-tog{display:flex;gap:.35rem;margin-bottom:.85rem}
+.ar-vtbtn{padding:.26rem .7rem;font-size:11.5px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--txt2);transition:background .12s,color .12s}
+.ar-vtbtn.active{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+/* ── AR customer view ─────────────────────────────────────────── */
+.ar-cv-hdr{cursor:pointer;background:#f5f7fb}
+.ar-cv-hdr:hover{background:#edf0f7}
+.ar-cv-hdr td{padding:.48rem .65rem;font-size:11.5px;font-family:var(--sans);font-weight:600;border-bottom:1px solid #dde2ea}
+.ar-cv-arrow{display:inline-block;width:14px;font-size:9px;color:#6b7280;transition:transform .15s}
+.ar-cv-inv td{padding:.32rem .65rem;font-size:11px;font-family:var(--mono);background:#fff;border-bottom:1px solid #f0f2f6}
+.ar-cv-inv:last-child td{border-bottom:2px solid #dde2ea}
 /* ── AR sortable headers ─────────────────────────────────────── */
 .ar-tbl thead th.sortable{cursor:pointer;user-select:none;transition:background .1s;white-space:nowrap}
 .ar-tbl thead th.sortable:hover{background:#eef2f7}
@@ -521,6 +532,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <!-- Open Invoices pane (default) -->
     <div id="ar-pane-invoices">
+      <div class="ar-view-tog">
+        <button id="ar-vt-invoice"  class="ar-vtbtn active" onclick="arSetInvView('invoice')">Invoice View</button>
+        <button id="ar-vt-customer" class="ar-vtbtn"        onclick="arSetInvView('customer')">Customer View</button>
+      </div>
       <div class="twrap" id="ar-invoice-wrap">
         <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or forward a UK AR email to Postmark to load invoices.</div>
       </div>
@@ -4588,6 +4603,7 @@ const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
 let _arInited   = false;
 let _arAllRows  = [];
 let _arFxRates  = {}; // { 'YYYY-MM': rate }
+let _arInvView  = 'invoice'; // 'invoice' | 'customer'
 let _arBuMap        = {}; // { customer_name_lower: bu_name }
 let _arBuMapLoading = false;
 let _arSortCol  = null;
@@ -4956,8 +4972,130 @@ function renderARBuSummary(rows) {
   </table>`;
 }
 
+function arSetInvView(v) {
+  _arInvView = v;
+  document.getElementById('ar-vt-invoice').classList.toggle('active',  v === 'invoice');
+  document.getElementById('ar-vt-customer').classList.toggle('active', v === 'customer');
+  renderARInvoiceList(_arLastRows);
+}
+
+function arToggleCust(idx) {
+  const hdr  = document.getElementById(`ar-cv-h${idx}`);
+  const open = hdr.dataset.open === '1';
+  document.querySelectorAll(`.ar-cv-i${idx}`).forEach(r => r.style.display = open ? 'none' : '');
+  hdr.dataset.open = open ? '0' : '1';
+  hdr.querySelector('.ar-cv-arrow').textContent = open ? '▶' : '▼';
+}
+
+function renderARCustomerView(rows) {
+  const wrap = document.getElementById('ar-invoice-wrap');
+  if (!rows.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No invoices match the current filters.</div>'; return; }
+
+  // Group by customer_name
+  const custMap = {};
+  for (const r of rows) {
+    const k = r.customer_name || '(Unknown)';
+    if (!custMap[k]) custMap[k] = [];
+    custMap[k].push(r);
+  }
+
+  // Build customer summaries, sort by total outstanding desc
+  const custs = Object.entries(custMap).map(([name, invs]) => {
+    const totalBal  = invs.reduce((s, r) => s + arInr(r), 0);
+    const ovdBal    = invs.filter(r => arOverdueDays(r.due_date) > 0).reduce((s, r) => s + arInr(r), 0);
+    const ovdCnt    = invs.filter(r => arOverdueDays(r.due_date) > 0).length;
+    const hasOverdue = ovdCnt > 0;
+    const bu = arGetBu(name);
+    return { name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu };
+  }).sort((a, b) => b.totalBal - a.totalBal);
+
+  const f = n => Math.round(n).toLocaleString('en-IN');
+  const cr = n => `₹${f(n)}`;
+
+  let body = '';
+  custs.forEach(({ name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu }, idx) => {
+    const buBadge = bu
+      ? `<span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.1rem .38rem;border-radius:4px">${escHtml(bu)}</span>`
+      : '<span style="color:#ddd;font-size:10px">—</span>';
+    const entities = [...new Set(invs.map(r => r.entity).filter(Boolean))];
+    const entBadges = entities.map(e => e === 'UK'
+      ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:.1rem .35rem;border-radius:3px;font-weight:700">UK</span>`
+      : `<span style="font-size:9px;background:#ecfdf5;color:#065f46;padding:.1rem .35rem;border-radius:3px;font-weight:700">IN</span>`
+    ).join(' ');
+    const statusBadge = hasOverdue
+      ? `<span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.12rem .45rem;border-radius:10px;font-weight:700">${ovdCnt} OVERDUE</span>`
+      : `<span style="font-size:9.5px;background:#eff6ff;color:#1d4ed8;padding:.12rem .45rem;border-radius:10px;font-weight:700">CURRENT</span>`;
+
+    // Customer header row
+    body += `<tr class="ar-cv-hdr" id="ar-cv-h${idx}" data-open="0" onclick="arToggleCust(${idx})">
+      <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}</td>
+      <td>${buBadge}</td>
+      <td style="text-align:center">${entBadges}</td>
+      <td style="text-align:right;font-family:var(--mono)">${invs.length}</td>
+      <td style="text-align:right;font-family:var(--mono);color:${hasOverdue?'#b91c1c':'inherit'}">${cr(totalBal)}</td>
+      <td style="text-align:right;font-family:var(--mono);color:#b91c1c">${ovdBal > 0 ? cr(ovdBal) : '—'}</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+
+    // Sort invoices: overdue first, then by days desc
+    const sortedInvs = [...invs].sort((a, b) => arOverdueDays(b.due_date) - arOverdueDays(a.due_date));
+    for (const r of sortedInvs) {
+      const days = arOverdueDays(r.due_date);
+      const daysCell = days > 0 ? `<span style="color:#b91c1c;font-weight:600">${days}d overdue</span>`
+        : days === 0 ? `<span style="color:#b45309;font-weight:600">Due today</span>`
+        : `<span style="color:#64748b">In ${-days}d</span>`;
+      const badge = r.status === 'overdue'
+        ? `<span style="font-size:9px;background:#fee2e2;color:#b91c1c;padding:.1rem .4rem;border-radius:8px;font-weight:700">OVERDUE</span>`
+        : r.status === 'partially_paid'
+        ? `<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:.1rem .4rem;border-radius:8px;font-weight:700">PARTIAL</span>`
+        : `<span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:.1rem .4rem;border-radius:8px;font-weight:700">SENT</span>`;
+      const rev   = r.revenue_type ? `<span style="font-size:9px;background:#f0fdf4;color:#15803d;padding:.1rem .35rem;border-radius:3px;font-weight:700">${r.revenue_type}</span>` : '';
+      const invLink = r.invoice_url
+        ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener">${escHtml(r.invoice_number || '')}</a>`
+        : escHtml(r.invoice_number || '');
+      const isFx  = r.currency_code && r.currency_code !== 'INR';
+      const fxBal = isFx ? `<span class="td-fx"> ${r.currency_code} ${f(r.balance)}</span>` : '';
+      const balStyle = days > 0 ? 'color:#b91c1c' : '';
+
+      body += `<tr class="ar-cv-inv ar-cv-i${idx}" style="display:none">
+        <td style="padding-left:1.8rem;font-family:var(--sans);font-size:11px;color:var(--txt2)">${invLink}</td>
+        <td style="font-size:10.5px;color:var(--txt3)">${r.invoice_date || '—'}</td>
+        <td style="font-size:10.5px;color:var(--txt3)">${r.due_date || '—'}</td>
+        <td>${daysCell}</td>
+        <td style="text-align:right;${balStyle}">${cr(arInr(r))}${fxBal}</td>
+        <td style="text-align:right;color:var(--txt3)">${cr(arTotal(r))}</td>
+        <td>${rev}</td>
+        <td>${badge}</td>
+      </tr>`;
+    }
+  });
+
+  wrap.innerHTML = `<table class="ar-tbl">
+    <thead>
+      <tr>
+        <th style="min-width:180px">Customer</th>
+        <th>BU</th>
+        <th style="text-align:center">Entity</th>
+        <th style="text-align:right"># Inv</th>
+        <th style="text-align:right">Outstanding (₹)</th>
+        <th style="text-align:right">Overdue (₹)</th>
+        <th>Status</th>
+      </tr>
+      <tr style="display:none" id="ar-cv-inv-hdr">
+        <th style="padding-left:1.8rem">Invoice #</th>
+        <th>Inv Date</th><th>Due Date</th><th>Days</th>
+        <th style="text-align:right">Balance</th><th style="text-align:right">Total</th>
+        <th>Type</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>${body}</tbody>
+  </table>`;
+}
+
 function renderARInvoiceList(rows) {
   _arLastRows = rows;
+  if (_arInvView === 'customer') { renderARCustomerView(rows); return; }
+
   const wrap = document.getElementById('ar-invoice-wrap');
   if (!rows.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No invoices match the current filters.</div>'; return; }
 
