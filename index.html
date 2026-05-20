@@ -4615,51 +4615,14 @@ async function loadArBuMap() {
   if (_arBuMapLoading || Object.keys(_arBuMap).length > 0) return;
   _arBuMapLoading = true;
   try {
-    // Step 1: bu_master id → name
-    const buR = await fetch(`${SUPABASE_URL}/rest/v1/bu_master?select=id,name`, { headers: cmrrHdr() });
-    if (!buR.ok) { console.warn('loadArBuMap: bu_master HTTP', buR.status); return; }
-    const buById = {};
-    for (const b of await buR.json()) buById[b.id] = b.name;
-
-    // Step 2: customer_mrr_lines zoho_name → bu_name (paginated)
-    const PAGE = 1000;
-    let offset = 0, cmlRows = [];
-    while (true) {
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/customer_mrr_lines` +
-        `?select=zoho_name,bu_id&bu_id=not.is.null&order=id&limit=${PAGE}&offset=${offset}`,
-        { headers: cmrrHdr() }
-      );
-      if (!r.ok) { console.warn('loadArBuMap: CML HTTP', r.status); break; }
-      const pg = await r.json();
-      cmlRows = cmlRows.concat(pg);
-      if (pg.length < PAGE) break;
-      offset += PAGE;
-    }
-    const zohoToBu = {};
-    for (const row of cmlRows) {
-      const key = (row.zoho_name || '').toLowerCase().trim();
-      const bu  = buById[row.bu_id];
-      if (key && bu && !zohoToBu[key]) zohoToBu[key] = bu;
-    }
-
-    // Step 3: customer_master maps AR customer_name → zoho_name
-    // billing_name matches Zoho Books (IN); qb_name matches QuickBooks (UK)
-    const cmR = await fetch(
-      `${SUPABASE_URL}/rest/v1/customer_master?select=billing_name,qb_name,zoho_name&limit=5000`,
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_customer_bu_map?select=customer_key,bu_name&limit=5000`,
       { headers: cmrrHdr() }
     );
-    _arBuMap = { ...zohoToBu }; // fallback: direct zoho_name match still works
-    if (cmR.ok) {
-      for (const row of await cmR.json()) {
-        const zk  = (row.zoho_name    || '').toLowerCase().trim();
-        const bu  = zohoToBu[zk];
-        if (!bu) continue;
-        const bk  = (row.billing_name || '').toLowerCase().trim();
-        const qk  = (row.qb_name      || '').toLowerCase().trim();
-        if (bk && !_arBuMap[bk]) _arBuMap[bk] = bu;
-        if (qk && !_arBuMap[qk]) _arBuMap[qk] = bu;
-      }
+    if (!r.ok) { console.warn('loadArBuMap: HTTP', r.status); return; }
+    const rows = await r.json();
+    for (const row of rows) {
+      if (row.customer_key && row.bu_name) _arBuMap[row.customer_key] = row.bu_name;
     }
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
