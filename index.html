@@ -2619,6 +2619,8 @@ function nretRenderFyRolling() {
     const fyYear    = parseInt(fyStr);
     const baseMonth = `${fyYear}-03`;
     const baseMrr   = custs.reduce((s, zn) => s + (_nretZohoMrr[zn]?.[baseMonth] || 0), 0);
+    // baseCount: go-lives with MRR > 0 in base March (analogous to baseMrr for ₹L mode)
+    const baseCount = custs.filter(zn => (_nretZohoMrr[zn]?.[baseMonth] || 0) > 0).length;
     const retentions = marchMonths
       .filter(m => m > baseMonth)
       .map(nextMonth => {
@@ -2626,9 +2628,9 @@ function nretRenderFyRolling() {
         const retCount = custs.filter(zn => (_nretZohoMrr[zn]?.[nextMonth] || 0) > 0).length;
         return { month: nextMonth, mrr: retMrr, count: retCount,
                  mrrPct: baseMrr ? retMrr / baseMrr * 100 : 0,
-                 cntPct: custs.length ? retCount / custs.length * 100 : 0 };
+                 cntPct: baseCount ? retCount / baseCount * 100 : 0 };
       });
-    cohorts.push({ fy: fyYear, baseMonth, baseMrr, count: custs.length, retentions });
+    cohorts.push({ fy: fyYear, baseMonth, baseMrr, count: custs.length, baseCount, retentions });
   }
 
   if (!cohorts.length) {
@@ -2651,7 +2653,7 @@ function nretRenderFyRolling() {
 
   let head = `<tr>
     ${th('FY Cohort', 'text-align:left;min-width:90px')}
-    ${th('#')}`;
+    ${th('Go-lives<br><span style="font-weight:400;font-size:9px">(active)</span>', 'min-width:52px')}`;
   for (const m of marchMonths)
     head += th(`${fyLabel(m)}<br><span style="font-weight:400;font-size:9px;color:#888">${nretFmtM(m)}</span>`);
   head += SEP_TH;
@@ -2663,17 +2665,24 @@ function nretRenderFyRolling() {
 
   let body = '<tbody>';
   for (const cohort of cohorts) {
+    // # column: go-lives total | tooltip shows baseCount (active in base March)
+    const countCell = isCount
+      ? `${cohort.count}<br><span style="font-size:9px;color:#aaa" title="Active in base March">(${cohort.baseCount})</span>`
+      : cohort.count;
     let tr = `<tr>
       <td style="${td};text-align:left;font-weight:600;font-family:var(--sans);font-size:11px;background:#f5f5f5;border-right:2px solid #bbb;min-width:80px">
         ${fyLabel(cohort.baseMonth)}<br><span style="font-weight:400;color:#888;font-size:9px">${nretFmtM(cohort.baseMonth)}</span>
       </td>
-      <td style="${td};color:#555">${cohort.count}</td>`;
+      <td style="${td};color:#555;line-height:1.3">${countCell}</td>`;
 
     for (const mm of marchMonths) {
       if (mm < cohort.baseMonth) {
         tr += `<td style="${td};color:#e4e8ee">·</td>`;
       } else if (mm === cohort.baseMonth) {
-        const baseVal = isPct ? '100%' : isCount ? cohort.count : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
+        // Base cell is analogous across modes: L=baseMrr, %=100%, count=baseCount
+        const baseVal = isPct ? '100%'
+                      : isCount ? cohort.baseCount
+                      : `${(cohort.baseMrr/1e5).toFixed(1)}L`;
         tr += `<td style="${td};font-weight:700;background:#dbeafe;color:#1e3a5f">${baseVal}</td>`;
       } else {
         const ret = cohort.retentions.find(r => r.month === mm);
