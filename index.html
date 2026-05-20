@@ -221,6 +221,18 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .nret-tog2:hover{background:#f0f4f9}
 .nret-tog2.active{background:var(--navy3);color:#fff;border-color:var(--navy3)}
 .nret-divsep{color:#ccc;font-size:14px;padding:0 .2rem;align-self:center}
+.nret-popup{display:none;position:fixed;z-index:820;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);min-width:260px;max-width:400px;max-height:400px;overflow-y:auto}
+.nret-popup-hdr{padding:.65rem .85rem .45rem;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem}
+.nret-popup-title{font-size:11.5px;font-weight:600;color:var(--navy2);font-family:var(--sans);line-height:1.4}
+.nret-popup-close{background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;padding:0;line-height:1;flex-shrink:0}
+.nret-popup-close:hover{color:#374151}
+.nret-popup-body{padding:.5rem .85rem .7rem}
+.nret-popup-row{display:flex;justify-content:space-between;align-items:baseline;padding:.2rem 0;border-bottom:1px solid #f3f4f6;gap:.5rem;font-size:11px}
+.nret-popup-row:last-child{border-bottom:none}
+.nret-popup-cust{font-family:var(--sans);color:var(--txt);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nret-popup-mrr{font-family:var(--mono);color:var(--navy2);font-size:10.5px;white-space:nowrap}
+.nret-popup-pct{font-family:var(--mono);color:#9ca3af;font-size:10px;white-space:nowrap;min-width:36px;text-align:right}
+.nret-popup-foot{padding:.4rem .85rem .6rem;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:11px;font-weight:600;font-family:var(--sans);color:var(--txt2)}
 /* ── Ask AI chat ───────────────────────────────────────────── */
 .ai-bubble{max-width:82%;padding:.6rem .95rem;border-radius:12px;font-size:12.5px;line-height:1.6;font-family:var(--sans);word-break:break-word}
 .ai-bubble.user{align-self:flex-end;background:var(--navy3);color:#fff;border-bottom-right-radius:3px}
@@ -2252,6 +2264,7 @@ let _nretAllLines  = [];       // [{id, go_live_date, segment_master:{name}, bu_
 let _nretCountMatrix = null;   // { go_live_month: { mrr_month: count } }
 let _nretZohoMrr    = null;    // { zoho_name: { mrr_month: total_mrr } } for FY rolling
 let _nretZohoGoLive = null;    // { zoho_name: earliest_go_live_month } for FY cohort grouping
+let _nretGmToZohos  = null;    // { go_live_month: [zoho_name, ...] } for cell drill-down
 
 async function showNretTab(btn) {
   showTab('nret', btn);
@@ -2461,6 +2474,14 @@ async function nretLoad() {
       }
     }
 
+    // gmToZohos: for cell drill-down in cohort table
+    const gmToZohos = {};
+    for (const l of lines) {
+      const gm = l.go_live_date.slice(0, 7);
+      if (!gmToZohos[gm]) gmToZohos[gm] = new Set();
+      gmToZohos[gm].add(l.zoho_name);
+    }
+    _nretGmToZohos  = Object.fromEntries(Object.entries(gmToZohos).map(([k, v]) => [k, [...v]]));
     _nretCountMatrix = countMatrix;
     _nretZohoMrr    = zohoMrrByMonth;
     _nretZohoGoLive = zohoGoLive;
@@ -2532,6 +2553,7 @@ function nretRenderTable(matrix, mrrMonthSet) {
     let rowTot = 0;
     let tr = `<tr><td class="nret-gl">${nretFmtM(gm)}</td>`;
     for (const mm of mrrMonths) {
+      const ca = `data-nret-cell="1" onmouseenter="nretCellEnter(event,'cohort','${gm}','${mm}')" onmouseleave="nretCellLeave()" onclick="nretCellClick(event,'cohort','${gm}','${mm}')" style="cursor:pointer;`;
       if (mm < gm) {
         tr += `<td class="nret-empty">·</td>`;
       } else if (isCount) {
@@ -2539,7 +2561,7 @@ function nretRenderTable(matrix, mrrMonthSet) {
         if (cnt) {
           const base = rowBaseCount[gm];
           const pct  = base ? cnt / base * 100 : null;
-          tr += `<td class="nret-cell" style="${pct != null ? nretRetBg(pct) : ''}">${cnt}</td>`;
+          tr += `<td class="nret-cell" ${ca}${pct != null ? nretRetBg(pct) : ''}">${cnt}</td>`;
         } else {
           tr += `<td class="nret-empty">·</td>`;
         }
@@ -2553,10 +2575,10 @@ function nretRenderTable(matrix, mrrMonthSet) {
           const pct  = base ? val / base * 100 : null;
           if (isPct) {
             tr += pct != null
-              ? `<td class="nret-cell" style="${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`
+              ? `<td class="nret-cell" ${ca}${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`
               : `<td class="nret-cell">—</td>`;
           } else {
-            tr += `<td class="nret-cell" style="${pct != null ? nretRetBg(pct) : ''}">${(val/1e5).toFixed(1)}L</td>`;
+            tr += `<td class="nret-cell" ${ca}${pct != null ? nretRetBg(pct) : ''}">${(val/1e5).toFixed(1)}L</td>`;
           }
         } else {
           tr += `<td class="nret-empty">·</td>`;
@@ -2693,12 +2715,13 @@ function nretRenderFyRolling() {
         const ret = cohort.retentions.find(r => r.month === mm);
         if (ret) {
           const pct = isCount ? ret.cntPct : ret.mrrPct;
+          const ca  = `data-nret-cell="1" onmouseenter="nretCellEnter(event,'fyrolling','${cohort.fy}','${mm}')" onmouseleave="nretCellLeave()" onclick="nretCellClick(event,'fyrolling','${cohort.fy}','${mm}')" style="cursor:pointer;${td};`;
           if (isPct) {
-            tr += `<td style="${td};${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`;
+            tr += `<td ${ca}${nretRetBg(pct)}">${pct.toFixed(0)}%</td>`;
           } else if (isCount) {
-            tr += `<td style="${td};${nretRetBg(pct)}">${ret.count}<br><span style="font-size:9px;opacity:.85">${pct.toFixed(0)}%</span></td>`;
+            tr += `<td ${ca}${nretRetBg(pct)}">${ret.count}<br><span style="font-size:9px;opacity:.85">${pct.toFixed(0)}%</span></td>`;
           } else {
-            tr += `<td style="${td};${nretRetBg(pct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
+            tr += `<td ${ca}${nretRetBg(pct)}">${(ret.mrr/1e5).toFixed(1)}L<br><span style="font-size:9px;opacity:.85">${ret.count}#</span></td>`;
           }
         } else {
           tr += `<td style="${td};color:#e4e8ee">·</td>`;
@@ -4515,7 +4538,8 @@ const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
 let _arInited   = false;
 let _arAllRows  = [];
 let _arFxRates  = {}; // { 'YYYY-MM': rate }
-let _arBuMap    = {}; // { customer_name_lower: bu_name }
+let _arBuMap        = {}; // { customer_name_lower: bu_name }
+let _arBuMapLoading = false;
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices';
@@ -4523,7 +4547,8 @@ let _arLastRows = []; // last filtered set for re-sort
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadArBuMap(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); }
+  loadArBuMap(); // always try — guards internally against duplicate calls
 }
 
 function showARSubTab(tab) {
@@ -4537,6 +4562,8 @@ function showARSubTab(tab) {
 }
 
 async function loadArBuMap() {
+  if (_arBuMapLoading || Object.keys(_arBuMap).length > 0) return;
+  _arBuMapLoading = true;
   try {
     // Step 1: bu_master id → name
     const buR = await fetch(`${SUPABASE_URL}/rest/v1/bu_master?select=id,name`, { headers: cmrrHdr() });
@@ -4586,6 +4613,7 @@ async function loadArBuMap() {
     }
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
+  finally { _arBuMapLoading = false; }
 }
 
 function arGetBu(customerName) {
@@ -5063,6 +5091,100 @@ async function _runARSync(url, btnId, statusId, label) {
 function syncARIndia() { _runARSync(AR_SYNC_IN_URL, 'ar-sync-btn-in', 'ar-status-in', '⟳ Sync India'); }
 
 initAuth();
+
+/* ─── NET RETENTION CELL POPUP ──────────────────────────────── */
+function nretGoLiveFY(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return m >= 4 ? y + 1 : y;
+}
+
+let _nretPopupTimer  = null;
+let _nretPopupPinned = false;
+
+function nretCellEnter(evt, type, key, mm) {
+  if (_nretPopupPinned) return;
+  clearTimeout(_nretPopupTimer);
+  _nretPopupTimer = setTimeout(() => nretShowPopup(evt, type, key, mm, false), 280);
+}
+function nretCellLeave() {
+  if (_nretPopupPinned) return;
+  clearTimeout(_nretPopupTimer);
+  document.getElementById('nret-cell-popup').style.display = 'none';
+}
+function nretCellClick(evt, type, key, mm) {
+  evt.stopPropagation();
+  clearTimeout(_nretPopupTimer);
+  _nretPopupPinned = true;
+  nretShowPopup(evt, type, key, mm, true);
+}
+function nretClosePopup() {
+  _nretPopupPinned = false;
+  document.getElementById('nret-cell-popup').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if (_nretPopupPinned && !e.target.closest('#nret-cell-popup') && !e.target.dataset.nretCell) {
+    nretClosePopup();
+  }
+});
+
+function nretShowPopup(evt, type, key, mm, pinned) {
+  // Gather customer list for the cell
+  let custs = [];
+  if (type === 'cohort') {
+    const znList = _nretGmToZohos?.[key] || [];
+    custs = znList
+      .map(zn => ({ name: zn, mrr: _nretZohoMrr?.[zn]?.[mm] || 0 }))
+      .filter(c => c.mrr > 0)
+      .sort((a, b) => b.mrr - a.mrr);
+  } else {
+    const fyYear = parseInt(key);
+    custs = Object.entries(_nretZohoGoLive || {})
+      .filter(([zn, gl]) => nretGoLiveFY(gl) === fyYear && (_nretZohoMrr?.[zn]?.[mm] || 0) > 0)
+      .map(([zn]) => ({ name: zn, mrr: _nretZohoMrr[zn][mm] }))
+      .sort((a, b) => b.mrr - a.mrr);
+  }
+
+  const totalMrr = custs.reduce((s, c) => s + c.mrr, 0);
+
+  const fyLbl = ym => `FY${String(parseInt(ym.split('-')[0])).slice(2)}`;
+  const mLbl  = ym => ym ? new Date(ym + '-01').toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '—';
+  const title = type === 'cohort'
+    ? `Go-live: ${mLbl(key)} &nbsp;→&nbsp; ${mLbl(mm)}`
+    : `${fyLbl(`${key}-03`)} cohort &nbsp;→&nbsp; ${mLbl(mm)}`;
+
+  const rows = custs.slice(0, 60).map(c => {
+    const pct = totalMrr > 0 ? (c.mrr / totalMrr * 100).toFixed(0) + '%' : '';
+    return `<div class="nret-popup-row">
+      <span class="nret-popup-cust">${c.name}</span>
+      <span class="nret-popup-mrr">${(c.mrr / 1e5).toFixed(2)}L</span>
+      <span class="nret-popup-pct">${pct}</span>
+    </div>`;
+  }).join('');
+  const overflow = custs.length > 60 ? `<div style="font-size:10px;color:#9ca3af;padding:.25rem 0">+${custs.length - 60} more…</div>` : '';
+
+  const popup = document.getElementById('nret-cell-popup');
+  document.getElementById('nret-cell-popup-inner').innerHTML = `
+    <div class="nret-popup-hdr">
+      <div class="nret-popup-title">${title}</div>
+      ${pinned ? '<button class="nret-popup-close" onclick="nretClosePopup()">✕</button>' : ''}
+    </div>
+    <div class="nret-popup-body">${rows || '<div style="color:#9ca3af;font-size:11px;padding:.3rem 0">No customers with MRR in this period.</div>'}${overflow}</div>
+    ${custs.length ? `<div class="nret-popup-foot"><span>${custs.length} customers</span><span>${(totalMrr/1e5).toFixed(2)}L</span></div>` : ''}`;
+
+  const rect = evt.target.getBoundingClientRect();
+  const pw = 400, ph = 360;
+  let left = rect.right + 8;
+  let top  = rect.top;
+  if (left + pw > window.innerWidth - 12)  left = rect.left - pw - 8;
+  if (top  + ph > window.innerHeight - 12) top  = window.innerHeight - ph - 12;
+  popup.style.left    = Math.max(8, left) + 'px';
+  popup.style.top     = Math.max(8, top)  + 'px';
+  popup.style.display = 'block';
+}
+
+initAuth();
 </script>
+<!-- Net retention cell popup -->
+<div id="nret-cell-popup" class="nret-popup"><div id="nret-cell-popup-inner"></div></div>
 </body>
 </html>
