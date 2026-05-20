@@ -3938,7 +3938,7 @@ function renderNav() {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(activeId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadArBuMap(); }
   }
 }
 
