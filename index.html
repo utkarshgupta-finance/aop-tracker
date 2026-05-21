@@ -531,7 +531,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="ar-subtabs">
       <button class="ar-stbtn active" id="ar-st-invoices" onclick="showARSubTab('invoices')">Open Invoices</button>
       <button class="ar-stbtn" id="ar-st-aging" onclick="showARSubTab('aging')">AR Aging</button>
-      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">BU Summary</button>
+      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">Daily Snapshots</button>
       <button class="ar-stbtn" id="ar-st-summary" onclick="showARSubTab('summary')">AR Summary</button>
     </div>
     <!-- Open Invoices pane (default) -->
@@ -544,9 +544,18 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or forward a UK AR email to Postmark to load invoices.</div>
       </div>
     </div>
-    <!-- Daily View pane -->
+    <!-- Daily Snapshots pane -->
     <div id="ar-pane-daily" style="display:none">
       <div id="ar-daily-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center;min-height:28px"></div>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.85rem;flex-wrap:wrap">
+        <select class="nret-sel" id="ar-snap-days" onchange="loadARSnapshots()" style="font-size:12px">
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <span id="ar-snap-status" style="font-size:11.5px;color:var(--txt3)"></span>
+      </div>
       <div class="twrap" id="ar-daily-wrap"></div>
     </div>
     <!-- AR Summary pane -->
@@ -4675,6 +4684,7 @@ function showARSubTab(tab) {
   document.getElementById('ar-st-aging').classList.toggle('active', tab === 'aging');
   document.getElementById('ar-st-daily').classList.toggle('active', tab === 'daily');
   document.getElementById('ar-st-summary').classList.toggle('active', tab === 'summary');
+  if (tab === 'daily') loadARSnapshots();
 }
 
 async function loadArBuMap() {
@@ -4970,6 +4980,8 @@ function initARCapsuleListeners() {
         else { _arBuSelected.clear(); _arBuSelected.add(bu); }
       }
       renderAR();
+      // also re-render snapshots if that tab is active and loaded
+      if (_arSubTab === 'daily' && _arSnapLoaded) loadARSnapshots();
     });
   });
 }
@@ -5015,7 +5027,6 @@ function renderAR() {
   renderARSummary(rows);
   renderARAgingTable(rows);
   renderARInvoiceList(rows);
-  renderARDailyTable(rows);
   renderARBuSummary(rows);
 }
 
@@ -5075,6 +5086,97 @@ function renderARAgingTable(rows) {
     <td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td><td class="r">100%</td>
   </tr>`;
   document.getElementById('ar-aging-body').innerHTML = trs;
+}
+
+let _arSnapLoaded = false;
+
+async function loadARSnapshots() {
+  const wrap   = document.getElementById('ar-daily-wrap');
+  const status = document.getElementById('ar-snap-status');
+  const days   = parseInt(document.getElementById('ar-snap-days')?.value || '30');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading snapshots…</div>';
+  if (status) status.textContent = '';
+  try {
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const url   = `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?select=*&snapshot_date=gte.${since}&order=snapshot_date.desc&limit=5000`;
+    const r     = await fetch(url, { headers: cmrrHdr() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows  = await r.json();
+    _arSnapLoaded = true;
+    if (status) status.textContent = rows.length ? `${rows.length} rows` : '';
+    renderARSnapshots(rows);
+  } catch(e) {
+    wrap.innerHTML = `<div style="padding:2rem;color:#b91c1c;font-size:12px">Error loading snapshots: ${e.message}</div>`;
+  }
+}
+
+function renderARSnapshots(rows) {
+  const wrap = document.getElementById('ar-daily-wrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No snapshots found for this period.</div>';
+    return;
+  }
+
+  // Apply exclusions and BU filter from main AR state
+  const filtered = rows.filter(r => {
+    const cn = (r.customer_name || '').toLowerCase();
+    if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
+    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name))) return false;
+    return true;
+  });
+
+  // Group by snapshot_date → BU → totals
+  const dateMap = {}; // date → { buName → { total, overdue } }
+  for (const r of filtered) {
+    const date = (r.snapshot_date || '').slice(0, 10);
+    const bu   = arGetBu(r.customer_name) || 'Uncategorised';
+    const bal  = arInr(r);
+    const isOvd = arOverdueDays(r.due_date) > 0;
+    if (!dateMap[date]) dateMap[date] = {};
+    if (!dateMap[date][bu]) dateMap[date][bu] = { total: 0, overdue: 0 };
+    dateMap[date][bu].total  += bal;
+    if (isOvd) dateMap[date][bu].overdue += bal;
+  }
+
+  const dates  = Object.keys(dateMap).sort().reverse();
+  const allBus = [...new Set(filtered.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort((a,b) => {
+    if (a === 'Uncategorised') return 1; if (b === 'Uncategorised') return -1; return a.localeCompare(b);
+  });
+
+  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '<span style="color:#e2e8f0">—</span>';
+  const thS = `padding:.45rem .75rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;text-align:right;white-space:nowrap`;
+  const tdS = `padding:.42rem .75rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9`;
+
+  const buCols  = allBus.map(b => `<th style="${thS}">${escHtml(b)}</th>`).join('');
+  const rowsHtml = dates.map(date => {
+    const d       = dateMap[date];
+    const dayTotal = allBus.reduce((s, b) => s + (d[b]?.total || 0), 0);
+    const dayOvd   = allBus.reduce((s, b) => s + (d[b]?.overdue || 0), 0);
+    const ovdTag   = dayOvd > 0
+      ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(dayOvd/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
+    const buCells  = allBus.map(bu => {
+      const v = d[bu]?.total   || 0;
+      const o = d[bu]?.overdue || 0;
+      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
+      return `<td style="${tdS}">${v > 0 ? '₹'+(v/1e7).toFixed(2)+' Cr' : '<span style="color:#e2e8f0">—</span>'}${ovd}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:600;color:#0f172a">${date}</td>
+      <td style="${tdS};font-weight:700;color:var(--navy)">₹${(dayTotal/1e7).toFixed(2)} Cr${ovdTag}</td>
+      ${buCells}
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${360+allBus.length*130}px">
+    <thead><tr>
+      <th style="${thS};text-align:left">Snapshot Date</th>
+      <th style="${thS}">Total</th>
+      ${buCols}
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
 }
 
 function renderARDailyTable(rows) {
