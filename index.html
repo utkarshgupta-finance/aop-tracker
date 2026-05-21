@@ -549,13 +549,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <!-- AR Aging pane -->
     <div id="ar-pane-aging" style="display:none">
-      <div class="twrap" style="margin-bottom:1rem;max-width:600px">
-        <table style="width:100%;min-width:380px;border-collapse:collapse">
+      <div id="ar-aging-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center;min-height:28px"></div>
+      <div class="twrap" style="margin-bottom:1rem;max-width:660px">
+        <table style="width:100%;min-width:420px;border-collapse:collapse">
           <thead><tr style="background:#f5f7fb">
             <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Bucket</th>
             <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)"># Invoices</th>
             <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Outstanding Balance</th>
             <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">% of Total</th>
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Cumulative %</th>
           </tr></thead>
           <tbody id="ar-aging-body"></tbody>
         </table>
@@ -4687,6 +4689,7 @@ async function loadArBuMap() {
       offset += PAGE;
     }
     renderARBuCapsules();
+    renderARAgingBuCapsules();
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
   finally { _arBuMapLoading = false; }
@@ -4939,10 +4942,9 @@ function arAgeBucket(dueDateStr) {
   return '90plus';
 }
 
-function renderARBuCapsules() {
-  const row = document.getElementById('ar-bu-row');
+function _arBuCapsuleHTML(targetId) {
+  const row = document.getElementById(targetId);
   if (!row) return;
-  // Collect distinct BUs from current (unfiltered-by-BU) rows
   const bus = [...new Set(
     _arAllRows
       .filter(r => !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase())))
@@ -4952,27 +4954,28 @@ function renderARBuCapsules() {
   if (!bus.length) { row.innerHTML = ''; return; }
   const all = _arBuSelected.size === 0;
   row.innerHTML =
-    `<button class="chip${all?' active':''}" onclick="arBuToggle(null)">All</button>` +
+    `<button class="chip${all?' active':''}" onclick="arBuToggle(event,null)">All</button>` +
     bus.map(b => {
       const active = _arBuSelected.has(b);
-      return `<button class="chip${active?' active':''}" onclick="arBuToggle(${JSON.stringify(b)})">${escHtml(b)}</button>`;
+      return `<button class="chip${active?' active':''}" onclick="arBuToggle(event,${JSON.stringify(b)})">${escHtml(b)}</button>`;
     }).join('');
 }
+function renderARBuCapsules()       { _arBuCapsuleHTML('ar-bu-row'); }
+function renderARAgingBuCapsules()  { _arBuCapsuleHTML('ar-aging-bu-row'); }
 
-function arBuToggle(bu) {
+function arBuToggle(evt, bu) {
   if (bu === null) {
     _arBuSelected.clear();
-  } else if (event.shiftKey || event.metaKey || event.ctrlKey) {
-    // multi-select: toggle without clearing others
+  } else if (evt && (evt.shiftKey || evt.metaKey || evt.ctrlKey)) {
     if (_arBuSelected.has(bu)) _arBuSelected.delete(bu);
     else _arBuSelected.add(bu);
-    if (_arBuSelected.size === 0) _arBuSelected.clear(); // stays as "all"
   } else {
-    // single-select: if already the only selection, deselect → all
+    // single-select: click same → deselect (show all)
     if (_arBuSelected.size === 1 && _arBuSelected.has(bu)) _arBuSelected.clear();
     else { _arBuSelected.clear(); _arBuSelected.add(bu); }
   }
   renderARBuCapsules();
+  renderARAgingBuCapsules();
   renderAR();
 }
 
@@ -5036,11 +5039,21 @@ function renderARAgingTable(rows) {
   const total = rows.reduce((s, r) => s + inr(r), 0);
   const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+  let cumBal = 0;
   const trs = AR_BUCKETS.map(b => {
     const { count, balance } = buckets[b.key];
-    return `<tr><td style="font-weight:500;color:${b.color}">${b.label}</td>
-      <td class="r">${count}</td><td class="r">${cr(balance)}</td><td class="r" style="color:#94a3b8">${pct(balance)}</td></tr>`;
-  }).join('') + `<tr><td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td></tr>`;
+    cumBal += balance;
+    const cumPct = total > 0 ? (cumBal / total * 100).toFixed(1) + '%' : '—';
+    return `<tr>
+      <td style="font-weight:500;color:${b.color}">${b.label}</td>
+      <td class="r">${count}</td>
+      <td class="r">${cr(balance)}</td>
+      <td class="r" style="color:#94a3b8">${pct(balance)}</td>
+      <td class="r" style="color:#475569;font-weight:500">${cumPct}</td>
+    </tr>`;
+  }).join('') + `<tr style="font-weight:700;border-top:1.5px solid var(--brd2)">
+    <td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td><td class="r">100%</td>
+  </tr>`;
   document.getElementById('ar-aging-body').innerHTML = trs;
 }
 
