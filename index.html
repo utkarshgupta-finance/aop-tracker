@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bizom Revenue</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
   --surf:#fff;--surf2:#f4f6f9;--surf3:#edf0f5;
   --brd:#dde2ea;--brd2:#c5cdd8;
   --txt:#0f2340;--txt2:#4a5568;--txt3:#8896a8;
-  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  --mono:'Geist Mono','Geist Mono Fallback',monospace;--sans:'Inter',sans-serif;
 }
 body{font-family:var(--sans);background:var(--surf2);color:var(--txt);min-height:100vh}
 header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px solid var(--navy3)}
@@ -278,9 +278,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 /* ── AR Tab ──────────────────────────────────────────────────── */
 .ar-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
 @media(max-width:900px){.ar-cards{grid-template-columns:repeat(2,1fr)}}
-.ar-card{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem}
-.ar-card-val{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:.15rem;font-family:var(--mono)}
-.ar-card-lbl{font-size:11px;color:var(--txt3);margin-bottom:.1rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.ar-card{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:.9rem 1.1rem;border-left:4px solid #e2e8f0}
+.ar-card.c-total{border-left-color:#2563eb}
+.ar-card.c-overdue{border-left-color:#dc2626}
+.ar-card.c-current{border-left-color:#16a34a}
+.ar-card.c-synced{border-left-color:#7c3aed}
+.ar-card-val{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:.1rem;font-family:var(--mono);letter-spacing:-.01em}
+.ar-card-lbl{font-size:10px;color:var(--txt3);margin-bottom:.35rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
 .ar-card-sub{font-size:11px;color:var(--txt2)}
 /* ── AR modern table ─────────────────────────────────────────── */
 .ar-tbl{width:100%;border-collapse:collapse}
@@ -487,22 +491,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="modal-csv" id="ar-sync-btn-in" onclick="syncARIndia()" style="margin-left:auto">⟳ Sync India</button>
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
       <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)">UK: forward QB email to Postmark to sync</span>
+      <button class="rbtn" onclick="openArSettings()" style="font-size:12px;padding:.28rem .8rem">⚙ Settings</button>
     </div>
-    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;background:#f8f9fb;border:1px solid var(--brd);border-radius:8px;padding:.6rem 1rem">
-      <span style="font-size:12px;color:var(--txt3);font-weight:600">GBP/INR Rate</span>
-      <input type="month" id="ar-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff"
-        onchange="arFxMonthChanged()">
-      <input type="number" id="ar-fx-rate" placeholder="e.g. 107.50" min="1" step="0.01"
-        style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;width:110px;background:#fff">
-      <button class="modal-csv" onclick="saveArFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
-      <button class="rbtn" onclick="showFxRatesModal()" style="font-size:12px;padding:.28rem .8rem">📋 All Rates</button>
-      <span id="ar-fx-status" style="font-size:11.5px;color:var(--txt3)"></span>
+    <div style="display:none">
+      <!-- hidden placeholders so existing JS (arFxMonthChanged, saveArFxRate) keeps working -->
+      <input type="month" id="ar-fx-month" onchange="arFxMonthChanged()">
+      <input type="number" id="ar-fx-rate" min="1" step="0.01">
+      <span id="ar-fx-status"></span>
     </div>
     <div class="ar-cards">
-      <div class="ar-card" id="ar-card-total"></div>
-      <div class="ar-card" id="ar-card-overdue"></div>
-      <div class="ar-card" id="ar-card-current"></div>
-      <div class="ar-card" id="ar-card-synced"></div>
+      <div class="ar-card c-total"   id="ar-card-total"></div>
+      <div class="ar-card c-overdue" id="ar-card-overdue"></div>
+      <div class="ar-card c-current" id="ar-card-current"></div>
+      <div class="ar-card c-synced"  id="ar-card-synced"></div>
     </div>
     <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
       <select class="nret-sel" id="ar-f-entity" onchange="renderAR()" style="font-size:12px">
@@ -556,6 +557,37 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           </tr></thead>
           <tbody id="ar-aging-body"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+  <!-- ── AR Settings Modal ────────────────────────────────────── -->
+  <div id="ar-settings-ov" class="fx-ov" onclick="if(event.target===this)closeArSettings()">
+    <div class="fx-box" style="width:500px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:600;color:var(--navy)">AR Settings</span>
+        <button onclick="closeArSettings()" style="background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:var(--txt3);padding:.1rem .3rem">×</button>
+      </div>
+      <!-- GBP/INR Rate section -->
+      <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">GBP / INR Exchange Rate</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem">
+          <input type="month" id="ar-settings-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff" onchange="arSettingsFxMonthChanged()">
+          <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP" min="1" step="0.01" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;width:115px;background:#fff">
+          <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
+          <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
+        <button class="rbtn" onclick="showFxRatesModal()" style="font-size:12px;padding:.28rem .8rem">📋 View / Edit All Rates</button>
+      </div>
+      <!-- Excluded customers section -->
+      <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">Excluded Customers</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
+        <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="text" id="ar-excl-input" placeholder="Customer name to exclude…" class="cust-input" style="font-size:12px;flex:1;padding:.32rem .65rem">
+          <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+        </div>
+        <div style="font-size:10.5px;color:var(--txt3);margin-top:.45rem">Partial match — e.g. "Mobisy UK" matches "Mobisy Technologies UK Limited"</div>
       </div>
     </div>
   </div>
@@ -4610,6 +4642,11 @@ let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices';
 let _arLastRows = []; // last filtered set for re-sort
+let _arCvSortCol = 'totalBal'; // customer view sort column
+let _arCvSortDir = -1; // -1=desc, 1=asc
+// Excluded customer substrings (persisted to localStorage)
+let _arExcluded = JSON.parse(localStorage.getItem('ar_excluded') || '["Mobisy Technologies UK"]');
+function arSaveExcluded() { localStorage.setItem('ar_excluded', JSON.stringify(_arExcluded)); }
 
 function showARTab(btn) {
   showTab('ar', btn);
@@ -4752,12 +4789,79 @@ async function saveArFxRate() {
 }
 
 function showFxRatesModal() {
-  const mi = document.getElementById('ar-fx-month');
-  document.getElementById('fx-add-month').value = mi?.value || new Date().toISOString().slice(0, 7);
+  const curMonth = new Date().toISOString().slice(0, 7);
+  document.getElementById('fx-add-month').value = curMonth;
   document.getElementById('fx-add-rate').value = '';
   document.getElementById('fx-modal-status').textContent = '';
   renderFxRateTable();
   document.getElementById('fx-modal-ov').classList.add('open');
+}
+
+// ── AR Settings modal ───────────────────────────────────────────────────
+function openArSettings() {
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const mi = document.getElementById('ar-settings-fx-month');
+  mi.value = curMonth;
+  arSettingsFxMonthChanged();
+  renderArExcludedList();
+  document.getElementById('ar-settings-ov').classList.add('open');
+}
+function closeArSettings() { document.getElementById('ar-settings-ov').classList.remove('open'); }
+
+function arSettingsFxMonthChanged() {
+  const m = document.getElementById('ar-settings-fx-month').value;
+  const ri = document.getElementById('ar-settings-fx-rate');
+  if (m && _arFxRates[m]) ri.value = _arFxRates[m];
+  else { const latest = Object.keys(_arFxRates).sort().pop(); ri.value = latest ? _arFxRates[latest] : ''; }
+}
+
+async function saveArSettingsFxRate() {
+  const month  = document.getElementById('ar-settings-fx-month').value;
+  const rate   = parseFloat(document.getElementById('ar-settings-fx-rate').value);
+  const status = document.getElementById('ar-settings-fx-status');
+  if (!month || !rate || rate < 1) { status.textContent = 'Enter valid month and rate'; status.style.color='#b91c1c'; return; }
+  status.textContent = 'Saving…'; status.style.color = '';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify({ year_month: month, currency: 'GBP', rate, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    _arFxRates[month] = rate;
+    // sync hidden inputs so saveArFxRate() still works if called
+    const hm = document.getElementById('ar-fx-month'); if (hm) hm.value = month;
+    const hr = document.getElementById('ar-fx-rate');  if (hr) hr.value = rate;
+    status.textContent = `Saved ${month}: ₹${rate}/GBP`; status.style.color='#15803d';
+    renderAR();
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color='#b91c1c'; }
+}
+
+function renderArExcludedList() {
+  const el = document.getElementById('ar-excl-list');
+  if (!el) return;
+  if (!_arExcluded.length) { el.innerHTML = '<div style="font-size:11.5px;color:var(--txt3);font-style:italic">No exclusions</div>'; return; }
+  el.innerHTML = _arExcluded.map((ex, i) =>
+    `<div style="display:flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid var(--brd);border-radius:5px;padding:.3rem .7rem">
+      <span style="flex:1;font-size:12px;font-family:var(--mono)">${escHtml(ex)}</span>
+      <button onclick="arExclRemove(${i})" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;line-height:1;padding:0 .2rem" title="Remove">×</button>
+    </div>`
+  ).join('');
+}
+function arExclAdd() {
+  const inp = document.getElementById('ar-excl-input');
+  const v = inp.value.trim();
+  if (!v || _arExcluded.includes(v)) return;
+  _arExcluded.push(v);
+  arSaveExcluded();
+  inp.value = '';
+  renderArExcludedList();
+  renderAR();
+}
+function arExclRemove(i) {
+  _arExcluded.splice(i, 1);
+  arSaveExcluded();
+  renderArExcludedList();
+  renderAR();
 }
 
 function closeFxModal() { document.getElementById('fx-modal-ov').classList.remove('open'); }
@@ -4836,12 +4940,14 @@ function renderAR() {
   const sf = document.getElementById('ar-f-status')?.value || '';
   const rf = document.getElementById('ar-f-rev')?.value    || '';
   const sq = (document.getElementById('ar-search')?.value  || '').toLowerCase();
-  const rows = _arAllRows.filter(r =>
-    (!ef || r.entity === ef) &&
-    (!sf || r.status === sf) &&
-    (!rf || r.revenue_type === rf) &&
-    (!sq || r.customer_name.toLowerCase().includes(sq))
-  );
+  const rows = _arAllRows.filter(r => {
+    const cn = (r.customer_name || '').toLowerCase();
+    if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
+    return (!ef || r.entity === ef) &&
+           (!sf || r.status === sf) &&
+           (!rf || r.revenue_type === rf) &&
+           (!sq || cn.includes(sq));
+  });
   renderARSummary(rows);
   renderARAgingTable(rows);
   renderARInvoiceList(rows);
@@ -4979,6 +5085,11 @@ function arSetInvView(v) {
   renderARInvoiceList(_arLastRows);
 }
 
+function arCvSort(col) {
+  if (_arCvSortCol === col) _arCvSortDir = _arCvSortDir === -1 ? 1 : -1;
+  else { _arCvSortCol = col; _arCvSortDir = -1; }
+  renderARCustomerView(_arLastRows);
+}
 function arToggleCust(idx) {
   const hdr  = document.getElementById(`ar-cv-h${idx}`);
   const open = hdr.dataset.open === '1';
@@ -4999,7 +5110,7 @@ function renderARCustomerView(rows) {
     custMap[k].push(r);
   }
 
-  // Build customer summaries, sort by total outstanding desc
+  // Build customer summaries
   const custs = Object.entries(custMap).map(([name, invs]) => {
     const totalBal  = invs.reduce((s, r) => s + arInr(r), 0);
     const ovdBal    = invs.filter(r => arOverdueDays(r.due_date) > 0).reduce((s, r) => s + arInr(r), 0);
@@ -5007,7 +5118,21 @@ function renderARCustomerView(rows) {
     const hasOverdue = ovdCnt > 0;
     const bu = arGetBu(name);
     return { name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu };
-  }).sort((a, b) => b.totalBal - a.totalBal);
+  });
+  // Sort by current sort state
+  custs.sort((a, b) => {
+    let va, vb;
+    switch (_arCvSortCol) {
+      case 'name':     va = a.name;     vb = b.name;     break;
+      case 'bu':       va = a.bu||'';   vb = b.bu||'';   break;
+      case 'cnt':      va = a.invs.length; vb = b.invs.length; break;
+      case 'ovdBal':   va = a.ovdBal;   vb = b.ovdBal;   break;
+      case 'status':   va = a.hasOverdue?1:0; vb = b.hasOverdue?1:0; break;
+      default:         va = a.totalBal; vb = b.totalBal;
+    }
+    if (typeof va === 'string') return _arCvSortDir * va.localeCompare(vb);
+    return _arCvSortDir * (vb - va); // numeric: flip sign so desc = higher first
+  });
 
   const f = n => Math.round(n).toLocaleString('en-IN');
   const cr = n => `₹${f(n)}`;
@@ -5070,16 +5195,22 @@ function renderARCustomerView(rows) {
     }
   });
 
+  const cvSortHdr = (col, label, align) => {
+    const active = _arCvSortCol === col;
+    const arrow = active ? (_arCvSortDir === -1 ? ' ▼' : ' ▲') : '';
+    const style = align ? `text-align:${align};` : '';
+    return `<th class="sortable${active?' sort-asc':''}" style="${style}cursor:pointer;user-select:none" onclick="arCvSort('${col}')">${label}${arrow}</th>`;
+  };
   wrap.innerHTML = `<table class="ar-tbl">
     <thead>
       <tr>
-        <th style="min-width:180px">Customer</th>
-        <th>BU</th>
+        ${cvSortHdr('name',    'Customer',         '')}
+        ${cvSortHdr('bu',      'BU',               '')}
         <th style="text-align:center">Entity</th>
-        <th style="text-align:right"># Inv</th>
-        <th style="text-align:right">Outstanding (₹)</th>
-        <th style="text-align:right">Overdue (₹)</th>
-        <th>Status</th>
+        ${cvSortHdr('cnt',     '# Inv',            'right')}
+        ${cvSortHdr('totalBal','Outstanding (₹)',  'right')}
+        ${cvSortHdr('ovdBal',  'Overdue (₹)',      'right')}
+        ${cvSortHdr('status',  'Status',           '')}
       </tr>
       <tr style="display:none" id="ar-cv-inv-hdr">
         <th style="padding-left:1.8rem">Invoice #</th>
