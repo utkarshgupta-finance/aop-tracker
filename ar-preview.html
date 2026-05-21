@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AR Dashboard — UI Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=DM+Mono:wght@400;500&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #e8ecf2; padding: 2rem; font-family: Inter, sans-serif; min-width: 1100px; }
+
+h1 { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: .35rem; }
+.subtitle { font-size: 12px; color: #64748b; margin-bottom: 2rem; }
+.section-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #94a3b8; margin-bottom: .75rem; margin-top: 2.5rem; }
+.options-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
+.option-wrap { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+.option-label { padding: .65rem 1rem; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; color: #374151; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+.option-tag { font-size: 9px; background: #eff6ff; color: #1d4ed8; padding: 2px 7px; border-radius: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.preview-frame { padding: 1.25rem; }
+
+/* ── FONT SWITCHER ──────────────────────────────── */
+.font-row { display: flex; gap: .5rem; margin-bottom: 2rem; align-items: center; flex-wrap: wrap; }
+.font-btn { padding: .3rem .85rem; border-radius: 20px; border: 1.5px solid #e2e8f0; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151; transition: all .15s; }
+.font-btn:hover { border-color: #3b82f6; color: #1d4ed8; }
+.font-btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.font-note { font-size: 11px; color: #64748b; margin-left: .5rem; }
+
+/* ── SHARED MOCK STYLES ─────────────────────────── */
+.mock { font-size: 11px; }
+
+/* Option A — Stripe-clean */
+.opt-a .cards { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .85rem; }
+.opt-a .card  { background: #fff; border: 1px solid #e2e8f0; border-radius: 7px; padding: .75rem .9rem; border-left: 3px solid #3b82f6; }
+.opt-a .card.red  { border-left-color: #ef4444; }
+.opt-a .card.green{ border-left-color: #22c55e; }
+.opt-a .card.purple{ border-left-color: #8b5cf6; }
+.opt-a .card-lbl  { font-size: 8.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
+.opt-a .card-val  { font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.opt-a .card-val.red { color: #dc2626; }
+.opt-a .card-val.green { color: #16a34a; }
+.opt-a .card-sub  { font-size: 9.5px; color: #94a3b8; margin-top: 2px; }
+.opt-a .tbl { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 7px; overflow: hidden; }
+.opt-a .tbl th { background: #f8fafc; font-size: 8.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #64748b; padding: .5rem .7rem; border-bottom: 1.5px solid #e2e8f0; text-align: left; }
+.opt-a .tbl td { padding: .48rem .7rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: #0f172a; font-size: 11px; }
+.opt-a .tbl tr:hover td { background: #f8fafc; }
+.opt-a .tbl tr:last-child td { border-bottom: none; }
+
+/* Option B — Modern KPI */
+.opt-b { background: #f1f5f9; }
+.opt-b .inner { background: #f1f5f9; padding: 1.25rem; }
+.opt-b .cards { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .85rem; }
+.opt-b .card  { background: #fff; border-radius: 10px; padding: .75rem .9rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+.opt-b .card.red  { background: linear-gradient(135deg,#fef2f2,#fff5f5); border: 1px solid #fecaca; }
+.opt-b .card.green{ background: linear-gradient(135deg,#f0fdf4,#f7fff9); border: 1px solid #bbf7d0; }
+.opt-b .card-lbl  { font-size: 8.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
+.opt-b .card-lbl.red { color: #f87171; }
+.opt-b .card-lbl.green { color: #4ade80; }
+.opt-b .card-val  { font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.opt-b .card-val.red { color: #dc2626; }
+.opt-b .card-val.green { color: #16a34a; }
+.opt-b .card-sub  { font-size: 9.5px; color: #94a3b8; margin-top: 2px; }
+.opt-b .tbl { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+.opt-b .tbl th { font-size: 8.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #64748b; padding: .55rem .75rem; border-bottom: 2px solid #f1f5f9; text-align: left; }
+.opt-b .tbl td { padding: .5rem .75rem; border-bottom: 1px solid #f8fafc; vertical-align: middle; color: #0f172a; font-size: 11px; }
+.opt-b .tbl tr:last-child td { border-bottom: none; }
+
+/* Option C — Dense minimal */
+.opt-c { background: #fff; border: 1px solid #e2e8f0; }
+.opt-c .inner { padding: 1.25rem; }
+.opt-c .kpi-row { display: flex; gap: 1.5rem; padding-bottom: .8rem; border-bottom: 1.5px solid #0f172a; margin-bottom: .75rem; }
+.opt-c .kpi { }
+.opt-c .kpi-lbl { font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #94a3b8; display: block; margin-bottom: 1px; }
+.opt-c .kpi-val { font-size: 14px; font-weight: 700; color: #0f172a; }
+.opt-c .kpi-val.red { color: #dc2626; }
+.opt-c .kpi-val.green { color: #15803d; }
+.opt-c .tbl { width: 100%; border-collapse: collapse; }
+.opt-c .tbl th { border-bottom: 1.5px solid #0f172a; font-size: 8.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #0f172a; padding: .3rem .6rem; text-align: left; }
+.opt-c .tbl td { padding: .38rem .6rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 11px; }
+.opt-c .tbl tr:last-child td { border-bottom: none; }
+
+/* shared badge styles */
+.badge { display: inline-block; font-size: 8.5px; font-weight: 700; padding: 1.5px 6px; border-radius: 8px; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-blue { background: #eff6ff; color: #1d4ed8; }
+.badge-green { background: #f0fdf4; color: #15803d; }
+.badge-amber { background: #fef3c7; color: #92400e; }
+.badge-ent { background: #eff6ff; color: #1e40af; }
+.badge-mm  { background: #f0fdf4; color: #15803d; }
+.badge-sme { background: #fdf4ff; color: #7e22ce; }
+.badge-in  { background: #ecfdf5; color: #065f46; }
+.badge-uk  { background: #ede9fe; color: #5b21b6; }
+.num { font-weight: 600; }
+.num.red { color: #dc2626; }
+.num.muted { color: #94a3b8; }
+.cust { font-weight: 500; }
+
+/* customer view rows */
+.cv-hdr td { background: #f5f7fb; font-weight: 600; font-size: 11px; padding: .45rem .7rem; border-bottom: 1px solid #dde2ea; cursor: pointer; }
+.cv-hdr:hover td { background: #edf0f7; }
+.cv-inv td { background: #fff; font-size: 10.5px; padding: .32rem .7rem; border-bottom: 1px solid #f0f2f6; }
+.cv-inv td:first-child { padding-left: 1.6rem; }
+.arrow { display: inline-block; width: 13px; font-size: 8px; color: #6b7280; }
+
+/* Subtabs */
+.subtabs { display: flex; gap: 0; border-bottom: 1.5px solid #e2e8f0; margin-bottom: .85rem; }
+.stab { padding: .45rem .9rem; font-size: 11px; font-weight: 500; border: none; background: none; border-bottom: 2px solid transparent; cursor: pointer; color: #64748b; margin-bottom: -1.5px; }
+.stab.active { color: #1d4ed8; border-bottom-color: #3b82f6; }
+
+/* View toggle */
+.vtog { display: flex; gap: .35rem; margin-bottom: .7rem; }
+.vtbtn { padding: .22rem .65rem; font-size: 10.5px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; color: #64748b; cursor: pointer; }
+.vtbtn.active { background: #1e3a5c; color: #fff; border-color: #1e3a5c; }
+</style>
+</head>
+<body>
+
+<h1>AR Dashboard — UI Preview Options</h1>
+<p class="subtitle">Switch fonts below to see how each layout looks. Click a layout card to imagine it in the real app.</p>
+
+<div class="font-row">
+  <span class="font-note">Font pairing:</span>
+  <button class="font-btn active" onclick="setFont('inter')" id="f-inter">Inter + Geist Mono</button>
+  <button class="font-btn" onclick="setFont('dm')" id="f-dm">DM Sans + DM Mono</button>
+  <button class="font-btn" onclick="setFont('jakarta')" id="f-jakarta">Plus Jakarta Sans + Fira Mono</button>
+</div>
+
+<div class="section-label">Layout Options — click to expand / see more</div>
+<div class="options-grid">
+
+  <!-- ── OPTION A: Stripe-clean ────────────────── -->
+  <div class="option-wrap">
+    <div class="option-label">Option A — Stripe-style Clean <span class="option-tag">Flat</span></div>
+    <div class="preview-frame mock opt-a" id="opt-a">
+      <div class="cards">
+        <div class="card"><div class="card-lbl">Total AR</div><div class="card-val mono">₹1.24 Cr</div><div class="card-sub">134 invoices</div></div>
+        <div class="card red"><div class="card-lbl">Overdue</div><div class="card-val red mono">₹38.5 L</div><div class="card-sub">42 invoices · 31%</div></div>
+        <div class="card green"><div class="card-lbl">Current</div><div class="card-val green mono">₹85.5 L</div><div class="card-sub">92 invoices</div></div>
+        <div class="card purple"><div class="card-lbl">Last Sync</div><div class="card-val" style="font-size:13px">2h ago</div><div class="card-sub">India + UK</div></div>
+      </div>
+      <div class="subtabs"><button class="stab active">Open Invoices</button><button class="stab">AR Aging</button><button class="stab">AR Summary</button></div>
+      <div class="vtog"><button class="vtbtn active">Invoice View</button><button class="vtbtn">Customer View</button></div>
+      <table class="tbl">
+        <thead><tr>
+          <th>Customer</th><th>BU</th><th>Entity</th><th style="text-align:right">Balance</th><th>Days</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="cust">Godrej Foods Limited</td><td><span class="badge badge-ent">India ENT</span></td><td><span class="badge badge-in">IN</span></td><td style="text-align:right" class="num red mono">₹8,40,000</td><td style="font-size:10px;color:#b91c1c;font-weight:600">24d overdue</td><td><span class="badge badge-red">OVERDUE</span></td></tr>
+          <tr><td class="cust">A V Thomas &amp; Co Ltd</td><td><span class="badge badge-mm">India MM</span></td><td><span class="badge badge-in">IN</span></td><td style="text-align:right" class="num mono">₹3,20,000</td><td style="font-size:10px;color:#64748b">In 12d</td><td><span class="badge badge-blue">SENT</span></td></tr>
+          <tr><td class="cust">British American Shared Services</td><td><span class="badge badge-ent">India ENT</span></td><td><span class="badge badge-uk">UK</span></td><td style="text-align:right" class="num mono">₹12,40,000</td><td style="font-size:10px;color:#64748b">In 5d</td><td><span class="badge badge-amber">PARTIAL</span></td></tr>
+          <tr><td class="cust">Gandhi Spices Pvt Ltd</td><td><span class="badge badge-sme">SME BU</span></td><td><span class="badge badge-in">IN</span></td><td style="text-align:right" class="num red mono">₹1,85,000</td><td style="font-size:10px;color:#b91c1c;font-weight:600">8d overdue</td><td><span class="badge badge-red">OVERDUE</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── OPTION B: Modern KPI cards ────────────── -->
+  <div class="option-wrap">
+    <div class="option-label">Option B — Modern KPI Cards <span class="option-tag">Tinted</span></div>
+    <div class="preview-frame opt-b" id="opt-b" style="background:#f1f5f9;padding:0">
+      <div class="inner mock">
+        <div class="cards">
+          <div class="card"><div class="card-lbl">Total AR</div><div class="card-val mono">₹1.24 Cr</div><div class="card-sub">134 invoices</div></div>
+          <div class="card red"><div class="card-lbl red">Overdue</div><div class="card-val red mono">₹38.5 L</div><div class="card-sub">42 invoices · 31%</div></div>
+          <div class="card green"><div class="card-lbl green">Current</div><div class="card-val green mono">₹85.5 L</div><div class="card-sub">92 invoices</div></div>
+          <div class="card"><div class="card-lbl">Last Sync</div><div class="card-val" style="font-size:13px">2h ago</div><div class="card-sub">India + UK</div></div>
+        </div>
+        <div class="subtabs"><button class="stab active">Open Invoices</button><button class="stab">AR Aging</button><button class="stab">AR Summary</button></div>
+        <div class="vtog"><button class="vtbtn">Invoice View</button><button class="vtbtn active">Customer View</button></div>
+        <table class="tbl">
+          <thead><tr>
+            <th>Customer</th><th>BU</th><th style="text-align:right"># Inv</th><th style="text-align:right">Outstanding</th><th style="text-align:right">Overdue</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            <tr class="cv-hdr"><td><span class="arrow">▼</span> Godrej Foods Limited</td><td><span class="badge badge-ent">India ENT</span></td><td style="text-align:right;color:#64748b">3</td><td style="text-align:right" class="num red mono">₹18,40,000</td><td style="text-align:right" class="num red mono">₹8,40,000</td><td><span class="badge badge-red">● OVERDUE</span></td></tr>
+            <tr class="cv-inv"><td>INV-2024-0892</td><td style="color:#64748b">15 Jan 2025</td><td style="text-align:right;color:#64748b">—</td><td style="text-align:right" class="num red mono">₹5,20,000</td><td></td><td><span class="badge badge-red">OVERDUE</span></td></tr>
+            <tr class="cv-inv"><td>INV-2024-0756</td><td style="color:#64748b">12 Dec 2024</td><td style="text-align:right;color:#64748b">—</td><td style="text-align:right" class="num mono">₹3,20,000</td><td></td><td><span class="badge badge-blue">SENT</span></td></tr>
+            <tr class="cv-hdr"><td><span class="arrow">▶</span> A V Thomas &amp; Co Ltd</td><td><span class="badge badge-mm">India MM</span></td><td style="text-align:right;color:#64748b">4</td><td style="text-align:right" class="num mono">₹9,60,000</td><td style="text-align:right;color:#94a3b8">—</td><td><span class="badge badge-blue">● CURRENT</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OPTION C: Dense minimal ────────────────── -->
+  <div class="option-wrap">
+    <div class="option-label">Option C — Dense &amp; Minimal <span class="option-tag">Compact</span></div>
+    <div class="preview-frame mock opt-c" id="opt-c" style="padding:0;background:#fff">
+      <div class="inner">
+        <div class="kpi-row">
+          <div class="kpi"><span class="kpi-lbl">Total AR</span><span class="kpi-val mono">₹1.24 Cr</span></div>
+          <div class="kpi"><span class="kpi-lbl">Overdue</span><span class="kpi-val red mono">₹38.5 L</span></div>
+          <div class="kpi"><span class="kpi-lbl">Current</span><span class="kpi-val green mono">₹85.5 L</span></div>
+          <div class="kpi" style="margin-left:auto"><span class="kpi-lbl">Synced</span><span class="kpi-val" style="font-size:12px">2h ago</span></div>
+        </div>
+        <div class="subtabs"><button class="stab active">Open Invoices</button><button class="stab">AR Aging</button><button class="stab">AR Summary</button></div>
+        <div class="vtog"><button class="vtbtn active">Invoice View</button><button class="vtbtn">Customer View</button></div>
+        <table class="tbl">
+          <thead><tr>
+            <th>Customer</th><th>BU</th><th>Entity</th><th style="text-align:right">Balance (₹)</th><th>Due / Overdue</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="cust" style="font-size:11px">Godrej Foods Limited</td><td style="font-size:10px;color:#64748b">India ENT BU</td><td><span class="badge badge-in">IN</span></td><td style="text-align:right" class="num red mono" style="font-size:11.5px">₹8,40,000</td><td style="font-size:10px;color:#b91c1c;font-weight:600">24d overdue</td><td><span style="font-size:10px;color:#b91c1c;font-weight:600">● Overdue</span></td></tr>
+            <tr><td class="cust" style="font-size:11px">A V Thomas &amp; Co Ltd</td><td style="font-size:10px;color:#64748b">India MM BU</td><td><span class="badge badge-in">IN</span></td><td style="text-align:right;font-size:11.5px" class="num mono">₹3,20,000</td><td style="font-size:10px;color:#64748b">In 12d</td><td><span style="font-size:10px;color:#2563eb;font-weight:600">● Sent</span></td></tr>
+            <tr><td class="cust" style="font-size:11px">British American Shared Services</td><td style="font-size:10px;color:#64748b">India ENT BU</td><td><span class="badge badge-uk">UK</span></td><td style="text-align:right;font-size:11.5px" class="num mono">₹12,40,000</td><td style="font-size:10px;color:#64748b">In 5d</td><td><span style="font-size:10px;color:#92400e;font-weight:600">● Partial</span></td></tr>
+            <tr><td class="cust" style="font-size:11px">Gandhi Spices Pvt Ltd</td><td style="font-size:10px;color:#64748b">SME BU</td><td><span class="badge badge-in">IN</span></td><td style="text-align:right;font-size:11.5px" class="num red mono">₹1,85,000</td><td style="font-size:10px;color:#b91c1c;font-weight:600">8d overdue</td><td><span style="font-size:10px;color:#b91c1c;font-weight:600">● Overdue</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label" style="margin-top:2rem">Current (for comparison)</div>
+<div style="max-width:700px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <div class="option-label">Current — IBM Plex Sans + IBM Plex Mono <span class="option-tag" style="background:#f1f5f9;color:#64748b">Existing</span></div>
+  <div class="preview-frame">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem;margin-bottom:1rem">
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem"><div style="font-size:11px;color:#8896a8;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.1rem">Total AR</div><div style="font-size:18px;font-weight:700;color:#1a3a5c;font-family:'IBM Plex Mono',monospace">₹1.24 Cr</div><div style="font-size:11px;color:#4a5568">134 invoices</div></div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem"><div style="font-size:11px;color:#8896a8;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.1rem">Overdue</div><div style="font-size:18px;font-weight:700;color:#b91c1c;font-family:'IBM Plex Mono',monospace">₹38.5 L</div><div style="font-size:11px;color:#4a5568">42 invoices</div></div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem"><div style="font-size:11px;color:#8896a8;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.1rem">Current</div><div style="font-size:18px;font-weight:700;color:#15803d;font-family:'IBM Plex Mono',monospace">₹85.5 L</div><div style="font-size:11px;color:#4a5568">92 invoices</div></div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem"><div style="font-size:11px;color:#8896a8;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.1rem">Last Sync</div><div style="font-size:18px;font-weight:700;color:#1a3a5c;font-family:'IBM Plex Mono',monospace">2h</div><div style="font-size:11px;color:#4a5568">ago</div></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;font-family:'IBM Plex Mono',monospace">
+      <thead><tr style="background:#f8fafc"><th style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left">Customer</th><th style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0">BU</th><th style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:right">Balance</th><th style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0">Status</th></tr></thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #f1f5f9"><td style="padding:.55rem .9rem;font-family:'IBM Plex Sans',sans-serif;font-weight:500;font-size:11.5px">Godrej Foods Limited</td><td style="padding:.55rem .9rem"><span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">India ENT BU</span></td><td style="padding:.55rem .9rem;text-align:right;font-weight:600;color:#b91c1c">₹8,40,000</td><td style="padding:.55rem .9rem"><span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.15rem .5rem;border-radius:10px;font-weight:700">OVERDUE</span></td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9"><td style="padding:.55rem .9rem;font-family:'IBM Plex Sans',sans-serif;font-weight:500;font-size:11.5px">A V Thomas &amp; Co Ltd</td><td style="padding:.55rem .9rem"><span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">India MM BU</span></td><td style="padding:.55rem .9rem;text-align:right;font-weight:600">₹3,20,000</td><td style="padding:.55rem .9rem"><span style="font-size:9.5px;background:#eff6ff;color:#1d4ed8;padding:.15rem .5rem;border-radius:10px;font-weight:700">SENT</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const fonts = {
+  inter:   { ui: "'Inter', sans-serif",             mono: "'Geist Mono','IBM Plex Mono',monospace" },
+  dm:      { ui: "'DM Sans', sans-serif",            mono: "'DM Mono',monospace" },
+  jakarta: { ui: "'Plus Jakarta Sans', sans-serif",  mono: "'Fira Mono',monospace" }
+};
+
+function setFont(key) {
+  document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('f-' + key).classList.add('active');
+  const f = fonts[key];
+  document.querySelectorAll('.mock').forEach(el => el.style.fontFamily = f.ui);
+  document.querySelectorAll('.mono').forEach(el => el.style.fontFamily = f.mono);
+}
+// Auto-apply font from URL hash: #font=dm or #font=jakarta
+(function() {
+  const m = location.hash.match(/font=([a-z]+)/);
+  if (m && fonts[m[1]]) { window.addEventListener('DOMContentLoaded', () => setFont(m[1])); }
+})();
+</script>
+</body>
+</html>
