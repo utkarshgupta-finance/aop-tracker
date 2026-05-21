@@ -5008,9 +5008,12 @@ function renderAR() {
   const allBus = [...new Set(
     _arAllRows
       .filter(r => !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase())))
-      .map(r => arGetBu(r.customer_name))
-      .filter(Boolean)
-  )].sort();
+      .map(r => arGetBu(r.customer_name) || 'Uncategorised')
+  )].sort((a, b) => {
+    if (a === 'Uncategorised') return 1;
+    if (b === 'Uncategorised') return -1;
+    return a.localeCompare(b);
+  });
   _arBuCapsuleHTML('ar-bu-row',       allBus);
   _arBuCapsuleHTML('ar-aging-bu-row', allBus);
   _arBuCapsuleHTML('ar-daily-bu-row', allBus);
@@ -5018,7 +5021,7 @@ function renderAR() {
   const rows = _arAllRows.filter(r => {
     const cn = (r.customer_name || '').toLowerCase();
     if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
-    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name))) return false;
+    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name) || 'Uncategorised')) return false;
     return (!ef || r.entity === ef) &&
            (!sf || r.status === sf) &&
            (!rf || r.revenue_type === rf) &&
@@ -5123,7 +5126,7 @@ function renderARSnapshots(rows) {
   const filtered = rows.filter(r => {
     const cn = (r.customer_name || '').toLowerCase();
     if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
-    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name))) return false;
+    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name) || 'Uncategorised')) return false;
     return true;
   });
 
