@@ -531,7 +531,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="ar-subtabs">
       <button class="ar-stbtn active" id="ar-st-invoices" onclick="showARSubTab('invoices')">Open Invoices</button>
       <button class="ar-stbtn" id="ar-st-aging" onclick="showARSubTab('aging')">AR Aging</button>
-      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">Daily View</button>
+      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">BU Summary</button>
       <button class="ar-stbtn" id="ar-st-summary" onclick="showARSubTab('summary')">AR Summary</button>
     </div>
     <!-- Open Invoices pane (default) -->
@@ -4948,30 +4948,42 @@ function arAgeBucket(dueDateStr) {
   return '90plus';
 }
 
+// Capsule rows use data-bu attributes; click is handled by delegated listeners
+// set up once in initARCapsuleListeners().
+const _arCapsuleRowIds = ['ar-bu-row','ar-aging-bu-row','ar-daily-bu-row'];
+
+function initARCapsuleListeners() {
+  _arCapsuleRowIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', function(e) {
+      const btn = e.target.closest('button[data-bu]');
+      if (!btn) return;
+      const bu = btn.dataset.bu === '__all__' ? null : btn.dataset.bu;
+      if (bu === null) {
+        _arBuSelected.clear();
+      } else if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        if (_arBuSelected.has(bu)) _arBuSelected.delete(bu);
+        else _arBuSelected.add(bu);
+      } else {
+        if (_arBuSelected.size === 1 && _arBuSelected.has(bu)) _arBuSelected.clear();
+        else { _arBuSelected.clear(); _arBuSelected.add(bu); }
+      }
+      renderAR();
+    });
+  });
+}
+
 function _arBuCapsuleHTML(targetId, allBus) {
   const row = document.getElementById(targetId);
   if (!row) return;
   if (!allBus.length) { row.innerHTML = ''; return; }
   const all = _arBuSelected.size === 0;
   row.innerHTML =
-    `<button class="chip${all?' active':''}" onclick="arBuToggle(event,null)">All</button>` +
-    allBus.map(b => {
-      const active = _arBuSelected.has(b);
-      return `<button class="chip${active?' active':''}" onclick="arBuToggle(event,${JSON.stringify(b)})">${escHtml(b)}</button>`;
-    }).join('');
-}
-
-function arBuToggle(evt, bu) {
-  if (bu === null) {
-    _arBuSelected.clear();
-  } else if (evt && (evt.shiftKey || evt.metaKey || evt.ctrlKey)) {
-    if (_arBuSelected.has(bu)) _arBuSelected.delete(bu);
-    else _arBuSelected.add(bu);
-  } else {
-    if (_arBuSelected.size === 1 && _arBuSelected.has(bu)) _arBuSelected.clear();
-    else { _arBuSelected.clear(); _arBuSelected.add(bu); }
-  }
-  renderAR();
+    `<button class="chip${all?' active':''}" data-bu="__all__">All</button>` +
+    allBus.map(b =>
+      `<button class="chip${_arBuSelected.has(b)?' active':''}" data-bu="${escHtml(b)}">${escHtml(b)}</button>`
+    ).join('');
 }
 
 function renderAR() {
@@ -5073,55 +5085,81 @@ function renderARDailyTable(rows) {
     return;
   }
 
-  // Group by invoice_date → BU
-  const dateMap = {}; // date → { total, overdue, byBU: { bu → { bal, ovd } } }
+  // BU × Aging bucket matrix
+  // Rows = BUs, Columns = aging buckets + total
+  const buMap = {}; // bu → { bucketKey → balance, total, ovdTotal }
   for (const r of rows) {
-    const date = r.invoice_date || '(No date)';
-    const bu   = arGetBu(r.customer_name) || 'Uncategorised';
-    const bal  = arInr(r);
-    const isOvd = arOverdueDays(r.due_date) > 0;
-    if (!dateMap[date]) dateMap[date] = { total: 0, overdue: 0, byBU: {} };
-    dateMap[date].total   += bal;
-    if (isOvd) dateMap[date].overdue += bal;
-    if (!dateMap[date].byBU[bu]) dateMap[date].byBU[bu] = { bal: 0, ovd: 0 };
-    dateMap[date].byBU[bu].bal += bal;
-    if (isOvd) dateMap[date].byBU[bu].ovd += bal;
+    const bu  = arGetBu(r.customer_name) || 'Uncategorised';
+    const bk  = arAgeBucket(r.due_date);
+    const bal = arInr(r);
+    if (!buMap[bu]) buMap[bu] = { total: 0, ovdTotal: 0 };
+    buMap[bu][bk]    = (buMap[bu][bk] || 0) + bal;
+    buMap[bu].total += bal;
+    if (bk !== 'current') buMap[bu].ovdTotal += bal;
   }
 
-  // All BUs present in this filtered set
-  const allBus = [...new Set(rows.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort();
+  const allBus  = Object.keys(buMap).sort((a, b) => {
+    if (a === 'Uncategorised') return 1;
+    if (b === 'Uncategorised') return -1;
+    return buMap[b].total - buMap[a].total; // highest total first
+  });
+  const grandTotal    = allBus.reduce((s, b) => s + buMap[b].total, 0);
+  const grandByBucket = {};
+  AR_BUCKETS.forEach(bk => {
+    grandByBucket[bk.key] = allBus.reduce((s, b) => s + (buMap[b][bk.key] || 0), 0);
+  });
 
-  const dates = Object.keys(dateMap).sort().reverse(); // most recent first
-  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '—';
-  const thS = 'padding:.45rem .75rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap;text-align:right';
-  const tdS = 'padding:.42rem .75rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9';
+  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '<span style="color:#cbd5e1">—</span>';
+  const pct = (v, tot) => tot > 0 ? (v / tot * 100).toFixed(0) + '%' : '—';
+  const thS = 'padding:.5rem .85rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap;text-align:right';
+  const tdS = (extra='') => `padding:.45rem .85rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9;${extra}`;
 
-  const buCols = allBus.map(b => `<th style="${thS}">${escHtml(b)}</th>`).join('');
-  const rows_html = dates.map(date => {
-    const d = dateMap[date];
-    const buCells = allBus.map(bu => {
-      const v = d.byBU[bu]?.bal || 0;
-      const o = d.byBU[bu]?.ovd || 0;
-      const ovdTag = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${cr(o)} ovd</span>` : '';
-      return `<td style="${tdS}">${v > 0 ? cr(v) : '<span style="color:#cbd5e1">—</span>'}${ovdTag}</td>`;
+  const bucketCols = AR_BUCKETS.map(b => `<th style="${thS};color:${b.color}">${b.label}</th>`).join('');
+  const rows_html  = allBus.map(bu => {
+    const d   = buMap[bu];
+    const cells = AR_BUCKETS.map(b => {
+      const v = d[b.key] || 0;
+      return `<td style="${tdS()}color:${v>0?b.color:'inherit'}">${cr(v)}</td>`;
     }).join('');
-    const ovdTag = d.overdue > 0
-      ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${cr(d.overdue)} overdue</span>` : '';
+    const ovdPct = d.total > 0 ? pct(d.ovdTotal, d.total) : '—';
+    const ovdColor = d.ovdTotal > 0 ? '#b91c1c' : '#94a3b8';
     return `<tr>
-      <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:500;color:#0f172a">${date}</td>
-      <td style="${tdS};font-weight:700;color:var(--navy)">${cr(d.total)}${ovdTag}</td>
-      ${buCells}
+      <td style="${tdS('text-align:left;font-family:var(--sans);font-weight:600;color:var(--navy2);')}">${escHtml(bu)}</td>
+      <td style="${tdS('font-weight:700;color:var(--navy);')}">${cr(d.total)}</td>
+      <td style="${tdS(`color:${ovdColor};`)}">${d.ovdTotal > 0 ? cr(d.ovdTotal) : '<span style="color:#94a3b8">—</span>'}</td>
+      <td style="${tdS(`color:${ovdColor};`)}">${d.ovdTotal > 0 ? ovdPct : '—'}</td>
+      ${cells}
     </tr>`;
   }).join('');
 
-  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${400 + allBus.length * 130}px">
+  // Totals row
+  const totCells = AR_BUCKETS.map(b => {
+    const v = grandByBucket[b.key] || 0;
+    return `<td style="${tdS('font-weight:700;')}color:${v>0?b.color:'inherit'}">${cr(v)}</td>`;
+  }).join('');
+  const grandOvd    = allBus.reduce((s, b) => s + (buMap[b].ovdTotal || 0), 0);
+  const grandOvdPct = grandTotal > 0 ? pct(grandOvd, grandTotal) : '—';
+
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl">
     <thead><tr>
-      <th style="${thS};text-align:left">Invoice Date</th>
+      <th style="${thS};text-align:left">BU</th>
       <th style="${thS}">Total Outstanding</th>
-      ${buCols}
+      <th style="${thS}">Overdue</th>
+      <th style="${thS}">Ovd %</th>
+      ${bucketCols}
     </tr></thead>
-    <tbody>${rows_html}</tbody>
-  </table></div>`;
+    <tbody>
+      ${rows_html}
+      <tr style="border-top:2px solid #e2e8f0;background:#f8fafc">
+        <td style="${tdS('text-align:left;font-family:var(--sans);font-weight:700;')}">Total</td>
+        <td style="${tdS('font-weight:700;color:var(--navy);')}">${cr(grandTotal)}</td>
+        <td style="${tdS('font-weight:700;color:#b91c1c;')}">${cr(grandOvd)}</td>
+        <td style="${tdS('font-weight:700;color:#b91c1c;')}">${grandOvdPct}</td>
+        ${totCells}
+      </tr>
+    </tbody>
+  </table></div>
+  <div style="font-size:11px;color:var(--txt3);margin-top:.75rem">Note: to see daily historical snapshots a snapshot table needs to be set up. This shows current outstanding AR by BU and aging bucket.</div>`;
 }
 
 function renderARBuSummary(rows) {
@@ -5593,6 +5631,7 @@ function nretShowPopup(evt, type, key, mm, pinned) {
 }
 
 initAuth();
+initARCapsuleListeners();
 </script>
 <!-- Net retention cell popup -->
 <div id="nret-cell-popup" class="nret-popup"><div id="nret-cell-popup-inner"></div></div>
