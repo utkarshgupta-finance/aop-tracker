@@ -2044,13 +2044,21 @@ async function cmrrLoadWf() {
     const lineMap = {};
     for (const l of lines) lineMap[l.id] = l.workflow || l.services || '(unset)';
     const ids = lines.map(l => l.id);
-    const mR = await fetch(
-      `${SUPABASE_URL}/rest/v1/customer_module_mrr?select=module_line_id,month_date,mrr_amount` +
-      `&module_line_id=in.(${ids.join(',')})&order=month_date.asc&limit=5000`,
-      { headers: cmrrHdr() }
-    );
-    if (!mR.ok) throw new Error('HTTP ' + mR.status);
-    const rows = await mR.json();
+    const rows = [];
+    const PAGE = 1000;
+    let mOff = 0;
+    while (true) {
+      const mR = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_module_mrr?select=module_line_id,month_date,mrr_amount` +
+        `&module_line_id=in.(${ids.join(',')})&order=month_date.asc&limit=${PAGE}&offset=${mOff}`,
+        { headers: cmrrHdr() }
+      );
+      if (!mR.ok) throw new Error('HTTP ' + mR.status);
+      const page = await mR.json();
+      rows.push(...page);
+      if (page.length < PAGE) break;
+      mOff += PAGE;
+    }
     const matrix = {}, mSet = new Set();
     for (const row of rows) {
       const wf = lineMap[row.module_line_id] || '(unset)';
@@ -2982,7 +2990,12 @@ DATABASE SCHEMA:
     IMPORTANT: Do NOT use for NRR — it is non-cohorted. Contains "Unknown BU" rows (always ₹0, exclude).
   customer_mrr_lines    — zoho_name, go_live_date DATE, churn_date DATE (null=active), segment_id, bu_id
     Lifecycle metadata. Joins: segment_master!left(name), bu_master!left(name)
-  customer_module_lines — zoho_name, services, workflow, service_type, status, billing_cycle
+  customer_module_lines — zoho_name, services, workflow, service_type, status, billing_cycle,
+                          line_label TEXT (distinguishes multiple lines for same combo),
+                          currency_code CHAR(3) DEFAULT 'INR', rate_unit TEXT,
+                          deleted_at TIMESTAMPTZ (NULL = active; always filter deleted_at IS NULL)
+  customer_module_mrr   — module_line_id, month_date, mrr_amount, rate NUMERIC,
+                          exchange_rate NUMERIC, billed_users INT (freeze-date user count)
   aop_targets           — bu_id, fy_id, month_date, mrr_aop, nrr_aop  [Join: bu_master!left(name)]
   deal_snapshots        — snapshot_date DATE, deal_name, account_name, closing_month DATE, stage,
                           probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
@@ -2998,7 +3011,7 @@ DATABASE SCHEMA:
         Filter: stage=neq.Closed Won&stage=neq.Revised Pricing  (or filter where expected_mrr > 0)
       Late-stage deals (highest probability to close): "PO pending" | "Negotiation" | "Decision maker bought in"
     closing_month: filter deals expected to close in a period — e.g. closing_month=eq.2026-04-01
-    billing_cycle data (from customer_module_lines, status=Active): always query live — do not use cached percentages.
+    billing_cycle data (from customer_module_lines, status=Active, deleted_at=is.null): always query live — do not use cached percentages.
   segment_master        — id INT, name TEXT
   bu_master             — id INT, name TEXT, code TEXT
 
@@ -3055,7 +3068,7 @@ USING THE TOOL — query_database(table, params):
   13. Tenure analysis: table=customer_mrr_lines, select=zoho_name,go_live_date,bu_master!left(name)
       Compute tenure = current date minus go_live_date. Segment by <1yr, 1-3yr, 3+yr.
   14. Billing cycle MRR — MANDATORY 2-step join method (never guess, never use counts alone):
-      Step 1: Query customer_module_lines: select=zoho_name,billing_cycle&status=eq.Active&limit=3000
+      Step 1: Query customer_module_lines: select=zoho_name,billing_cycle&status=eq.Active&deleted_at=is.null&limit=3000
               This returns all active module lines with their billing cycle per customer.
       Step 2: Query customer_mrr_unified for the target month: select=zoho_name,mrr_amount&month_date=eq.YYYY-MM-01&limit=2000
       Step 3: In memory — group Step 1 by billing_cycle value. For each group, collect the set of unique zoho_names.
@@ -3322,7 +3335,7 @@ HANDLING VAGUE OR HALF-FORMED QUESTIONS — never stall, never ask for clarifica
     "deals closing this month" / "closing in April" / "what closes this quarter":
       → Filter closing_month=eq.2026-04-01 (or the relevant month). Sort by expected_mrr desc.
     "billing cycle" / "how do customers pay" / "annual vs monthly":
-      → Query live: table=customer_module_lines, params=select=billing_cycle&status=eq.Active&limit=1000. Group and compute % breakdown.
+      → Query live: table=customer_module_lines, params=select=billing_cycle&status=eq.Active&deleted_at=is.null&limit=1000. Group and compute % breakdown.
     "what if we close 50% of pipeline" / "scenario planning" / "best case":
       → Fetch weighted pipeline total, multiply by assumed close rate, compare to AOP gap.
          State clearly: "Closing X% of pipeline adds ₹Y to MRR. Monthly gap to plan is ₹Z."
@@ -4657,6 +4670,8 @@ let _arFxRates  = {}; // { 'YYYY-MM': rate }
 let _arInvView  = 'invoice'; // 'invoice' | 'customer'
 let _arBuMap        = {}; // { customer_name_lower: bu_name }
 let _arBuMapLoading = false;
+const _AR_BU_MAP_CACHE_KEY = 'ar_bu_map_cache';
+const _AR_BU_MAP_TTL_MS    = 5 * 60 * 1000; // 5 minutes
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices';
@@ -4689,6 +4704,15 @@ function showARSubTab(tab) {
 
 async function loadArBuMap() {
   if (_arBuMapLoading || Object.keys(_arBuMap).length > 0) return;
+  // Serve from localStorage cache if fresh (TTL = 5 min)
+  try {
+    const cached = JSON.parse(localStorage.getItem(_AR_BU_MAP_CACHE_KEY) || 'null');
+    if (cached && cached.ts && (Date.now() - cached.ts) < _AR_BU_MAP_TTL_MS && cached.data) {
+      _arBuMap = cached.data;
+      renderAR();
+      return;
+    }
+  } catch(_) {}
   _arBuMapLoading = true;
   try {
     const PAGE = 1000;
@@ -4706,6 +4730,10 @@ async function loadArBuMap() {
       if (rows.length < PAGE) break;
       offset += PAGE;
     }
+    // Persist to localStorage with timestamp
+    try {
+      localStorage.setItem(_AR_BU_MAP_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: _arBuMap }));
+    } catch(_) {}
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
   finally { _arBuMapLoading = false; }
@@ -5102,10 +5130,21 @@ async function loadARSnapshots() {
   if (status) status.textContent = '';
   try {
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    const url   = `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?select=*&snapshot_date=gte.${since}&order=snapshot_date.desc&limit=5000`;
-    const r     = await fetch(url, { headers: cmrrHdr() });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const rows  = await r.json();
+    const snapRows = [], PAGE = 1000;
+    let snapOff = 0;
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?select=*&snapshot_date=gte.${since}` +
+        `&order=snapshot_date.desc&limit=${PAGE}&offset=${snapOff}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const page = await r.json();
+      snapRows.push(...page);
+      if (page.length < PAGE) break;
+      snapOff += PAGE;
+    }
+    const rows = snapRows;
     _arSnapLoaded = true;
     if (status) status.textContent = rows.length ? `${rows.length} rows` : '';
     renderARSnapshots(rows);

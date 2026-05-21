@@ -2,11 +2,11 @@
 ALTER TABLE customer_module_mrr
   ADD COLUMN IF NOT EXISTS rate          numeric(14,4),
   ADD COLUMN IF NOT EXISTS exchange_rate numeric(10,4),
-  ADD COLUMN IF NOT EXISTS freeze_count  integer;
+  ADD COLUMN IF NOT EXISTS billed_users  integer;
 
--- Step 2: Populate rate, exchange_rate, freeze_count from Excel FY26 data
+-- Step 2: Populate rate, exchange_rate, billed_users from Excel FY26 data
 -- 1782 Excel rows matched to DB line_ids → 21384 mrr row updates
-WITH updates(mrr_id, rate, exchange_rate, freeze_count) AS (VALUES
+WITH updates(mrr_id, rate, exchange_rate, billed_users) AS (VALUES
   (1,11666.66,1.0,NULL),
   (2,11666.66,1.0,NULL),
   (3,11666.66,1.0,NULL),
@@ -21396,6 +21396,6 @@ UPDATE customer_module_mrr m
 SET
   rate          = u.rate,
   exchange_rate = u.exchange_rate,
-  freeze_count  = u.freeze_count
+  billed_users  = u.billed_users
 FROM updates u
 WHERE m.id = u.mrr_id;
