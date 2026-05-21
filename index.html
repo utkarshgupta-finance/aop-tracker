@@ -2032,7 +2032,8 @@ async function cmrrLoadWf() {
   try {
     const lR = await fetch(
       `${SUPABASE_URL}/rest/v1/customer_module_lines?select=id,workflow,services` +
-      `&zoho_name=eq.${encodeURIComponent(_cmrrCurName)}&order=id`,
+      `&zoho_name=eq.${encodeURIComponent(_cmrrCurName)}` +
+      `&services=neq._historical&deleted_at=is.null&order=id`,
       { headers: cmrrHdr() }
     );
     if (!lR.ok) throw new Error('HTTP ' + lR.status);
@@ -2982,6 +2983,8 @@ METRIC DEFINITIONS — compute these precisely from raw data you fetch:
 
 DATABASE SCHEMA:
   customer_mrr_unified  — zoho_name, month_date DATE (YYYY-MM-01), mrr_amount NUMERIC
+                          VIEW over customer_module_mrr (all months Apr 2017–present).
+                          Excludes zero-amount rows. Groups multiple billing lines per customer per month.
     Per-customer MRR. Merges contract + module MRR. Use for all customer-level and NRR analysis.
     Covers Apr 2025–present; pre-Apr 2025 data is a partial cut (see DATA QUIRKS).
     Totals match bu_mrr_monthly exactly — both are valid for aggregation.
@@ -2990,12 +2993,25 @@ DATABASE SCHEMA:
     IMPORTANT: Do NOT use for NRR — it is non-cohorted. Contains "Unknown BU" rows (always ₹0, exclude).
   customer_mrr_lines    — zoho_name, go_live_date DATE, churn_date DATE (null=active), segment_id, bu_id
     Lifecycle metadata. Joins: segment_master!left(name), bu_master!left(name)
-  customer_module_lines — zoho_name, services, workflow, service_type, status, billing_cycle,
+  customer_module_lines — zoho_name, customer_id FK→customer_master, services, workflow,
+                          service_type, status, billing_cycle,
                           line_label TEXT (distinguishes multiple lines for same combo),
                           currency_code CHAR(3) DEFAULT 'INR', rate_unit TEXT,
-                          deleted_at TIMESTAMPTZ (NULL = active; always filter deleted_at IS NULL)
+                          mrr_line_ref FK→customer_mrr_lines (set on historical marker rows only),
+                          deleted_at TIMESTAMPTZ (NULL = active; ALWAYS filter deleted_at IS NULL)
+                          NOTE: rows with services='_historical' are pre-Apr-2025 migration markers —
+                          exclude from UI queries with &services=neq._historical
   customer_module_mrr   — module_line_id, month_date, mrr_amount, rate NUMERIC,
                           exchange_rate NUMERIC, billed_users INT (freeze-date user count)
+                          Contains ALL months Apr 2017–present (historical + FY26+)
+  customer_module_mrr_with_fx — extends customer_module_mrr with effective_exchange_rate
+                          (from fx_rates canonical source) and mrr_amount_inr
+  customer_mrr_lines    — id, zoho_name, customer_id FK→customer_master, cmrr_name,
+                          regrouped_name, go_live_date, churn_date, segment_id, bu_id
+                          READ-ONLY archive after migration g. Use for segment/BU lookups.
+  customer_master       — id, zoho_name, regrouped_name, is_historical BOOL
+                          Complete customer registry (active + churned). is_historical=true
+                          for customers added from mrr history not tracked in Zoho today.
   aop_targets           — bu_id, fy_id, month_date, mrr_aop, nrr_aop  [Join: bu_master!left(name)]
   deal_snapshots        — snapshot_date DATE, deal_name, account_name, closing_month DATE, stage,
                           probability SMALLINT, adjusted_mrr INT, expected_mrr INT, bu_id
