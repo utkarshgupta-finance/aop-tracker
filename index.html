@@ -531,6 +531,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="ar-subtabs">
       <button class="ar-stbtn active" id="ar-st-invoices" onclick="showARSubTab('invoices')">Open Invoices</button>
       <button class="ar-stbtn" id="ar-st-aging" onclick="showARSubTab('aging')">AR Aging</button>
+      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">Daily View</button>
       <button class="ar-stbtn" id="ar-st-summary" onclick="showARSubTab('summary')">AR Summary</button>
     </div>
     <!-- Open Invoices pane (default) -->
@@ -542,6 +543,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div class="twrap" id="ar-invoice-wrap">
         <div style="padding:2rem;text-align:center;color:var(--txt3)">No data — click Sync India or forward a UK AR email to Postmark to load invoices.</div>
       </div>
+    </div>
+    <!-- Daily View pane -->
+    <div id="ar-pane-daily" style="display:none">
+      <div id="ar-daily-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center;min-height:28px"></div>
+      <div class="twrap" id="ar-daily-wrap"></div>
     </div>
     <!-- AR Summary pane -->
     <div id="ar-pane-summary" style="display:none">
@@ -4663,9 +4669,11 @@ function showARSubTab(tab) {
   _arSubTab = tab;
   document.getElementById('ar-pane-invoices').style.display = tab === 'invoices' ? '' : 'none';
   document.getElementById('ar-pane-aging').style.display    = tab === 'aging'    ? '' : 'none';
+  document.getElementById('ar-pane-daily').style.display    = tab === 'daily'    ? '' : 'none';
   document.getElementById('ar-pane-summary').style.display  = tab === 'summary'  ? '' : 'none';
   document.getElementById('ar-st-invoices').classList.toggle('active', tab === 'invoices');
   document.getElementById('ar-st-aging').classList.toggle('active', tab === 'aging');
+  document.getElementById('ar-st-daily').classList.toggle('active', tab === 'daily');
   document.getElementById('ar-st-summary').classList.toggle('active', tab === 'summary');
 }
 
@@ -4688,8 +4696,6 @@ async function loadArBuMap() {
       if (rows.length < PAGE) break;
       offset += PAGE;
     }
-    renderARBuCapsules();
-    renderARAgingBuCapsules();
     renderAR();
   } catch(e) { console.warn('loadArBuMap:', e); }
   finally { _arBuMapLoading = false; }
@@ -4942,26 +4948,18 @@ function arAgeBucket(dueDateStr) {
   return '90plus';
 }
 
-function _arBuCapsuleHTML(targetId) {
+function _arBuCapsuleHTML(targetId, allBus) {
   const row = document.getElementById(targetId);
   if (!row) return;
-  const bus = [...new Set(
-    _arAllRows
-      .filter(r => !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase())))
-      .map(r => arGetBu(r.customer_name))
-      .filter(Boolean)
-  )].sort();
-  if (!bus.length) { row.innerHTML = ''; return; }
+  if (!allBus.length) { row.innerHTML = ''; return; }
   const all = _arBuSelected.size === 0;
   row.innerHTML =
     `<button class="chip${all?' active':''}" onclick="arBuToggle(event,null)">All</button>` +
-    bus.map(b => {
+    allBus.map(b => {
       const active = _arBuSelected.has(b);
       return `<button class="chip${active?' active':''}" onclick="arBuToggle(event,${JSON.stringify(b)})">${escHtml(b)}</button>`;
     }).join('');
 }
-function renderARBuCapsules()       { _arBuCapsuleHTML('ar-bu-row'); }
-function renderARAgingBuCapsules()  { _arBuCapsuleHTML('ar-aging-bu-row'); }
 
 function arBuToggle(evt, bu) {
   if (bu === null) {
@@ -4970,12 +4968,9 @@ function arBuToggle(evt, bu) {
     if (_arBuSelected.has(bu)) _arBuSelected.delete(bu);
     else _arBuSelected.add(bu);
   } else {
-    // single-select: click same → deselect (show all)
     if (_arBuSelected.size === 1 && _arBuSelected.has(bu)) _arBuSelected.clear();
     else { _arBuSelected.clear(); _arBuSelected.add(bu); }
   }
-  renderARBuCapsules();
-  renderARAgingBuCapsules();
   renderAR();
 }
 
@@ -4984,6 +4979,18 @@ function renderAR() {
   const sf = document.getElementById('ar-f-status')?.value || '';
   const rf = document.getElementById('ar-f-rev')?.value    || '';
   const sq = (document.getElementById('ar-search')?.value  || '').toLowerCase();
+
+  // Compute all available BUs (before BU filter, after exclusions) for capsule rendering
+  const allBus = [...new Set(
+    _arAllRows
+      .filter(r => !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase())))
+      .map(r => arGetBu(r.customer_name))
+      .filter(Boolean)
+  )].sort();
+  _arBuCapsuleHTML('ar-bu-row',       allBus);
+  _arBuCapsuleHTML('ar-aging-bu-row', allBus);
+  _arBuCapsuleHTML('ar-daily-bu-row', allBus);
+
   const rows = _arAllRows.filter(r => {
     const cn = (r.customer_name || '').toLowerCase();
     if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
@@ -4996,6 +5003,7 @@ function renderAR() {
   renderARSummary(rows);
   renderARAgingTable(rows);
   renderARInvoiceList(rows);
+  renderARDailyTable(rows);
   renderARBuSummary(rows);
 }
 
@@ -5055,6 +5063,65 @@ function renderARAgingTable(rows) {
     <td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td><td class="r">100%</td>
   </tr>`;
   document.getElementById('ar-aging-body').innerHTML = trs;
+}
+
+function renderARDailyTable(rows) {
+  const wrap = document.getElementById('ar-daily-wrap');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>';
+    return;
+  }
+
+  // Group by invoice_date → BU
+  const dateMap = {}; // date → { total, overdue, byBU: { bu → { bal, ovd } } }
+  for (const r of rows) {
+    const date = r.invoice_date || '(No date)';
+    const bu   = arGetBu(r.customer_name) || 'Uncategorised';
+    const bal  = arInr(r);
+    const isOvd = arOverdueDays(r.due_date) > 0;
+    if (!dateMap[date]) dateMap[date] = { total: 0, overdue: 0, byBU: {} };
+    dateMap[date].total   += bal;
+    if (isOvd) dateMap[date].overdue += bal;
+    if (!dateMap[date].byBU[bu]) dateMap[date].byBU[bu] = { bal: 0, ovd: 0 };
+    dateMap[date].byBU[bu].bal += bal;
+    if (isOvd) dateMap[date].byBU[bu].ovd += bal;
+  }
+
+  // All BUs present in this filtered set
+  const allBus = [...new Set(rows.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort();
+
+  const dates = Object.keys(dateMap).sort().reverse(); // most recent first
+  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '—';
+  const thS = 'padding:.45rem .75rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap;text-align:right';
+  const tdS = 'padding:.42rem .75rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9';
+
+  const buCols = allBus.map(b => `<th style="${thS}">${escHtml(b)}</th>`).join('');
+  const rows_html = dates.map(date => {
+    const d = dateMap[date];
+    const buCells = allBus.map(bu => {
+      const v = d.byBU[bu]?.bal || 0;
+      const o = d.byBU[bu]?.ovd || 0;
+      const ovdTag = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${cr(o)} ovd</span>` : '';
+      return `<td style="${tdS}">${v > 0 ? cr(v) : '<span style="color:#cbd5e1">—</span>'}${ovdTag}</td>`;
+    }).join('');
+    const ovdTag = d.overdue > 0
+      ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${cr(d.overdue)} overdue</span>` : '';
+    return `<tr>
+      <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:500;color:#0f172a">${date}</td>
+      <td style="${tdS};font-weight:700;color:var(--navy)">${cr(d.total)}${ovdTag}</td>
+      ${buCells}
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${400 + allBus.length * 130}px">
+    <thead><tr>
+      <th style="${thS};text-align:left">Invoice Date</th>
+      <th style="${thS}">Total Outstanding</th>
+      ${buCols}
+    </tr></thead>
+    <tbody>${rows_html}</tbody>
+  </table></div>`;
 }
 
 function renderARBuSummary(rows) {
