@@ -447,6 +447,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="cmrr-status" id="cmrr-wf-status" style="padding:.3rem 0 .6rem"></div>
         <div class="twrap" id="cmrr-wf-table"></div>
       </div>
+      <div class="cmrr-wf-hdr" style="margin-top:.9rem">
+        <button class="cmrr-wf-btn" id="cmrr-nrr-btn" onclick="cmrrToggleNrr()">▶ NRR Breakup</button>
+        <span class="cmrr-wf-note">Non-recurring revenue · FY26</span>
+      </div>
+      <div id="cmrr-nrr-wrap" style="display:none">
+        <div class="cmrr-status" id="cmrr-nrr-status" style="padding:.3rem 0 .6rem"></div>
+        <div class="twrap" id="cmrr-nrr-table"></div>
+      </div>
       <!-- AR Dues for this customer -->
       <div id="cmrr-ar-dues" class="hidden ar-dues-section">
         <p class="slabel" style="margin-bottom:.5rem">Open Dues (AR)</p>
@@ -1519,6 +1527,8 @@ let _cmrrWfLoaded = false; // whether workflow data is fetched for _cmrrCurName
 let _cmrrWfMetric  = 'mrr'; // active metric tab: mrr | rate | users | fx
 let _cmrrWfMatrices = null; // {mrr, rate, users, fx} matrices, set after load
 let _cmrrWfMonths   = null; // sorted month keys after load
+let _cmrrNrrLoaded  = false;
+let _cmrrNrrRows    = null; // raw NRR rows for current customer
 
 function cmrrHdr() {
   const token = USER_JWT || SUPABASE_ANON_KEY;
@@ -1626,6 +1636,12 @@ async function loadCustMRR(zohoName) {
   }
   document.getElementById('cmrr-wf-status').textContent = '';
   document.getElementById('cmrr-wf-table').innerHTML = '';
+  _cmrrNrrLoaded = false; _cmrrNrrRows = null;
+  const nrrWrap = document.getElementById('cmrr-nrr-wrap');
+  const nrrBtn  = document.getElementById('cmrr-nrr-btn');
+  if (nrrWrap) { nrrWrap.style.display = 'none'; nrrBtn.textContent = '▶ NRR Breakup'; }
+  document.getElementById('cmrr-nrr-status').textContent = '';
+  document.getElementById('cmrr-nrr-table').innerHTML = '';
   document.getElementById('cmrr-metrics').style.display = 'none';
 
   const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
@@ -2113,9 +2129,27 @@ function cmrrWfSetMetric(metric, btn) {
 }
 
 function cmrrRenderWf() {
-  const matrix = _cmrrWfMatrices[_cmrrWfMetric];
+  let matrix   = _cmrrWfMatrices[_cmrrWfMetric];
   const months  = _cmrrWfMonths;
   const metric  = _cmrrWfMetric;
+
+  // Exchange Rate: strip cells where rate = 1 (INR — no FX applicable)
+  if (metric === 'fx') {
+    const filtered = {};
+    for (const wf of Object.keys(matrix)) {
+      filtered[wf] = {};
+      for (const [m, v] of Object.entries(matrix[wf])) {
+        if (Math.abs(v - 1) > 0.0001) filtered[wf][m] = v;
+      }
+    }
+    const hasAny = Object.values(filtered).some(wf => Object.keys(wf).length > 0);
+    if (!hasAny) {
+      document.getElementById('cmrr-wf-table').innerHTML =
+        '<div style="padding:.65rem .1rem;color:var(--txt3);font-size:11.5px;font-family:var(--mono)">This customer\'s MRR is billed in INR — exchange rate not applicable.</div>';
+      return;
+    }
+    matrix = filtered;
+  }
 
   const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
   const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
@@ -2213,6 +2247,115 @@ function cmrrRenderWf() {
   });
 
   document.getElementById('cmrr-wf-table').innerHTML = html;
+}
+
+/* ─── CUSTOMER NRR BREAKUP ───────────────────────────────────── */
+function cmrrToggleNrr() {
+  const wrap = document.getElementById('cmrr-nrr-wrap');
+  const btn  = document.getElementById('cmrr-nrr-btn');
+  const open = wrap.style.display !== 'none';
+  if (open) {
+    wrap.style.display = 'none';
+    btn.textContent = '▶ NRR Breakup';
+  } else {
+    wrap.style.display = 'block';
+    btn.textContent = '▼ NRR Breakup';
+    if (!_cmrrNrrLoaded) cmrrLoadNrr();
+  }
+}
+
+async function cmrrLoadNrr() {
+  if (!_cmrrCurName) return;
+  const status = document.getElementById('cmrr-nrr-status');
+  const tbl    = document.getElementById('cmrr-nrr-table');
+  status.textContent = 'Loading…';
+  tbl.innerHTML = '';
+  try {
+    const PAGE = 1000; let off = 0, rows = [];
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/customer_nrr?select=month_date,category,amount` +
+        `&zoho_name=eq.${encodeURIComponent(_cmrrCurName)}&order=month_date.asc&limit=${PAGE}&offset=${off}`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const page = await r.json();
+      rows.push(...page);
+      if (page.length < PAGE) break;
+      off += PAGE;
+    }
+    if (!rows.length) {
+      status.textContent = 'No NRR data for this customer.';
+      return;
+    }
+    _cmrrNrrLoaded = true;
+    _cmrrNrrRows   = rows;
+    status.textContent = '';
+    cmrrRenderNrr(rows);
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+function cmrrRenderNrr(rows) {
+  const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
+  const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  // Build category × month matrix for FY26 (Apr-25 → Mar-26)
+  const matrix = {}, mSet = new Set();
+  for (const row of rows) {
+    const m   = row.month_date.slice(0, 7);
+    const cat = row.category || '(Other)';
+    mSet.add(m);
+    if (!matrix[cat]) matrix[cat] = {};
+    matrix[cat][m] = (matrix[cat][m] || 0) + parseFloat(row.amount || 0);
+  }
+  const months = [...mSet].sort();
+  const cats = Object.keys(matrix).sort();
+
+  // Build header: month labels
+  let thead = `<tr><th class="th-bu" style="min-width:200px">Category</th>`;
+  const fyMonths = [];
+  for (let mi = 0; mi < 12; mi++) {
+    const year = mi <= 8 ? 2025 : 2026;
+    const key  = `${year}-${M_MM[mi]}`;
+    const has  = months.includes(key);
+    fyMonths.push({ key, lbl: M_LBL[mi], has });
+    if (has) thead += `<th class="th-mon" style="min-width:72px">${M_LBL[mi]}</th>`;
+  }
+  thead += `<th class="th-fy">Total</th></tr>`;
+
+  const colTots = {}; let grandTotal = 0;
+  let body = '<tbody>';
+  for (const cat of cats) {
+    let rowTotal = 0;
+    let row = `<tr><td class="bu" style="font-size:10.5px;line-height:1.35">${cat}</td>`;
+    for (const { key, has } of fyMonths) {
+      if (!has) continue;
+      const val = matrix[cat][key] || 0;
+      if (val) {
+        rowTotal += val;
+        colTots[key] = (colTots[key] || 0) + val;
+        row += `<td class="caop">${f(val)}</td>`;
+      } else {
+        row += `<td class="caop" style="color:#ddd">—</td>`;
+      }
+    }
+    grandTotal += rowTotal;
+    row += `<td class="fl cfyaop">${f(rowTotal)}</td></tr>`;
+    body += row;
+  }
+
+  let tr = `<tr class="tot"><td class="bu">Total</td>`;
+  for (const { key, has } of fyMonths) {
+    if (!has) continue;
+    const v = colTots[key] || 0;
+    tr += v ? `<td class="caop">${f(v)}</td>` : `<td class="caop"></td>`;
+  }
+  tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
+  body += tr + '</tbody>';
+
+  document.getElementById('cmrr-nrr-table').innerHTML =
+    `<table><thead>${thead}</thead>${body}</table>`;
 }
 
 function showCustMRRTab(btn) {
