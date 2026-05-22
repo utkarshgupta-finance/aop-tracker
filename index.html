@@ -477,11 +477,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div id="omrr-wrap"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
   </div>
   <div id="overall-nrr" class="pane">
-    <div class="omrr-bar" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+    <div class="omrr-bar" style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap">
       <div class="omrr-status" id="onrr-status"></div>
+      <div class="ar-view-tog" id="onrr-main-tog" style="margin-bottom:0">
+        <button class="ar-vtbtn active" onclick="onrrSetMain('nrr',this)">NRR</button>
+        <button class="ar-vtbtn"        onclick="onrrSetMain('rl',this)">Revenue Loss</button>
+      </div>
       <div class="ar-view-tog" id="onrr-view-tog" style="margin-bottom:0">
-        <button class="ar-vtbtn active" id="onrr-vtbtn-bu"       onclick="onrrSetView('bu',this)">BU Wise</button>
-        <button class="ar-vtbtn"        id="onrr-vtbtn-category" onclick="onrrSetView('category',this)">Category Wise</button>
+        <button class="ar-vtbtn active" onclick="onrrSetView('bu',this)">BU Wise</button>
+        <button class="ar-vtbtn"        onclick="onrrSetView('category',this)">Category Wise</button>
       </div>
     </div>
     <div id="onrr-wrap"><div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div></div>
@@ -2816,12 +2820,20 @@ function omrrShowFY(fy, btn) {
 
 /* ─── OVERALL NRR TAB ────────────────────────────────────── */
 let _onrrInited = false;
-let _onrrView   = 'bu';   // 'bu' | 'category'
-let _onrrData   = null;   // { rows, buSet, catSet, monthSet }
+let _onrrMain   = 'nrr'; // 'nrr' | 'rl'
+let _onrrView   = 'bu';  // 'bu'  | 'category'
+let _onrrData   = null;  // { rows, buSet, catSet, stdReasonSet, monthSet }
 
 function showOverallNRRTab(btn) {
   showTab('overall-nrr', btn);
   if (!_onrrInited) { _onrrInited = true; loadOverallNRR(); }
+}
+
+function onrrSetMain(main, btn) {
+  _onrrMain = main;
+  document.querySelectorAll('#onrr-main-tog .ar-vtbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (_onrrData) onrrRender();
 }
 
 function onrrSetView(view, btn) {
@@ -2841,7 +2853,7 @@ async function loadOverallNRR() {
     let offset = 0, rows = [];
     while (true) {
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/customer_nrr?select=bu_name,category,month_date,amount` +
+        `${SUPABASE_URL}/rest/v1/customer_nrr?select=bu_name,category,month_date,amount,revenue_loss_yn,revenue_loss_amt,standard_reason` +
         `&order=month_date,bu_name&limit=${PAGE}&offset=${offset}`,
         { headers: cmrrHdr() }
       );
@@ -2851,13 +2863,14 @@ async function loadOverallNRR() {
       if (pg.length < PAGE) break;
       offset += PAGE;
     }
-    const buSet = new Set(), catSet = new Set(), monthSet = new Set();
+    const buSet = new Set(), catSet = new Set(), stdReasonSet = new Set(), monthSet = new Set();
     for (const row of rows) {
-      if (row.bu_name)   buSet.add(row.bu_name);
-      if (row.category)  catSet.add(row.category);
+      if (row.bu_name)        buSet.add(row.bu_name);
+      if (row.category)       catSet.add(row.category);
+      if (row.standard_reason) stdReasonSet.add(row.standard_reason);
       monthSet.add(row.month_date.slice(0, 7));
     }
-    _onrrData = { rows, buSet, catSet, monthSet };
+    _onrrData = { rows, buSet, catSet, stdReasonSet, monthSet };
     status.textContent = '';
     onrrRender();
   } catch(e) {
@@ -2867,7 +2880,10 @@ async function loadOverallNRR() {
 }
 
 function onrrRender() {
-  const { rows, buSet, catSet, monthSet } = _onrrData;
+  const { rows, buSet, catSet, stdReasonSet, monthSet } = _onrrData;
+  const isRL = _onrrMain === 'rl';
+  const isBU = _onrrView === 'bu';
+
   const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
   const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
   function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
@@ -2875,44 +2891,75 @@ function onrrRender() {
     let [y,m]=ym.split('-').map(Number); m--; if(m===0){m=12;y--;}
     return `${y}-${String(m).padStart(2,'0')}`;
   }
+  function fL(v) { return v ? (Math.abs(v)/1e5).toFixed(2) : ''; }
+
+  // For Revenue Loss: cells are always negative/bad — higher loss = worse = red
+  // For NRR: higher = better = green
   function momCls(val, prev) {
     if (prev==null) return '';
-    return val>prev ? 'background:#dcfce7;color:#166534' : val<prev ? 'background:#fee2e2;color:#991b1b' : '';
+    if (isRL) {
+      // more negative this month = worse
+      return val < prev ? 'background:#fee2e2;color:#991b1b' : val > prev ? 'background:#dcfce7;color:#166534' : '';
+    }
+    return val > prev ? 'background:#dcfce7;color:#166534' : val < prev ? 'background:#fee2e2;color:#991b1b' : '';
   }
-  function fL(v) { return v ? (v/1e5).toFixed(2) : ''; }
 
-  const isBU      = _onrrView === 'bu';
-  const dimKeys   = isBU
-    ? [...buSet].filter(b => b).sort()
-    : [...catSet].filter(c => c).sort();
-  const dimField  = isBU ? 'bu_name' : 'category';
+  // Decide dimension keys and aggregation field
+  let dimKeys, dimField, amtField, filterFn;
+  if (isRL) {
+    // Revenue Loss view
+    filterFn = row => row.revenue_loss_yn === true;
+    amtField = 'revenue_loss_amt';
+    dimField = isBU ? 'bu_name' : 'standard_reason';
+    dimKeys  = isBU
+      ? [...buSet].filter(b => b).sort()
+      : [...stdReasonSet].filter(r => r).sort();
+  } else {
+    // NRR view
+    filterFn = () => true;
+    amtField = 'amount';
+    dimField = isBU ? 'bu_name' : 'category';
+    dimKeys  = isBU
+      ? [...buSet].filter(b => b).sort()
+      : [...catSet].filter(c => c).sort();
+  }
 
-  // Aggregate into dimMap[dim][month] = sum(amount)
-  const dimMap = {};
+  // Build dimMap[dim][month] and collect months with data
+  const dimMap = {}, rlMonthSet = new Set();
   for (const row of rows) {
+    if (!filterFn(row)) continue;
     const dim = row[dimField] || '(Other)';
     const mo  = row.month_date.slice(0, 7);
+    rlMonthSet.add(mo);
     if (!dimMap[dim]) dimMap[dim] = {};
-    dimMap[dim][mo] = (dimMap[dim][mo] || 0) + parseFloat(row.amount || 0);
+    dimMap[dim][mo] = (dimMap[dim][mo] || 0) + parseFloat(row[amtField] || 0);
   }
 
-  const months   = [...monthSet].sort();
-  const wrap     = document.getElementById('onrr-wrap');
-  if (!months.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>'; return; }
+  // Remove dim rows that are all-zero
+  const activeDims = dimKeys.filter(d => dimMap[d] && Object.values(dimMap[d]).some(v => v !== 0));
+
+  const months = [...(isRL ? rlMonthSet : monthSet)].sort();
+  const wrap   = document.getElementById('onrr-wrap');
+  if (!months.length || !activeDims.length) {
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No data.</div>';
+    return;
+  }
 
   const minFY = getFY(months[0]), maxFY = getFY(months[months.length-1]);
   const fys = [];
   for (let fy = maxFY; fy >= minFY; fy--) fys.push(fy);
 
-  // All-month totals for Δ/CMGR rows
+  // All-month totals for Δ/CMGR
   const allMonthTotals = {};
   for (const m of months) {
     let t = 0;
-    for (const dim of dimKeys) t += (dimMap[dim]||{})[m] || 0;
+    for (const dim of activeDims) t += (dimMap[dim]||{})[m] || 0;
     allMonthTotals[m] = t;
   }
 
-  const hdrLabel = isBU ? 'BU' : 'Category';
+  const hdrLabel = isBU ? 'BU' : (isRL ? 'Standard Reason' : 'Category');
+  const deltaLbl = isRL ? 'Δ MoM Loss' : 'Δ MoM';
+
   let html = `<div class="cmrr-fy-tabs">`;
   fys.forEach((fy, i) =>
     html += `<button class="nret-tog${i===0?' active':''}" onclick="onrrShowFY(${fy},this)">FY${fy}</button>`
@@ -2936,24 +2983,28 @@ function onrrRender() {
     const colTotals = {};
     let grandTotal = 0;
 
-    for (const dim of dimKeys) {
+    for (const dim of activeDims) {
       const rowData = dimMap[dim] || {};
-      let rowTotal = 0;
-      let row = `<tr><td class="omrr-bu">${dim}</td>`;
+      let rowTotal = 0, hasAny = false;
+      let row = `<tr><td class="omrr-bu" style="${isRL?'max-width:200px;white-space:normal;line-height:1.35':''}">${dim}</td>`;
       for (const { key, hasData } of fyMonths) {
         if (!hasData) { row += `<td class="caop"></td>`; continue; }
         const val  = rowData[key];
         const prev = rowData[prevKey(key)];
         if (val != null && val !== 0) {
+          hasAny = true;
           rowTotal += val;
           colTotals[key] = (colTotals[key] || 0) + val;
-          row += `<td class="caop" style="${momCls(val,prev)}">${fL(val)}</td>`;
+          const display = isRL ? `<span style="color:#991b1b">(${fL(val)})</span>` : fL(val);
+          row += `<td class="caop" style="${momCls(val,prev)}">${display}</td>`;
         } else {
           row += `<td class="caop" style="color:#ddd">—</td>`;
         }
       }
+      if (!hasAny) continue;
       grandTotal += rowTotal;
-      row += `<td class="fl cfyaop">${fL(rowTotal)}</td></tr>`;
+      const totDisplay = isRL ? `<span style="color:#991b1b">(${fL(rowTotal)})</span>` : fL(rowTotal);
+      row += `<td class="fl cfyaop">${totDisplay}</td></tr>`;
       tbody += row;
     }
 
@@ -2962,12 +3013,14 @@ function onrrRender() {
     for (const { key, hasData } of fyMonths) {
       if (!hasData) { totRow += `<td class="caop" style="background:#e8ecf4"></td>`; continue; }
       const v = colTotals[key] || 0;
-      totRow += `<td class="caop" style="background:#e8ecf4;font-weight:600">${v ? fL(v) : '—'}</td>`;
+      const vDisp = v ? (isRL ? `<span style="color:#991b1b">(${fL(v)})</span>` : fL(v)) : '—';
+      totRow += `<td class="caop" style="background:#e8ecf4;font-weight:600">${vDisp}</td>`;
     }
-    totRow += `<td class="fl cfyaop" style="font-weight:700">${fL(grandTotal)}</td></tr>`;
+    const gtDisp = isRL ? `<span style="color:#991b1b">(${fL(grandTotal)})</span>` : fL(grandTotal);
+    totRow += `<td class="fl cfyaop" style="font-weight:700">${gtDisp}</td></tr>`;
 
     // Δ MoM and CMGR rows
-    let deltaRow = `<tr><td class="omrr-tot-bu" style="font-size:10px;font-style:italic">Δ MoM</td>`;
+    let deltaRow = `<tr><td class="omrr-tot-bu" style="font-size:10px;font-style:italic">${deltaLbl}</td>`;
     let cmgrRow  = `<tr><td class="omrr-tot-bu" style="font-size:10px;font-style:italic">CMGR %</td>`;
     for (const { key, hasData } of fyMonths) {
       const bg = 'background:#f0f2f8';
@@ -2981,8 +3034,11 @@ function onrrRender() {
       }
       const delta = curr - prev;
       const cmgr  = (delta / prev) * 100;
+      // For RL: less negative = improvement = green
       const pos = 'color:#166534;font-weight:600', neg = 'color:#991b1b;font-weight:600', neu = 'color:#666';
-      deltaRow += `<td class="caop" style="${bg};${delta>0?pos:delta<0?neg:neu}">${delta>=0?'+':''}${fL(delta)}</td>`;
+      const dGood = isRL ? delta > 0 : delta > 0;
+      const dBad  = isRL ? delta < 0 : delta < 0;
+      deltaRow += `<td class="caop" style="${bg};${dGood?pos:dBad?neg:neu}">${delta>=0?'+':''}${fL(delta)}</td>`;
       cmgrRow  += `<td class="caop" style="${bg};${cmgr>0?pos:cmgr<0?neg:neu}">${cmgr>=0?'+':''}${cmgr.toFixed(1)}%</td>`;
     }
     deltaRow += `<td class="fl cfyaop" style="background:#f0f2f8"></td></tr>`;
