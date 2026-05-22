@@ -2139,6 +2139,59 @@ async function cmrrLoadWf() {
   }
 }
 
+function cmrrWfShowTip(evt, td) {
+  const wf  = td.dataset.wf;
+  const mo  = td.dataset.mo;
+  const mx  = _cmrrWfMatrices;
+  if (!mx) return;
+
+  const mrr   = mx.mrr[wf]?.[mo];
+  const users = mx.users[wf]?.[mo];
+  const rate  = mx.rate[wf]?.[mo];
+  const fx    = mx.fx[wf]?.[mo];
+  if (mrr == null) return;
+
+  let tip = document.getElementById('_cmrr_wf_tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = '_cmrr_wf_tip';
+    tip.style.cssText = 'position:fixed;display:none;background:#111827;color:#e5e7eb;font-family:var(--mono);font-size:11px;line-height:1.75;padding:.6rem .85rem;border-radius:8px;z-index:9999;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.45);white-space:nowrap';
+    document.body.appendChild(tip);
+  }
+
+  const usersStr = users != null ? Math.round(users).toLocaleString('en-IN') : '—';
+  const rateStr  = rate  != null ? '₹' + f(rate) : '—';
+  const fxVal    = fx    != null ? fx : 1;
+  const fxLabel  = Math.abs(fxVal - 1) < 0.0001 ? '1.0000 <span style="color:#6b7280">(INR)</span>' : fxVal.toFixed(4);
+  const calc     = (users != null && rate != null) ? Math.round(users * rate * fxVal) : null;
+  const diffStr  = (calc != null && mrr != null) ? Math.round(mrr) - calc : null;
+
+  tip.innerHTML =
+    `<div style="color:#6b7280;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.3rem">MRR Breakdown</div>` +
+    `<table style="border-collapse:collapse">` +
+    `<tr><td style="color:#9ca3af;padding-right:1.2rem">Frozen Users</td><td style="text-align:right"><b>${usersStr}</b></td></tr>` +
+    `<tr><td style="color:#9ca3af;padding-right:1.2rem">Rate</td><td style="text-align:right"><b>${rateStr}</b></td></tr>` +
+    `<tr><td style="color:#9ca3af;padding-right:1.2rem">Exchange Rate</td><td style="text-align:right"><b>${fxLabel}</b></td></tr>` +
+    `<tr><td colspan="2"><div style="border-top:1px solid #374151;margin:.3rem 0"></div></td></tr>` +
+    `<tr><td style="color:#9ca3af;padding-right:1.2rem">Calculated</td><td style="text-align:right"><b style="color:#93c5fd">₹${calc != null ? f(calc) : '—'}</b></td></tr>` +
+    `<tr><td style="color:#9ca3af;padding-right:1.2rem">Actual MRR</td><td style="text-align:right"><b style="color:#86efac">₹${f(mrr)}</b></td></tr>` +
+    (diffStr != null && diffStr !== 0 ? `<tr><td style="color:#9ca3af;padding-right:1.2rem">Diff (rounding)</td><td style="text-align:right"><b style="color:#fcd34d">₹${f(Math.abs(diffStr))}</b></td></tr>` : '') +
+    `</table>`;
+
+  tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  let x = evt.clientX + 14, y = evt.clientY - 10;
+  if (x + r.width  > window.innerWidth  - 8) x = evt.clientX - r.width - 10;
+  if (y + r.height > window.innerHeight - 8) y = evt.clientY - r.height - 10;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+
+function cmrrWfHideTip() {
+  const tip = document.getElementById('_cmrr_wf_tip');
+  if (tip) tip.style.display = 'none';
+}
+
 function cmrrWfSetMetric(metric, btn) {
   _cmrrWfMetric = metric;
   document.querySelectorAll('.cmrr-wf-mtbtn').forEach(b => b.classList.remove('active'));
@@ -2237,7 +2290,12 @@ function cmrrRenderWf() {
         if (val != null) {
           hasAny = true;
           if (showTotal) { rowTotal += val; colTots[key] = (colTots[key] || 0) + val; }
-          row += `<td class="caop" style="${momCls(val,prev)}">${fmtVal(val)}</td>`;
+          if (metric === 'mrr') {
+            const wfAttr = wf.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+            row += `<td class="caop" style="${momCls(val,prev)}" data-wf="${wfAttr}" data-mo="${key}" onmouseenter="cmrrWfShowTip(event,this)" onmouseleave="cmrrWfHideTip()">${fmtVal(val)}</td>`;
+          } else {
+            row += `<td class="caop" style="${momCls(val,prev)}">${fmtVal(val)}</td>`;
+          }
         } else {
           row += `<td class="caop" style="color:#ddd">—</td>`;
         }
