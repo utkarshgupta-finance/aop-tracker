@@ -455,6 +455,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="cmrr-status" id="cmrr-nrr-status" style="padding:.3rem 0 .6rem"></div>
         <div class="twrap" id="cmrr-nrr-table"></div>
       </div>
+      <div class="cmrr-wf-hdr" style="margin-top:.9rem">
+        <button class="cmrr-wf-btn" id="cmrr-rl-btn" onclick="cmrrToggleRl()">▶ Revenue Loss</button>
+        <span class="cmrr-wf-note">Credit notes &amp; adjustments where revenue was lost</span>
+      </div>
+      <div id="cmrr-rl-wrap" style="display:none">
+        <div class="cmrr-status" id="cmrr-rl-status" style="padding:.3rem 0 .6rem"></div>
+        <div id="cmrr-rl-content"></div>
+      </div>
       <!-- AR Dues for this customer -->
       <div id="cmrr-ar-dues" class="hidden ar-dues-section">
         <p class="slabel" style="margin-bottom:.5rem">Open Dues (AR)</p>
@@ -1529,6 +1537,10 @@ let _cmrrWfMatrices = null; // {mrr, rate, users, fx} matrices, set after load
 let _cmrrWfMonths   = null; // sorted month keys after load
 let _cmrrNrrLoaded  = false;
 let _cmrrNrrRows    = null; // raw NRR rows for current customer
+let _cmrrRlLoaded   = false;
+let _cmrrRlRows     = null; // revenue-loss rows for current customer
+let _cmrrRlView     = 'month'; // 'month' | 'reason'
+let _cmrrRlFY       = null;   // active FY number
 
 function cmrrHdr() {
   const token = USER_JWT || SUPABASE_ANON_KEY;
@@ -1642,6 +1654,12 @@ async function loadCustMRR(zohoName) {
   if (nrrWrap) { nrrWrap.style.display = 'none'; nrrBtn.textContent = '▶ NRR Breakup'; }
   document.getElementById('cmrr-nrr-status').textContent = '';
   document.getElementById('cmrr-nrr-table').innerHTML = '';
+  _cmrrRlLoaded = false; _cmrrRlRows = null; _cmrrRlView = 'month'; _cmrrRlFY = null;
+  const rlWrap = document.getElementById('cmrr-rl-wrap');
+  const rlBtn  = document.getElementById('cmrr-rl-btn');
+  if (rlWrap) { rlWrap.style.display = 'none'; rlBtn.textContent = '▶ Revenue Loss'; }
+  document.getElementById('cmrr-rl-status').textContent = '';
+  document.getElementById('cmrr-rl-content').innerHTML = '';
   document.getElementById('cmrr-metrics').style.display = 'none';
 
   const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
@@ -2356,6 +2374,199 @@ function cmrrRenderNrr(rows) {
 
   document.getElementById('cmrr-nrr-table').innerHTML =
     `<table><thead>${thead}</thead>${body}</table>`;
+}
+
+/* ─── CUSTOMER REVENUE LOSS BREAKUP ─────────────────────────── */
+function cmrrToggleRl() {
+  const wrap = document.getElementById('cmrr-rl-wrap');
+  const btn  = document.getElementById('cmrr-rl-btn');
+  const open = wrap.style.display !== 'none';
+  if (open) {
+    wrap.style.display = 'none';
+    btn.textContent = '▶ Revenue Loss';
+  } else {
+    wrap.style.display = 'block';
+    btn.textContent = '▼ Revenue Loss';
+    if (!_cmrrRlLoaded) cmrrLoadRl();
+  }
+}
+
+async function cmrrLoadRl() {
+  if (!_cmrrCurName) return;
+  const status = document.getElementById('cmrr-rl-status');
+  status.textContent = 'Loading…';
+  document.getElementById('cmrr-rl-content').innerHTML = '';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/customer_nrr` +
+      `?select=month_date,invoice_no,invoice_date,revenue_loss_amt,standard_reason,detailed_reason` +
+      `&zoho_name=eq.${encodeURIComponent(_cmrrCurName)}&revenue_loss_yn=eq.true&order=month_date.asc`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    if (!rows.length) { status.textContent = 'No revenue loss entries for this customer.'; return; }
+    _cmrrRlLoaded = true;
+    _cmrrRlRows   = rows;
+    // Determine initial FY from latest month in data
+    function getFY(m) { const [y,mo]=m.slice(0,7).split('-').map(Number); return mo>=4?y+1:y; }
+    const fys = [...new Set(rows.map(r=>getFY(r.month_date)))].sort((a,b)=>b-a);
+    if (_cmrrRlFY === null) _cmrrRlFY = fys[0];
+    status.textContent = '';
+    cmrrRenderRl();
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+function cmrrRlSetView(view, btn) {
+  _cmrrRlView = view;
+  document.querySelectorAll('.cmrr-rl-vtbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  cmrrRenderRlContent();
+}
+
+function cmrrRlSetFY(fy, btn) {
+  _cmrrRlFY = fy;
+  document.querySelectorAll('.cmrr-rl-fybtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  cmrrRenderRlContent();
+}
+
+function cmrrRenderRl() {
+  if (!_cmrrRlRows) return;
+  function getFY(m) { const [y,mo]=m.slice(0,7).split('-').map(Number); return mo>=4?y+1:y; }
+  const fys = [...new Set(_cmrrRlRows.map(r=>getFY(r.month_date)))].sort((a,b)=>b-a);
+
+  // FY tabs
+  let html = `<div class="cmrr-fy-tabs" style="margin-bottom:.5rem">`;
+  fys.forEach(fy =>
+    html += `<button class="nret-tog cmrr-rl-fybtn${fy===_cmrrRlFY?' active':''}" onclick="cmrrRlSetFY(${fy},this)">FY${fy}</button>`
+  );
+  html += `</div>`;
+
+  // View sub-tabs
+  html += `<div class="cmrr-wf-metric-tabs" style="margin-bottom:.75rem">`;
+  html += `<button class="cmrr-wf-mtbtn cmrr-rl-vtbtn${_cmrrRlView==='month'?' active':''}" onclick="cmrrRlSetView('month',this)">Month-wise</button>`;
+  html += `<button class="cmrr-wf-mtbtn cmrr-rl-vtbtn${_cmrrRlView==='reason'?' active':''}" onclick="cmrrRlSetView('reason',this)">By Reason</button>`;
+  html += `</div>`;
+
+  html += `<div id="cmrr-rl-table"></div>`;
+  document.getElementById('cmrr-rl-content').innerHTML = html;
+  cmrrRenderRlContent();
+}
+
+function cmrrRenderRlContent() {
+  if (!_cmrrRlRows || _cmrrRlFY === null) return;
+  const tbl = document.getElementById('cmrr-rl-table');
+  if (!tbl) return;
+
+  const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
+  const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  function getFY(m) { const [y,mo]=m.slice(0,7).split('-').map(Number); return mo>=4?y+1:y; }
+
+  const fyRows = _cmrrRlRows.filter(r => getFY(r.month_date) === _cmrrRlFY);
+  if (!fyRows.length) {
+    tbl.innerHTML = '<div style="padding:.6rem 0;font-size:12px;color:var(--txt3);font-family:var(--mono)">No revenue loss data for this fiscal year.</div>';
+    return;
+  }
+
+  const fmtLoss = v => {
+    if (v == null) return '—';
+    const neg = v < 0;
+    const s = f(Math.abs(v));
+    return `<span style="color:${neg?'#991b1b':'#166534'}">${neg?'('+s+')':s}</span>`;
+  };
+
+  if (_cmrrRlView === 'month') {
+    // Transaction list sorted by month
+    let thead = `<tr>
+      <th class="th-bu" style="min-width:55px;text-align:left">Month</th>
+      <th class="th-mon" style="min-width:90px;text-align:left">Invoice No</th>
+      <th class="th-mon" style="min-width:90px">Loss Amount</th>
+      <th class="th-mon" style="min-width:130px;text-align:left">Standard Reason</th>
+      <th class="th-mon" style="min-width:240px;text-align:left">Detailed Reason</th>
+    </tr>`;
+    let body = '<tbody>';
+    let grandTotal = 0;
+    for (const row of fyRows) {
+      const mo  = row.month_date.slice(0,7);
+      const [y, m] = mo.split('-').map(Number);
+      const fyMoIdx = m >= 4 ? m - 4 : m + 8;
+      const lbl = M_LBL[fyMoIdx] + ' ' + String(y).slice(2);
+      const amt  = parseFloat(row.revenue_loss_amt || 0);
+      grandTotal += amt;
+      const detail = row.detailed_reason || '';
+      const detShort = detail.length > 80 ? detail.slice(0,77)+'…' : detail;
+      body += `<tr>
+        <td class="bu" style="font-size:10.5px;white-space:nowrap">${lbl}</td>
+        <td class="caop" style="text-align:left;font-size:10.5px;white-space:nowrap">${row.invoice_no||'—'}</td>
+        <td class="caop" style="font-size:10.5px">${fmtLoss(amt)}</td>
+        <td class="caop" style="text-align:left;font-size:10.5px;white-space:normal;line-height:1.4">${row.standard_reason||'—'}</td>
+        <td class="caop" style="text-align:left;font-size:10px;color:var(--txt2);white-space:normal;line-height:1.4;max-width:300px" title="${detail.replace(/"/g,'&quot;')}">${detShort||'—'}</td>
+      </tr>`;
+    }
+    body += `<tr class="tot">
+      <td class="bu" colspan="2">Total</td>
+      <td class="caop">${fmtLoss(grandTotal)}</td>
+      <td class="caop" colspan="2"></td>
+    </tr></tbody>`;
+    tbl.innerHTML = `<div class="twrap"><table><thead>${thead}</thead>${body}</table></div>`;
+
+  } else {
+    // By Reason: standard_reason × month matrix
+    const mSet = new Set(fyRows.map(r => r.month_date.slice(0,7)));
+    const matrix = {}, reasonTotals = {};
+    for (const row of fyRows) {
+      const mo  = row.month_date.slice(0,7);
+      const rsn = row.standard_reason || '(Other)';
+      const amt = parseFloat(row.revenue_loss_amt || 0);
+      if (!matrix[rsn]) matrix[rsn] = {};
+      matrix[rsn][mo] = (matrix[rsn][mo] || 0) + amt;
+      reasonTotals[rsn] = (reasonTotals[rsn] || 0) + amt;
+    }
+    const reasons = Object.keys(matrix).sort((a,b) => reasonTotals[a] - reasonTotals[b]); // most negative first
+
+    // Build 12-month FY columns
+    const fyMonths = [];
+    for (let mi = 0; mi < 12; mi++) {
+      const year = mi <= 8 ? _cmrrRlFY - 1 : _cmrrRlFY;
+      const key  = `${year}-${M_MM[mi]}`;
+      if (mSet.has(key)) fyMonths.push({ key, lbl: M_LBL[mi] });
+    }
+
+    let thead = `<tr><th class="th-bu" style="min-width:220px;text-align:left">Standard Reason</th>`;
+    for (const { lbl } of fyMonths) thead += `<th class="th-mon" style="min-width:72px">${lbl}</th>`;
+    thead += `<th class="th-fy">Total</th></tr>`;
+
+    const colTots = {}; let grandTotal = 0;
+    let body = '<tbody>';
+    for (const rsn of reasons) {
+      let rowTotal = 0;
+      let row = `<tr><td class="bu" style="font-size:10.5px;white-space:normal;line-height:1.35">${rsn}</td>`;
+      for (const { key } of fyMonths) {
+        const val = matrix[rsn][key] || 0;
+        if (val) {
+          rowTotal += val;
+          colTots[key] = (colTots[key] || 0) + val;
+          row += `<td class="caop">${fmtLoss(val)}</td>`;
+        } else {
+          row += `<td class="caop" style="color:#ddd">—</td>`;
+        }
+      }
+      grandTotal += rowTotal;
+      row += `<td class="fl cfyaop">${fmtLoss(rowTotal)}</td></tr>`;
+      body += row;
+    }
+    let tr = `<tr class="tot"><td class="bu">Total</td>`;
+    for (const { key } of fyMonths) {
+      const v = colTots[key] || 0;
+      tr += v ? `<td class="caop">${fmtLoss(v)}</td>` : `<td class="caop"></td>`;
+    }
+    tr += `<td class="fl cfyaop">${fmtLoss(grandTotal)}</td></tr>`;
+    body += tr + '</tbody>';
+    tbl.innerHTML = `<div class="twrap"><table><thead>${thead}</thead>${body}</table></div>`;
+  }
 }
 
 function showCustMRRTab(btn) {
