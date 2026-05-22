@@ -199,6 +199,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-wf-btn:hover{background:#f0f4f9}
 .cmrr-wf-note{font-size:10px;font-family:var(--mono);color:var(--txt3);letter-spacing:.06em}
 .cmrr-fy-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.75rem}
+.cmrr-wf-metric-tabs{display:flex;gap:0;margin-bottom:.85rem;border-bottom:1.5px solid var(--brd)}
+.cmrr-wf-mtbtn{padding:.45rem 1.05rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s,border-color .15s}
+.cmrr-wf-mtbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.cmrr-wf-mtbtn:hover:not(.active){color:var(--txt)}
 /* ── Net Retention tab ─────────────────────────────────────── */
 .nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .nret-selwrap{display:flex;flex-direction:column;gap:.35rem;position:relative}
@@ -434,6 +438,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <span class="cmrr-wf-note">Module-level detail · Apr 2025 – Apr 2026</span>
       </div>
       <div id="cmrr-wf-wrap" style="display:none">
+        <div class="cmrr-wf-metric-tabs">
+          <button class="cmrr-wf-mtbtn active" onclick="cmrrWfSetMetric('mrr',this)">MRR</button>
+          <button class="cmrr-wf-mtbtn" onclick="cmrrWfSetMetric('rate',this)">Rate</button>
+          <button class="cmrr-wf-mtbtn" onclick="cmrrWfSetMetric('users',this)">Frozen Users</button>
+          <button class="cmrr-wf-mtbtn" onclick="cmrrWfSetMetric('fx',this)">Exchange Rate</button>
+        </div>
         <div class="cmrr-status" id="cmrr-wf-status" style="padding:.3rem 0 .6rem"></div>
         <div class="twrap" id="cmrr-wf-table"></div>
       </div>
@@ -1506,6 +1516,9 @@ let custChartObj = null; // Chart.js instance
 let CMRR_GLOBAL_END = null; // latest month in DB, set during initCustMRR
 let _cmrrCurName = null;   // customer currently loaded
 let _cmrrWfLoaded = false; // whether workflow data is fetched for _cmrrCurName
+let _cmrrWfMetric  = 'mrr'; // active metric tab: mrr | rate | users | fx
+let _cmrrWfMatrices = null; // {mrr, rate, users, fx} matrices, set after load
+let _cmrrWfMonths   = null; // sorted month keys after load
 
 function cmrrHdr() {
   const token = USER_JWT || SUPABASE_ANON_KEY;
@@ -1600,9 +1613,17 @@ async function loadCustMRR(zohoName) {
   // Reset workflow section when switching customers
   _cmrrCurName = zohoName;
   _cmrrWfLoaded = false;
+  _cmrrWfMatrices = null;
+  _cmrrWfMonths = null;
+  _cmrrWfMetric = 'mrr';
   const wfWrap = document.getElementById('cmrr-wf-wrap');
   const wfBtn  = document.getElementById('cmrr-wf-btn');
-  if (wfWrap) { wfWrap.style.display = 'none'; wfBtn.textContent = '▶ Workflow Breakup'; }
+  if (wfWrap) {
+    wfWrap.style.display = 'none';
+    wfBtn.textContent = '▶ Workflow Breakup';
+    // Reset active metric tab to MRR
+    wfWrap.querySelectorAll('.cmrr-wf-mtbtn').forEach((b,i) => b.classList.toggle('active', i===0));
+  }
   document.getElementById('cmrr-wf-status').textContent = '';
   document.getElementById('cmrr-wf-table').innerHTML = '';
   document.getElementById('cmrr-metrics').style.display = 'none';
@@ -2050,7 +2071,7 @@ async function cmrrLoadWf() {
     let mOff = 0;
     while (true) {
       const mR = await fetch(
-        `${SUPABASE_URL}/rest/v1/customer_module_mrr?select=module_line_id,month_date,mrr_amount` +
+        `${SUPABASE_URL}/rest/v1/customer_module_mrr?select=module_line_id,month_date,mrr_amount,rate,exchange_rate,billed_users` +
         `&module_line_id=in.(${ids.join(',')})&order=month_date.asc&limit=${PAGE}&offset=${mOff}`,
         { headers: cmrrHdr() }
       );
@@ -2060,24 +2081,42 @@ async function cmrrLoadWf() {
       if (page.length < PAGE) break;
       mOff += PAGE;
     }
-    const matrix = {}, mSet = new Set();
+    const mxMRR = {}, mxRate = {}, mxFX = {}, mxUsers = {}, mSet = new Set();
     for (const row of rows) {
       const wf = lineMap[row.module_line_id] || '(unset)';
       const m  = row.month_date.slice(0, 7);
       mSet.add(m);
-      if (!matrix[wf]) matrix[wf] = {};
-      matrix[wf][m] = (matrix[wf][m] || 0) + parseFloat(row.mrr_amount);
+      if (!mxMRR[wf])   mxMRR[wf]   = {};
+      if (!mxRate[wf])  mxRate[wf]  = {};
+      if (!mxFX[wf])    mxFX[wf]    = {};
+      if (!mxUsers[wf]) mxUsers[wf] = {};
+      mxMRR[wf][m]   = (mxMRR[wf][m]   || 0) + parseFloat(row.mrr_amount || 0);
+      if (row.rate          != null) mxRate[wf][m]  = parseFloat(row.rate);
+      if (row.exchange_rate != null) mxFX[wf][m]    = parseFloat(row.exchange_rate);
+      if (row.billed_users  != null) mxUsers[wf][m] = (mxUsers[wf][m] || 0) + parseInt(row.billed_users, 10);
     }
-    _cmrrWfLoaded = true;
-    const months = [...mSet].sort();
-    cmrrRenderWf(matrix, months);
+    _cmrrWfLoaded   = true;
+    _cmrrWfMatrices = { mrr: mxMRR, rate: mxRate, fx: mxFX, users: mxUsers };
+    _cmrrWfMonths   = [...mSet].sort();
+    cmrrRenderWf();
     status.textContent = '';
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
   }
 }
 
-function cmrrRenderWf(matrix, months) {
+function cmrrWfSetMetric(metric, btn) {
+  _cmrrWfMetric = metric;
+  document.querySelectorAll('.cmrr-wf-mtbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (_cmrrWfLoaded) cmrrRenderWf();
+}
+
+function cmrrRenderWf() {
+  const matrix = _cmrrWfMatrices[_cmrrWfMetric];
+  const months  = _cmrrWfMonths;
+  const metric  = _cmrrWfMetric;
+
   const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
   const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
   function getFY(m) { const [y,mo]=m.split('-').map(Number); return mo>=4?y+1:y; }
@@ -2086,15 +2125,26 @@ function cmrrRenderWf(matrix, months) {
     return `${y}-${String(m).padStart(2,'0')}`;
   }
   function momCls(val, prev) {
-    if (prev==null) return '';
+    if (prev==null || val==null) return '';
     return val>prev ? 'background:#dcfce7;color:#166534' : val<prev ? 'background:#fee2e2;color:#991b1b' : '';
   }
 
+  // Formatters per metric
+  function fmtVal(v) {
+    if (v == null) return null;
+    if (metric === 'users') return Math.round(v).toLocaleString('en-IN');
+    if (metric === 'fx')    return v.toFixed(4);
+    if (metric === 'rate')  return f(v);
+    return f(v); // mrr
+  }
+  // For rate/fx/users, "total" row doesn't make sense as a sum — skip it
+  const showTotal = metric === 'mrr';
+
   const workflows = Object.keys(matrix).sort()
-    .filter(wf => months.some(m => (matrix[wf][m] || 0) !== 0));
+    .filter(wf => months.some(m => matrix[wf][m] != null));
   if (!workflows.length) {
     document.getElementById('cmrr-wf-table').innerHTML =
-      '<div style="padding:1rem;color:var(--txt3);font-size:12px">No non-zero data.</div>';
+      '<div style="padding:1rem;color:var(--txt3);font-size:12px">No data for this metric.</div>';
     return;
   }
 
@@ -2109,7 +2159,6 @@ function cmrrRenderWf(matrix, months) {
   html += `</div>`;
 
   fys.forEach((fy, i) => {
-    // Always show all 12 months; mark which have data — matches MRR table structure
     const fyMonths = [];
     for (let mi = 0; mi < 12; mi++) {
       const year = mi <= 8 ? fy - 1 : fy;
@@ -2123,37 +2172,41 @@ function cmrrRenderWf(matrix, months) {
 
     let thead = `<tr><th class="th-bu" style="min-width:220px;max-width:300px">Workflow / Service</th>`;
     for (const { lbl } of fyMonths) thead += `<th class="th-mon" style="min-width:72px">${lbl}</th>`;
-    thead += `<th class="th-fy">Total</th></tr>`;
+    thead += `<th class="th-fy">${showTotal ? 'Total' : ''}</th></tr>`;
 
     for (const wf of workflows) {
-      if (!fyMonths.some(({ key, hasData }) => hasData && (matrix[wf][key] || 0) !== 0)) continue;
-      let rowTotal = 0;
+      if (!fyMonths.some(({ key, hasData }) => hasData && matrix[wf][key] != null)) continue;
+      let rowTotal = 0, hasAny = false;
       let row = `<tr><td class="bu" style="white-space:normal;word-break:break-word;font-size:10.5px;line-height:1.35;min-width:220px;max-width:300px" title="${wf.replace(/"/g,'&quot;')}">${wf}</td>`;
       for (const { key, hasData } of fyMonths) {
         if (!hasData) { row += `<td class="caop"></td>`; continue; }
-        const val  = matrix[wf][key] || 0;
+        const val  = matrix[wf]?.[key] ?? null;
         const prev = matrix[wf]?.[prevKey(key)] ?? null;
-        if (val) {
-          rowTotal += val;
-          colTots[key] = (colTots[key] || 0) + val;
-          row += `<td class="caop" style="${momCls(val,prev)}">${f(val)}</td>`;
+        if (val != null) {
+          hasAny = true;
+          if (showTotal) { rowTotal += val; colTots[key] = (colTots[key] || 0) + val; }
+          row += `<td class="caop" style="${momCls(val,prev)}">${fmtVal(val)}</td>`;
         } else {
           row += `<td class="caop" style="color:#ddd">—</td>`;
         }
       }
-      grandTotal += rowTotal;
-      row += `<td class="fl cfyaop">${f(rowTotal)}</td></tr>`;
+      if (!hasAny) continue;
+      if (showTotal) grandTotal += rowTotal;
+      row += `<td class="fl cfyaop">${showTotal ? f(rowTotal) : ''}</td></tr>`;
       body += row;
     }
 
-    let tr = `<tr class="tot"><td class="bu">Total</td>`;
-    for (const { key, hasData } of fyMonths) {
-      if (!hasData) { tr += `<td class="caop"></td>`; continue; }
-      const v = colTots[key] || 0;
-      tr += v ? `<td class="caop">${f(v)}</td>` : `<td class="caop"></td>`;
+    if (showTotal) {
+      let tr = `<tr class="tot"><td class="bu">Total</td>`;
+      for (const { key, hasData } of fyMonths) {
+        if (!hasData) { tr += `<td class="caop"></td>`; continue; }
+        const v = colTots[key] || 0;
+        tr += v ? `<td class="caop">${f(v)}</td>` : `<td class="caop"></td>`;
+      }
+      tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
+      body += tr;
     }
-    tr += `<td class="fl cfyaop">${f(grandTotal)}</td></tr>`;
-    body += tr + '</tbody>';
+    body += '</tbody>';
 
     html += `<div class="cmrr-fy-section" id="cmrr-wf-fy-${fy}" style="display:${i===0?'block':'none'}">`;
     html += `<div class="twrap"><table><thead>${thead}</thead>${body}</table></div></div>`;
