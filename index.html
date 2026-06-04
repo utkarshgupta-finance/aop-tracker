@@ -203,6 +203,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cmrr-wf-mtbtn{padding:.45rem 1.05rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s,border-color .15s}
 .cmrr-wf-mtbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
 .cmrr-wf-mtbtn:hover:not(.active){color:var(--txt)}
+/* ── Customer MRR sub-tabs ─────────────────────────────────── */
+.cmrr-stabs{display:flex;gap:0;border-bottom:2px solid var(--brd);margin-bottom:1.25rem}
+.cmrr-stbtn{padding:.65rem 1.35rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;margin-bottom:-2px;transition:color .15s,border-color .15s;white-space:nowrap}
+.cmrr-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.cmrr-stbtn:hover:not(.active){color:var(--txt)}
+.cmrr-stpane{display:none}.cmrr-stpane.active{display:block}
 /* ── Net Retention tab ─────────────────────────────────────── */
 .nret-bar{display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;padding:.85rem 0 1rem;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .nret-selwrap{display:flex;flex-direction:column;gap:.35rem;position:relative}
@@ -426,18 +432,25 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div id="cust-detail" class="hidden">
       <div class="cmrr-info" id="cmrr-info"></div>
-      <div id="cmrr-metrics" style="display:none;gap:.75rem;margin-bottom:1.1rem;flex-wrap:wrap"></div>
-      <div class="cmrr-chart-box">
-        <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Apr 2026</div>
-        <div class="cmrr-chart-inner"><canvas id="cust-chart"></canvas></div>
+      <!-- Sub-tab navigation -->
+      <div class="cmrr-stabs">
+        <button class="cmrr-stbtn active" onclick="cmrrSubTab('mrr',this)">MRR</button>
+        <button class="cmrr-stbtn" onclick="cmrrSubTab('breakup',this)">MRR Breakup</button>
+        <button class="cmrr-stbtn" onclick="cmrrSubTab('nrr',this)">NRR</button>
+        <button class="cmrr-stbtn" onclick="cmrrSubTab('ar',this)">Open Invoice</button>
       </div>
-      <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
-      <div class="twrap" id="cmrr-table-wrap"></div>
-      <div class="cmrr-wf-hdr">
-        <button class="cmrr-wf-btn" id="cmrr-wf-btn" onclick="cmrrToggleWf()">▶ Workflow Breakup</button>
-        <span class="cmrr-wf-note">Module-level detail · Apr 2025 – Apr 2026</span>
+      <!-- Tab 1: MRR -->
+      <div id="cmrr-st-mrr" class="cmrr-stpane active">
+        <div id="cmrr-metrics" style="display:none;gap:.75rem;margin-bottom:1.1rem;flex-wrap:wrap"></div>
+        <div class="cmrr-chart-box">
+          <div class="cmrr-chart-lbl">Monthly MRR — Apr 2017 to Apr 2026</div>
+          <div class="cmrr-chart-inner"><canvas id="cust-chart"></canvas></div>
+        </div>
+        <p class="slabel" style="margin-bottom:.5rem">MRR by Fiscal Year</p>
+        <div class="twrap" id="cmrr-table-wrap"></div>
       </div>
-      <div id="cmrr-wf-wrap" style="display:none">
+      <!-- Tab 2: MRR Breakup -->
+      <div id="cmrr-st-breakup" class="cmrr-stpane">
         <div class="cmrr-wf-metric-tabs">
           <button class="cmrr-wf-mtbtn active" onclick="cmrrWfSetMetric('mrr',this)">MRR</button>
           <button class="cmrr-wf-mtbtn" onclick="cmrrWfSetMetric('rate',this)">Rate</button>
@@ -447,26 +460,25 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="cmrr-status" id="cmrr-wf-status" style="padding:.3rem 0 .6rem"></div>
         <div class="twrap" id="cmrr-wf-table"></div>
       </div>
-      <div class="cmrr-wf-hdr" style="margin-top:.9rem">
-        <button class="cmrr-wf-btn" id="cmrr-nrr-btn" onclick="cmrrToggleNrr()">▶ NRR Breakup</button>
-        <span class="cmrr-wf-note">Non-recurring revenue · FY26</span>
+      <!-- Tab 3: NRR -->
+      <div id="cmrr-st-nrr" class="cmrr-stpane">
+        <div class="ar-view-tog" style="margin-bottom:.85rem">
+          <button class="ar-vtbtn active" onclick="cmrrNrrSetView('nrr',this)">NRR</button>
+          <button class="ar-vtbtn" onclick="cmrrNrrSetView('rl',this)">Revenue Loss</button>
+        </div>
+        <div id="cmrr-nrr-pane">
+          <div class="cmrr-status" id="cmrr-nrr-status" style="padding:.3rem 0 .6rem"></div>
+          <div class="twrap" id="cmrr-nrr-table"></div>
+        </div>
+        <div id="cmrr-rl-pane" style="display:none">
+          <div class="cmrr-status" id="cmrr-rl-status" style="padding:.3rem 0 .6rem"></div>
+          <div id="cmrr-rl-content"></div>
+        </div>
       </div>
-      <div id="cmrr-nrr-wrap" style="display:none">
-        <div class="cmrr-status" id="cmrr-nrr-status" style="padding:.3rem 0 .6rem"></div>
-        <div class="twrap" id="cmrr-nrr-table"></div>
-      </div>
-      <div class="cmrr-wf-hdr" style="margin-top:.9rem">
-        <button class="cmrr-wf-btn" id="cmrr-rl-btn" onclick="cmrrToggleRl()">▶ Revenue Loss</button>
-        <span class="cmrr-wf-note">Credit notes &amp; adjustments where revenue was lost</span>
-      </div>
-      <div id="cmrr-rl-wrap" style="display:none">
-        <div class="cmrr-status" id="cmrr-rl-status" style="padding:.3rem 0 .6rem"></div>
-        <div id="cmrr-rl-content"></div>
-      </div>
-      <!-- AR Dues for this customer -->
-      <div id="cmrr-ar-dues" class="hidden ar-dues-section">
-        <p class="slabel" style="margin-bottom:.5rem">Open Dues (AR)</p>
-        <div class="twrap" id="cmrr-ar-dues-wrap"></div>
+      <!-- Tab 4: Open Invoice -->
+      <div id="cmrr-st-ar" class="cmrr-stpane">
+        <div class="cmrr-status" id="cmrr-ar-status" style="padding:.3rem 0 .6rem"></div>
+        <div id="cmrr-ar-dues-wrap"></div>
       </div>
     </div>
   </div>
@@ -1555,6 +1567,8 @@ let _cmrrRlLoaded   = false;
 let _cmrrRlRows     = null; // revenue-loss rows for current customer
 let _cmrrRlView     = 'month'; // 'month' | 'reason'
 let _cmrrRlFY       = null;   // active FY number
+let _cmrrSubTab     = 'mrr';  // active customer sub-tab
+let _cmrrNrrView    = 'nrr';  // 'nrr' | 'rl' in the NRR tab
 
 function cmrrHdr() {
   const token = USER_JWT || SUPABASE_ANON_KEY;
@@ -1646,34 +1660,32 @@ function cmrrPick(idx) {
 }
 
 async function loadCustMRR(zohoName) {
-  // Reset workflow section when switching customers
+  // Reset all state when switching customers
   _cmrrCurName = zohoName;
-  _cmrrWfLoaded = false;
-  _cmrrWfMatrices = null;
-  _cmrrWfMonths = null;
-  _cmrrWfMetric = 'mrr';
-  const wfWrap = document.getElementById('cmrr-wf-wrap');
-  const wfBtn  = document.getElementById('cmrr-wf-btn');
-  if (wfWrap) {
-    wfWrap.style.display = 'none';
-    wfBtn.textContent = '▶ Workflow Breakup';
-    // Reset active metric tab to MRR
-    wfWrap.querySelectorAll('.cmrr-wf-mtbtn').forEach((b,i) => b.classList.toggle('active', i===0));
-  }
+  _cmrrWfLoaded = false; _cmrrWfMatrices = null; _cmrrWfMonths = null; _cmrrWfMetric = 'mrr';
+  _cmrrNrrLoaded = false; _cmrrNrrRows = null;
+  _cmrrRlLoaded = false; _cmrrRlRows = null; _cmrrRlView = 'month'; _cmrrRlFY = null;
+  _cmrrNrrView = 'nrr';
+
+  // Reset to MRR sub-tab
+  document.querySelectorAll('.cmrr-stbtn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.querySelectorAll('.cmrr-stpane').forEach((p,i) => p.classList.toggle('active', i===0));
+  _cmrrSubTab = 'mrr';
+
+  // Clear content areas
   document.getElementById('cmrr-wf-status').textContent = '';
   document.getElementById('cmrr-wf-table').innerHTML = '';
-  _cmrrNrrLoaded = false; _cmrrNrrRows = null;
-  const nrrWrap = document.getElementById('cmrr-nrr-wrap');
-  const nrrBtn  = document.getElementById('cmrr-nrr-btn');
-  if (nrrWrap) { nrrWrap.style.display = 'none'; nrrBtn.textContent = '▶ NRR Breakup'; }
+  document.getElementById('cmrr-st-breakup').querySelectorAll('.cmrr-wf-mtbtn').forEach((b,i) => b.classList.toggle('active', i===0));
   document.getElementById('cmrr-nrr-status').textContent = '';
   document.getElementById('cmrr-nrr-table').innerHTML = '';
-  _cmrrRlLoaded = false; _cmrrRlRows = null; _cmrrRlView = 'month'; _cmrrRlFY = null;
-  const rlWrap = document.getElementById('cmrr-rl-wrap');
-  const rlBtn  = document.getElementById('cmrr-rl-btn');
-  if (rlWrap) { rlWrap.style.display = 'none'; rlBtn.textContent = '▶ Revenue Loss'; }
   document.getElementById('cmrr-rl-status').textContent = '';
   document.getElementById('cmrr-rl-content').innerHTML = '';
+  document.getElementById('cmrr-ar-status').textContent = '';
+  document.getElementById('cmrr-ar-dues-wrap').innerHTML = '';
+  // Reset NRR toggle to NRR view
+  document.querySelectorAll('#cmrr-st-nrr .ar-vtbtn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.getElementById('cmrr-nrr-pane').style.display = '';
+  document.getElementById('cmrr-rl-pane').style.display = 'none';
   document.getElementById('cmrr-metrics').style.display = 'none';
 
   const lines = CUST_LINES.filter(l => l.zoho_name === zohoName);
@@ -1727,16 +1739,42 @@ async function loadCustMRR(zohoName) {
   } catch(e) {
     document.getElementById('cmrr-status').textContent = 'Error: ' + e.message;
   }
-  renderCmrrArDues(zohoName);
 }
 
-async function renderCmrrArDues(zohoName) {
-  const duesEl = document.getElementById('cmrr-ar-dues');
+/* ── Customer MRR sub-tab switching ──────────────────────────── */
+function cmrrSubTab(tab, btn) {
+  _cmrrSubTab = tab;
+  document.querySelectorAll('.cmrr-stbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.cmrr-stpane').forEach(p => p.classList.remove('active'));
+  document.getElementById('cmrr-st-' + tab).classList.add('active');
+  if (tab === 'breakup' && !_cmrrWfLoaded) cmrrLoadWf();
+  if (tab === 'nrr') cmrrEnsureNrrData();
+  if (tab === 'ar') cmrrLoadArDues();
+}
+
+function cmrrNrrSetView(view, btn) {
+  _cmrrNrrView = view;
+  document.querySelectorAll('#cmrr-st-nrr .ar-vtbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('cmrr-nrr-pane').style.display = view === 'nrr' ? '' : 'none';
+  document.getElementById('cmrr-rl-pane').style.display  = view === 'rl'  ? '' : 'none';
+}
+
+function cmrrEnsureNrrData() {
+  if (!_cmrrNrrLoaded) cmrrLoadNrr();
+  if (!_cmrrRlLoaded)  cmrrLoadRl();
+}
+
+async function cmrrLoadArDues() {
+  if (!_cmrrCurName) return;
+  const status = document.getElementById('cmrr-ar-status');
   const wrapEl = document.getElementById('cmrr-ar-dues-wrap');
-  if (!duesEl || !wrapEl) return;
+  if (!wrapEl) return;
 
   let arRows = _arAllRows;
   if (!arRows.length) {
+    status.textContent = 'Loading…';
     try {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/ar_invoices?select=*&order=due_date.asc&limit=3000`,
@@ -1746,14 +1784,17 @@ async function renderCmrrArDues(zohoName) {
     } catch(e) { arRows = []; }
   }
 
-  const nameLower = zohoName.toLowerCase();
+  const nameLower = _cmrrCurName.toLowerCase();
   const matches = arRows.filter(r => {
     const cn = (r.customer_name || '').toLowerCase();
     return cn.includes(nameLower) || nameLower.includes(cn);
   });
 
-  if (!matches.length) { duesEl.classList.add('hidden'); return; }
-  duesEl.classList.remove('hidden');
+  status.textContent = '';
+  if (!matches.length) {
+    wrapEl.innerHTML = '<div style="padding:1.5rem 0;color:var(--txt3);font-size:12px;font-family:var(--mono)">No open invoices for this customer.</div>';
+    return;
+  }
 
   const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const totalBal = matches.reduce((s, r) => s + arInr(r), 0);
@@ -2077,20 +2118,7 @@ function cmrrShowFY(prefix, fy, btn) {
   document.getElementById(`cmrr-${prefix}-fy-${fy}`).style.display = 'block';
 }
 
-/* ── Workflow Breakup ──────────────────────────────────────── */
-function cmrrToggleWf() {
-  const wrap = document.getElementById('cmrr-wf-wrap');
-  const btn  = document.getElementById('cmrr-wf-btn');
-  const open = wrap.style.display !== 'none';
-  if (open) {
-    wrap.style.display = 'none';
-    btn.textContent = '▶ Workflow Breakup';
-  } else {
-    wrap.style.display = 'block';
-    btn.textContent = '▼ Workflow Breakup';
-    if (!_cmrrWfLoaded) cmrrLoadWf();
-  }
-}
+/* ── MRR Breakup ─────────────────────────────────────────────── */
 
 async function cmrrLoadWf() {
   if (!_cmrrCurName) return;
@@ -2340,19 +2368,6 @@ function cmrrRenderWf() {
 }
 
 /* ─── CUSTOMER NRR BREAKUP ───────────────────────────────────── */
-function cmrrToggleNrr() {
-  const wrap = document.getElementById('cmrr-nrr-wrap');
-  const btn  = document.getElementById('cmrr-nrr-btn');
-  const open = wrap.style.display !== 'none';
-  if (open) {
-    wrap.style.display = 'none';
-    btn.textContent = '▶ NRR Breakup';
-  } else {
-    wrap.style.display = 'block';
-    btn.textContent = '▼ NRR Breakup';
-    if (!_cmrrNrrLoaded) cmrrLoadNrr();
-  }
-}
 
 async function cmrrLoadNrr() {
   if (!_cmrrCurName) return;
@@ -2391,26 +2406,23 @@ function cmrrRenderNrr(rows) {
   const M_MM  = ['04','05','06','07','08','09','10','11','12','01','02','03'];
   const M_LBL = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
   // Build category × month matrix for FY26 (Apr-25 → Mar-26)
-  const matrix = {}, mSet = new Set();
+  const matrix = {};
   for (const row of rows) {
     const m   = row.month_date.slice(0, 7);
     const cat = row.category || '(Other)';
-    mSet.add(m);
     if (!matrix[cat]) matrix[cat] = {};
     matrix[cat][m] = (matrix[cat][m] || 0) + parseFloat(row.amount || 0);
   }
-  const months = [...mSet].sort();
   const cats = Object.keys(matrix).sort();
 
-  // Build header: month labels
-  let thead = `<tr><th class="th-bu" style="min-width:200px">Category</th>`;
+  // Always show all 12 FY months
   const fyMonths = [];
+  let thead = `<tr><th class="th-bu" style="min-width:200px">Category</th>`;
   for (let mi = 0; mi < 12; mi++) {
     const year = mi <= 8 ? 2025 : 2026;
     const key  = `${year}-${M_MM[mi]}`;
-    const has  = months.includes(key);
-    fyMonths.push({ key, lbl: M_LBL[mi], has });
-    if (has) thead += `<th class="th-mon" style="min-width:72px">${M_LBL[mi]}</th>`;
+    fyMonths.push({ key, lbl: M_LBL[mi] });
+    thead += `<th class="th-mon" style="min-width:72px">${M_LBL[mi]}</th>`;
   }
   thead += `<th class="th-fy">Total</th></tr>`;
 
@@ -2419,15 +2431,14 @@ function cmrrRenderNrr(rows) {
   for (const cat of cats) {
     let rowTotal = 0;
     let row = `<tr><td class="bu" style="font-size:10.5px;line-height:1.35">${cat}</td>`;
-    for (const { key, has } of fyMonths) {
-      if (!has) continue;
+    for (const { key } of fyMonths) {
       const val = matrix[cat][key] || 0;
       if (val) {
         rowTotal += val;
         colTots[key] = (colTots[key] || 0) + val;
         row += `<td class="caop">${f(val)}</td>`;
       } else {
-        row += `<td class="caop" style="color:#ddd">—</td>`;
+        row += `<td class="caop" style="color:#ddd"></td>`;
       }
     }
     grandTotal += rowTotal;
@@ -2436,8 +2447,7 @@ function cmrrRenderNrr(rows) {
   }
 
   let tr = `<tr class="tot"><td class="bu">Total</td>`;
-  for (const { key, has } of fyMonths) {
-    if (!has) continue;
+  for (const { key } of fyMonths) {
     const v = colTots[key] || 0;
     tr += v ? `<td class="caop">${f(v)}</td>` : `<td class="caop"></td>`;
   }
@@ -2449,19 +2459,6 @@ function cmrrRenderNrr(rows) {
 }
 
 /* ─── CUSTOMER REVENUE LOSS BREAKUP ─────────────────────────── */
-function cmrrToggleRl() {
-  const wrap = document.getElementById('cmrr-rl-wrap');
-  const btn  = document.getElementById('cmrr-rl-btn');
-  const open = wrap.style.display !== 'none';
-  if (open) {
-    wrap.style.display = 'none';
-    btn.textContent = '▶ Revenue Loss';
-  } else {
-    wrap.style.display = 'block';
-    btn.textContent = '▼ Revenue Loss';
-    if (!_cmrrRlLoaded) cmrrLoadRl();
-  }
-}
 
 async function cmrrLoadRl() {
   if (!_cmrrCurName) return;
@@ -2599,12 +2596,12 @@ function cmrrRenderRlContent() {
     }
     const reasons = Object.keys(matrix).sort((a,b) => reasonTotals[a] - reasonTotals[b]); // most negative first
 
-    // Build 12-month FY columns
+    // Build 12-month FY columns — always show all months
     const fyMonths = [];
     for (let mi = 0; mi < 12; mi++) {
       const year = mi <= 8 ? _cmrrRlFY - 1 : _cmrrRlFY;
       const key  = `${year}-${M_MM[mi]}`;
-      if (mSet.has(key)) fyMonths.push({ key, lbl: M_LBL[mi] });
+      fyMonths.push({ key, lbl: M_LBL[mi] });
     }
 
     let thead = `<tr><th class="th-bu" style="min-width:220px;text-align:left">Standard Reason</th>`;
