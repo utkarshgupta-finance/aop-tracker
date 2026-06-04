@@ -2566,13 +2566,12 @@ function cmrrRenderRlContent() {
       const amt  = parseFloat(row.revenue_loss_amt || 0);
       grandTotal += amt;
       const detail = row.detailed_reason || '';
-      const detShort = detail.length > 80 ? detail.slice(0,77)+'…' : detail;
       body += `<tr>
         <td class="bu" style="font-size:10.5px;white-space:nowrap">${lbl}</td>
         <td class="caop" style="text-align:left;font-size:10.5px;white-space:nowrap">${row.invoice_no||'—'}</td>
         <td class="caop" style="font-size:10.5px">${fmtLoss(amt)}</td>
         <td class="caop" style="text-align:left;font-size:10.5px;white-space:normal;line-height:1.4">${row.standard_reason||'—'}</td>
-        <td class="caop" style="text-align:left;font-size:10px;color:var(--txt2);white-space:normal;line-height:1.4;max-width:300px" title="${detail.replace(/"/g,'&quot;')}">${detShort||'—'}</td>
+        <td class="caop" style="text-align:left;font-size:10px;color:var(--txt2);white-space:normal;word-break:break-word;line-height:1.45;max-width:320px">${detail||'—'}</td>
       </tr>`;
     }
     body += `<tr class="tot">
