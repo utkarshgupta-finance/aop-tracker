@@ -387,7 +387,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
       <button class="modal-csv" id="ar-upload-uk-btn" onclick="openUKARModal()">⬆ Upload UK AR</button>
       <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)"></span>
-      <button class="rbtn" onclick="openArSettings()" style="font-size:12px;padding:.28rem .8rem">⚙ Settings</button>
     </div>
     <div style="display:none">
       <!-- hidden placeholders so existing JS (arFxMonthChanged, saveArFxRate) keeps working -->
@@ -475,36 +474,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
-  <!-- ── AR Settings Modal ────────────────────────────────────── -->
-  <div id="ar-settings-ov" class="fx-ov" onclick="if(event.target===this)closeArSettings()">
-    <div class="fx-box" style="width:500px">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:13px;font-weight:600;color:var(--navy)">AR Settings</span>
-        <button onclick="closeArSettings()" style="background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:var(--txt3);padding:.1rem .3rem">×</button>
-      </div>
-      <!-- GBP/INR Rate section -->
-      <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">GBP / INR Exchange Rate</div>
-        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">Used for all UK AR conversions. Enter the current rate and save.</div>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-          <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP  e.g. 107.5" min="1" step="0.01" style="font-size:12px;padding:.3rem .6rem;border:1px solid var(--brd);border-radius:5px;width:190px;background:#fff">
-          <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
-          <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
-        </div>
-      </div>
-      <!-- Excluded customers section -->
-      <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">Excluded Customers</div>
-        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
-        <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
-        <div style="display:flex;gap:.5rem;align-items:center">
-          <input type="text" id="ar-excl-input" placeholder="Customer name to exclude…" class="cust-input" style="font-size:12px;flex:1;padding:.32rem .65rem">
-          <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
-        </div>
-        <div style="font-size:10.5px;color:var(--txt3);margin-top:.45rem">Partial match — e.g. "Mobisy UK" matches "Mobisy Technologies UK Limited"</div>
-      </div>
-    </div>
-  </div>
   <!-- ── GBP/INR FX Rates Modal ──────────────────────────────── -->
   <div id="fx-modal-ov" class="fx-ov" onclick="if(event.target===this)closeFxModal()">
     <div class="fx-box">
@@ -564,35 +533,83 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   </div>
   <!-- ── Settings Pane ──────────────────────────────────────── -->
   <div id="settings" class="pane">
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-      <span class="slabel" style="margin:0">Customer Master</span>
-      <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
-        <button class="rbtn" onclick="downloadCustMaster()" style="font-size:12px">⬇ Export</button>
-        <label class="modal-csv" style="font-size:12px;cursor:pointer;padding:.32rem .75rem;display:inline-flex;align-items:center">
-          ⬆ Upload CSV/XLSX
-          <input type="file" id="cust-master-upload" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadCustMaster(this.files[0]);this.value=''">
-        </label>
+    <!-- GBP/INR Rate -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">GBP / INR Exchange Rate</div>
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">Used for all UK AR conversions. Enter the current rate and save.</div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP  e.g. 107.5" min="1" step="0.01" style="font-size:12px;padding:.3rem .6rem;border:1px solid var(--brd);border-radius:5px;width:190px;background:#fff">
+        <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
+        <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
       </div>
     </div>
-    <div id="cm-stats" style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;font-size:12.5px"></div>
-    <div style="display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center">
-      <input type="text" id="cm-search" placeholder="Search customer…" class="cust-input" style="flex:1;min-width:160px;font-size:12px;padding:.3rem .65rem" oninput="renderCustMasterTable()">
-      <select id="cm-filter-bu" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()"><option value="">All BUs</option></select>
-      <select id="cm-filter-mapped" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()">
-        <option value="">All</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option>
-      </select>
+    <!-- Excluded Customers -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">Excluded Customers</div>
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
+      <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input type="text" id="ar-excl-input" placeholder="Customer name to exclude…" class="cust-input" style="font-size:12px;flex:1;max-width:340px;padding:.32rem .65rem">
+        <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+      </div>
+      <div style="font-size:10.5px;color:var(--txt3);margin-top:.45rem">Partial match — e.g. "Mobisy UK" matches "Mobisy Technologies UK Limited"</div>
     </div>
-    <div id="cm-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.4rem"></div>
-    <div style="overflow-x:auto">
-      <table class="ar-tbl" style="min-width:560px">
-        <thead><tr>
-          <th style="text-align:left">Customer</th>
-          <th style="text-align:left;width:175px">BU</th>
-          <th style="text-align:left;width:175px">Collector</th>
-          <th style="width:65px"></th>
-        </tr></thead>
-        <tbody id="cm-tbody"></tbody>
-      </table>
+    <!-- BU Master -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">BU Master</span>
+      </div>
+      <div id="bu-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
+        <input type="text" id="bu-add-input" placeholder="Add BU name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
+        <button class="modal-csv" onclick="addBuMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+        <span id="bu-master-status" style="font-size:11px;color:var(--txt3)"></span>
+      </div>
+    </div>
+    <!-- Collector Master -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Collector Master</span>
+      </div>
+      <div id="collector-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
+        <input type="text" id="collector-add-input" placeholder="Add collector name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
+        <button class="modal-csv" onclick="addCollectorMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+        <span id="collector-master-status" style="font-size:11px;color:var(--txt3)"></span>
+      </div>
+    </div>
+    <!-- Customer Master -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Customer Master</span>
+        <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="rbtn" onclick="downloadCustMaster()" style="font-size:12px">⬇ Export</button>
+          <label class="modal-csv" style="font-size:12px;cursor:pointer;padding:.32rem .75rem;display:inline-flex;align-items:center">
+            ⬆ Upload CSV/XLSX
+            <input type="file" id="cust-master-upload" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadCustMaster(this.files[0]);this.value=''">
+          </label>
+        </div>
+      </div>
+      <div id="cm-stats" style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;font-size:12.5px"></div>
+      <div style="display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center">
+        <input type="text" id="cm-search" placeholder="Search customer…" class="cust-input" style="flex:1;min-width:160px;font-size:12px;padding:.3rem .65rem" oninput="renderCustMasterTable()">
+        <select id="cm-filter-bu" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()"><option value="">All BUs</option></select>
+        <select id="cm-filter-mapped" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()">
+          <option value="">All</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option>
+        </select>
+      </div>
+      <div id="cm-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.4rem"></div>
+      <div style="overflow-x:auto">
+        <table class="ar-tbl" style="min-width:560px">
+          <thead><tr>
+            <th style="text-align:left">Customer</th>
+            <th style="text-align:left;width:175px">BU</th>
+            <th style="text-align:left;width:175px">Collector</th>
+            <th style="width:65px"></th>
+          </tr></thead>
+          <tbody id="cm-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
   <div id="manage-users" class="pane">
@@ -635,18 +652,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div>
           <div class="flabel">Role</div>
           <select id="um-role" class="cust-input" onchange="umRoleChanged()">
-            <option value="admin">Admin (full access + manages users)</option>
+            <option value="admin-edit">Admin Edit (full access + Settings)</option>
+            <option value="admin-view">Admin View (sees all, no Settings)</option>
             <option value="bu">BU (sees own BU customers only)</option>
             <option value="collector">Collector (sees own + unmapped customers)</option>
           </select>
         </div>
-        <div id="um-bu-section">
-          <div class="flabel" style="margin-bottom:.4rem">BU Access <span style="font-weight:400;opacity:.65">(BUs this user can see)</span></div>
-          <div id="um-bus-wrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
+        <div id="um-bu-section" style="display:none">
+          <div class="flabel">BU <span style="font-weight:400;opacity:.65">(select the BU for this user)</span></div>
+          <select id="um-bu-select" class="cust-input"><option value="">— Select BU —</option></select>
         </div>
         <div id="um-collector-section" style="display:none">
-          <div class="flabel">Collector Name <span style="font-weight:400;opacity:.65">(must match Customer Master exactly)</span></div>
-          <input type="text" id="um-collector-name" class="cust-input" placeholder="e.g. Ravi Kumar">
+          <div class="flabel">Collector <span style="font-weight:400;opacity:.65">(select from collector master)</span></div>
+          <select id="um-collector-select" class="cust-input"><option value="">— Select Collector —</option></select>
         </div>
         <div id="um-err" style="color:#a32d2d;font-size:12px;min-height:1rem"></div>
         <button class="modal-csv" id="um-save-btn" onclick="saveUser()" style="width:100%">Save</button>
@@ -667,7 +685,8 @@ const SUPABASE_URL      = 'https://vntqszeaokcbrzuppmew.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHFzemVhb2tjYnJ6dXBwbWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzE1NzcsImV4cCI6MjA5MjQwNzU3N30.NIllrkxrhwrNDxWTCgRxxyvk2VbRTBaC7F8_VFWfZDY';
 
 /* ─── CONSTANTS ─────────────────────────────────────────── */
-const BUS = ['BAT BU','India ENT BU','India MM BU','KAM BU','MEA BU','SEA BU','SME BU'];
+let _buList = [];        // loaded from bu_master
+let _collectorList = []; // loaded from collector_master
 
 const f  = n => Math.round(n).toLocaleString('en-IN');
 const fL = n => (Math.round(n) / 100000).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -689,8 +708,26 @@ const ALL_TABS_CFG = [
 
 
 function allowedBUS() {
-  if (!USER_ACCESS?.allowed_bus?.length) return BUS;
-  return BUS.filter(b => USER_ACCESS.allowed_bus.includes(b));
+  if (!USER_ACCESS?.allowed_bus?.length) return _buList;
+  return _buList.filter(b => USER_ACCESS.allowed_bus.includes(b));
+}
+
+async function loadBuList() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/bu_master?select=name&is_active=eq.true&order=name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _buList = rows.map(r => r.name).filter(Boolean);
+  } catch(e) { console.warn('loadBuList:', e); }
+}
+
+async function loadCollectorList() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/collector_master?select=collector_name&order=collector_name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _collectorList = rows.map(r => r.collector_name).filter(Boolean);
+  } catch(e) { console.warn('loadCollectorList:', e); }
 }
 
 async function initAuth() {
@@ -769,25 +806,32 @@ function renderNav() {
     .filter(t => allowed.includes(t.id))
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
-  if (USER_ACCESS.is_admin) {
+  const role = USER_ACCESS.role || 'admin-edit';
+  if (role === 'admin-edit') {
     nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
+  }
+  if (USER_ACCESS.is_admin) {
     nav.innerHTML += '<button class="tbtn" data-tab="manage-users" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
-  const allIds  = [...allowed, ...(USER_ACCESS.is_admin ? ['settings', 'manage-users'] : [])];
+  const extraIds = [...(role === 'admin-edit' ? ['settings'] : []), ...(USER_ACCESS.is_admin ? ['manage-users'] : [])];
+  const allIds  = [...allowed, ...extraIds];
   const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
   if (activeId) {
     const paneId = activeId;
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadArCustMaster(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); }
   }
 }
 
 /* ─── MANAGE USERS ───────────────────────────────────────────── */
-function showManageUsersTab(btn) { showTab('manage-users', btn); loadUsersPanel(); }
+function showManageUsersTab(btn) {
+  showTab('manage-users', btn);
+  Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
+}
 
 async function userAdminCall(operation, payload) {
   if (payload === undefined) payload = {};
@@ -806,14 +850,16 @@ async function loadUsersPanel() {
   if (!ok || !data.ok) { list.innerHTML = '<div style="color:#a32d2d;font-size:12px">Error: ' + (data.error || '?') + '</div>'; return; }
   if (!data.users.length) { list.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem">No users yet.</div>'; return; }
   list.innerHTML = data.users.map(function(u) {
-    const role = u.role || 'admin';
-    const roleChip = role === 'admin'
-      ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin</span>'
+    const role = u.role || 'admin-edit';
+    const roleChip = (role === 'admin-edit' || role === 'admin')
+      ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin Edit</span>'
+      : role === 'admin-view'
+      ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin View</span>'
       : role === 'bu'
       ? '<span class="user-chip" style="background:#eff6ff;color:#1d4ed8">BU</span>'
       : '<span class="user-chip" style="background:#f0fdf4;color:#166534">Collector</span>';
     const extraChips = role === 'bu'
-      ? (u.allowed_bus.length ? u.allowed_bus.map(function(b){ return '<span class="user-chip" style="background:#f0fdf4;color:#166534">' + escHtml(b) + '</span>'; }).join('') : '<span class="user-chip" style="opacity:.6">All BUs</span>')
+      ? (u.allowed_bus && u.allowed_bus.length ? u.allowed_bus.map(function(b){ return '<span class="user-chip" style="background:#f0fdf4;color:#166534">' + escHtml(b) + '</span>'; }).join('') : '')
       : role === 'collector' && u.collector_name
       ? '<span class="user-chip">' + escHtml(u.collector_name) + '</span>'
       : '';
@@ -849,20 +895,25 @@ function openUserModal(user) {
   document.getElementById('um-tabs-wrap').innerHTML = ALL_TABS_CFG.map(function(t) {
     return '<label class="um-check-label"><input type="checkbox" value="' + t.id + '"' + (allowedTabs.includes(t.id) ? ' checked' : '') + '> ' + t.label + '</label>';
   }).join('');
-  const role = (user && user.role) ? user.role : 'admin';
+  let role = (user && user.role) ? user.role : 'admin-edit';
+  if (role === 'admin') role = 'admin-edit'; // migrate legacy
   document.getElementById('um-role').value = role;
-  const allowedBus = (user && user.allowed_bus) ? user.allowed_bus : [];
-  document.getElementById('um-bus-wrap').innerHTML = BUS.map(function(b) {
-    return '<label class="um-check-label"><input type="checkbox" value="' + b + '"' + (allowedBus.includes(b) ? ' checked' : '') + '> ' + b + '</label>';
-  }).join('');
-  document.getElementById('um-collector-name').value = (user && user.collector_name) ? user.collector_name : '';
+  // populate BU dropdown
+  const buSel = document.getElementById('um-bu-select');
+  buSel.innerHTML = '<option value="">— Select BU —</option>' + _buList.map(function(b) { return '<option value="' + escHtml(b) + '">' + escHtml(b) + '</option>'; }).join('');
+  const currentBu = (user && user.allowed_bus && user.allowed_bus.length) ? user.allowed_bus[0] : '';
+  buSel.value = currentBu;
+  // populate Collector dropdown
+  const colSel = document.getElementById('um-collector-select');
+  colSel.innerHTML = '<option value="">— Select Collector —</option>' + _collectorList.map(function(c) { return '<option value="' + escHtml(c) + '">' + escHtml(c) + '</option>'; }).join('');
+  colSel.value = (user && user.collector_name) ? user.collector_name : '';
   umRoleChanged();
   document.getElementById('user-modal').classList.remove('hidden');
 }
 
 function umRoleChanged() {
   const role = document.getElementById('um-role').value;
-  document.getElementById('um-bu-section').style.display      = role === 'bu'        ? '' : 'none';
+  document.getElementById('um-bu-section').style.display        = role === 'bu'        ? '' : 'none';
   document.getElementById('um-collector-section').style.display = role === 'collector' ? '' : 'none';
 }
 
@@ -873,12 +924,13 @@ async function saveUser() {
   const email = document.getElementById('um-email').value.trim();
   const pwd = document.getElementById('um-pwd').value;
   const role = document.getElementById('um-role').value;
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin-edit' || role === 'admin-view' || role === 'admin';
   const err = document.getElementById('um-err');
   const btn = document.getElementById('um-save-btn');
   const allowedTabs = Array.from(document.querySelectorAll('#um-tabs-wrap input:checked')).map(function(c){ return c.value; });
-  const allowedBus  = role === 'bu' ? Array.from(document.querySelectorAll('#um-bus-wrap input:checked')).map(function(c){ return c.value; }) : [];
-  const collectorName = role === 'collector' ? document.getElementById('um-collector-name').value.trim() : null;
+  const selectedBu = document.getElementById('um-bu-select').value;
+  const allowedBus  = role === 'bu' && selectedBu ? [selectedBu] : [];
+  const collectorName = role === 'collector' ? (document.getElementById('um-collector-select').value || null) : null;
   if (!name) { err.textContent = 'Display name required'; return; }
   if (!_editingUserId && !email) { err.textContent = 'Email required'; return; }
   if (!_editingUserId && pwd.length < 8) { err.textContent = 'Password must be at least 8 characters'; return; }
@@ -912,6 +964,14 @@ function showSettingsTab(btn) {
 }
 
 async function loadSettingsPane() {
+  // Pre-populate GBP rate input with current value
+  const ri = document.getElementById('ar-settings-fx-rate');
+  if (ri && _arCurrentRate) ri.value = _arCurrentRate;
+  renderArExcludedList();
+  // Load masters
+  await Promise.all([loadBuList(), loadCollectorList()]);
+  renderBuMasterList();
+  renderCollectorMasterList();
   _cmData = [];
   _arCustMaster = {};
   _arCustMasterLoading = false;
@@ -947,10 +1007,12 @@ async function renderCustMasterTable() {
 
   tbody.innerHTML = rows.map(r => {
     const buSel = `<select class="cm-row-select" data-name="${escHtml(r.name)}" onchange="saveCustMasterCell(this,'bu_name')">
-      <option value="">— None —</option>${BUS.map(b => `<option value="${escHtml(b)}"${r.bu === b ? ' selected' : ''}>${escHtml(b)}</option>`).join('')}
+      <option value="">— None —</option>${_buList.map(b => `<option value="${escHtml(b)}"${r.bu === b ? ' selected' : ''}>${escHtml(b)}</option>`).join('')}
     </select>`;
-    const colInput = `<input type="text" class="cm-row-input" data-name="${escHtml(r.name)}" value="${escHtml(r.collector)}" placeholder="Collector name"
-      onblur="saveCustMasterCell(this,'collector_name')" onkeydown="if(event.key==='Enter')this.blur()">`;
+    const collectorOpts = _collectorList.map(c => `<option value="${escHtml(c)}"${r.collector === c ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
+    const colInput = `<select class="cm-row-select" data-name="${escHtml(r.name)}" onchange="saveCustMasterCell(this,'collector_name')">
+      <option value="">— None —</option>${collectorOpts}
+    </select>`;
     const badge = (!r.inMaster || (!r.bu && !r.collector)) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const delBtn = r.inMaster ? `<button class="rbtn" style="font-size:11px;color:#a32d2d;padding:.2rem .45rem" onclick="deleteCustMasterRow('${escHtml(r.name)}')">✕</button>` : '';
     return `<tr><td style="font-size:12px">${escHtml(r.name)}${badge}</td><td>${buSel}</td><td>${colInput}</td><td style="text-align:center">${delBtn}</td></tr>`;
@@ -1297,7 +1359,7 @@ function showTab(id, btn) {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); }
   loadArCustMaster();
 }
 
@@ -1356,8 +1418,8 @@ function arGetCollector(customerName) { return _cmLookup(customerName)?.collecto
 function arIsMapped(customerName)     { const m = _cmLookup(customerName); return !!(m && (m.bu_name || m.collector_name)); }
 
 function arPassesRoleFilter(r) {
-  const role = USER_ACCESS.role || 'admin';
-  if (role === 'admin') return true;
+  const role = USER_ACCESS.role || 'admin-edit';
+  if (role === 'admin-edit' || role === 'admin-view' || role === 'admin') return true;
   if (role === 'bu') {
     if (!arIsMapped(r.customer_name)) return false;
     const bu = arGetBu(r.customer_name);
@@ -1471,15 +1533,6 @@ function showFxRatesModal() {
   document.getElementById('fx-modal-ov').classList.add('open');
 }
 
-// ── AR Settings modal ───────────────────────────────────────────────────
-function openArSettings() {
-  const ri = document.getElementById('ar-settings-fx-rate');
-  if (ri && _arCurrentRate) ri.value = _arCurrentRate;
-  renderArExcludedList();
-  document.getElementById('ar-settings-ov').classList.add('open');
-}
-function closeArSettings() { document.getElementById('ar-settings-ov').classList.remove('open'); }
-
 async function saveArSettingsFxRate() {
   const rate   = parseFloat(document.getElementById('ar-settings-fx-rate').value);
   const status = document.getElementById('ar-settings-fx-status');
@@ -1528,6 +1581,103 @@ function arExclRemove(i) {
   arSaveExcluded();
   renderArExcludedList();
   renderAR();
+}
+
+/* ─── BU / COLLECTOR MASTER MANAGEMENT ───────────────────────── */
+function renderBuMasterList() {
+  const el = document.getElementById('bu-master-list');
+  if (!el) return;
+  if (!_buList.length) { el.innerHTML = '<span style="font-size:12px;color:var(--txt3)">No BUs yet.</span>'; return; }
+  el.innerHTML = _buList.map((b, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surf2);border:1px solid var(--brd);border-radius:5px;padding:.25rem .6rem;font-size:12px">
+      ${escHtml(b)}
+      <button onclick="deleteBuMaster(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#94a3b8;line-height:1;padding:0" title="Remove">×</button>
+    </span>`
+  ).join('');
+}
+
+async function addBuMaster() {
+  const inp = document.getElementById('bu-add-input');
+  const st  = document.getElementById('bu-master-status');
+  const v = inp.value.trim();
+  if (!v) return;
+  st.textContent = 'Saving…'; st.style.color = '';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/bu_master`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ name: v, code: v.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, ''), is_active: true }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    inp.value = '';
+    await loadBuList();
+    renderBuMasterList();
+    st.textContent = 'Added'; st.style.color = '#15803d';
+    setTimeout(() => { st.textContent = ''; }, 2000);
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
+}
+
+async function deleteBuMaster(idx) {
+  const name = _buList[idx];
+  if (!name || !confirm(`Remove BU "${name}"?`)) return;
+  const st = document.getElementById('bu-master-status');
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/bu_master?name=eq.${encodeURIComponent(name)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), 'Prefer': 'return=minimal' },
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadBuList();
+    renderBuMasterList();
+    st.textContent = 'Removed'; st.style.color = '#15803d';
+    setTimeout(() => { st.textContent = ''; }, 2000);
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
+}
+
+function renderCollectorMasterList() {
+  const el = document.getElementById('collector-master-list');
+  if (!el) return;
+  if (!_collectorList.length) { el.innerHTML = '<span style="font-size:12px;color:var(--txt3)">No collectors yet.</span>'; return; }
+  el.innerHTML = _collectorList.map((c, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;background:var(--surf2);border:1px solid var(--brd);border-radius:5px;padding:.25rem .6rem;font-size:12px">
+      ${escHtml(c)}
+      <button onclick="deleteCollectorMaster(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#94a3b8;line-height:1;padding:0" title="Remove">×</button>
+    </span>`
+  ).join('');
+}
+
+async function addCollectorMaster() {
+  const inp = document.getElementById('collector-add-input');
+  const st  = document.getElementById('collector-master-status');
+  const v = inp.value.trim();
+  if (!v) return;
+  st.textContent = 'Saving…'; st.style.color = '';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/collector_master`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ collector_name: v }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    inp.value = '';
+    await loadCollectorList();
+    renderCollectorMasterList();
+    st.textContent = 'Added'; st.style.color = '#15803d';
+    setTimeout(() => { st.textContent = ''; }, 2000);
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
+}
+
+async function deleteCollectorMaster(idx) {
+  const name = _collectorList[idx];
+  if (!name || !confirm(`Remove collector "${name}"?`)) return;
+  const st = document.getElementById('collector-master-status');
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/collector_master?collector_name=eq.${encodeURIComponent(name)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), 'Prefer': 'return=minimal' },
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadCollectorList();
+    renderCollectorMasterList();
+    st.textContent = 'Removed'; st.style.color = '#15803d';
+    setTimeout(() => { st.textContent = ''; }, 2000);
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
 }
 
 function closeFxModal() { document.getElementById('fx-modal-ov').classList.remove('open'); }
@@ -2155,7 +2305,8 @@ function renderARInvoiceList(rows) {
         let va, vb;
         switch (_arSortCol) {
           case 'customer': va = a.customer_name||''; vb = b.customer_name||''; break;
-          case 'bu':       va = arGetBu(a.customer_name); vb = arGetBu(b.customer_name); break;
+          case 'bu':        va = arGetBu(a.customer_name); vb = arGetBu(b.customer_name); break;
+          case 'collector': va = arGetCollector(a.customer_name); vb = arGetCollector(b.customer_name); break;
           case 'entity':   va = a.entity||''; vb = b.entity||''; break;
           case 'inv':      va = a.invoice_number||''; vb = b.invoice_number||''; break;
           case 'inv_date': va = a.invoice_date||''; vb = b.invoice_date||''; break;
@@ -2204,10 +2355,13 @@ function renderARInvoiceList(rows) {
     const buCell = bu ? `<span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:#ddd;font-size:10px">—</span>';
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const collectorName = arGetCollector(r.customer_name);
-    const collectorBadge = collectorName ? `<span class="cm-collector-badge">${escHtml(collectorName)}</span>` : '';
+    const collectorCell = collectorName
+      ? `<span style="font-size:10px;background:#f0fdf4;color:#15803d;padding:.12rem .4rem;border-radius:4px">${escHtml(collectorName)}</span>`
+      : '<span style="color:#ddd;font-size:10px">—</span>';
     return `<tr>
-      <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}${collectorBadge}</td>
+      <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td>${buCell}</td>
+      <td style="white-space:nowrap">${collectorCell}</td>
       <td>${entityBadge}</td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
@@ -2224,6 +2378,7 @@ function renderARInvoiceList(rows) {
     <thead><tr>
       ${th('Customer','customer')}
       ${th('BU','bu')}
+      ${th('Collector','collector')}
       ${th('Entity','entity')}
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}

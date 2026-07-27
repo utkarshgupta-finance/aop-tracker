@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
   // create_user
   if (body.operation === 'create_user') {
     const { email, password, display_name, allowed_tabs = [], allowed_bus = [], is_admin = false,
-            role = 'admin', collector_name = null } = body as Record<string,unknown>;
+            role = 'admin-edit', collector_name = null } = body as Record<string,unknown>;
     if (!email || !password || !display_name) return json({ error: 'email, password, display_name required' }, 400);
     const aR = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
       method: 'POST', headers: authH,
