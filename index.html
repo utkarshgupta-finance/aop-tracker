@@ -14,17 +14,23 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --navy:#0f2340;--navy2:#1a3a5c;--navy3:#2a5f9e;
-  --green:#3b6d11;--greenbg:#f4faf0;--greendark:#1a5c2e;
-  --amber:#854f0b;--amberbg:#fef9f0;
-  --red:#a32d2d;
+  --navy:#182338;--navy2:#1a3a5c;--navy3:#2a5f9e;
+  --green:#1E6E45;--greenbg:#E9F4EE;--greendark:#1a5c2e;
+  --amber:#9A6416;--amberbg:#FBF1E1;
+  --red:#B3261E;--red-bg:#FBEBEA;
   --qhdr:#163d6e;--fyhdr:#0d2d52;
   --surf:#fff;--surf2:#f4f6f9;--surf3:#edf0f5;
-  --brd:#dde2ea;--brd2:#c5cdd8;
-  --txt:#0f2340;--txt2:#4a5568;--txt3:#8896a8;
+  --brd:#E3E5EA;--brd2:#CED1D9;
+  --txt:#14181F;--txt2:#4B5160;--txt3:#8A8F9C;
+  /* new design tokens */
+  --ink:#14181F;--ink-soft:#4B5160;--ink-faint:#8A8F9C;
+  --page-bg:#F1F2F5;--card-bg:#FFFFFF;
+  --line:#E3E5EA;--line-strong:#CED1D9;
+  --action:#28527A;
+  --green-bg:#E9F4EE;--amber-bg:#FBF1E1;
   --mono:'Geist Mono','Geist Mono Fallback',monospace;--sans:'Inter',sans-serif;
 }
-body{font-family:var(--sans);background:var(--surf2);color:var(--txt);min-height:100vh}
+body{font-family:var(--sans);background:var(--page-bg);color:var(--ink);min-height:100vh}
 header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px solid var(--navy3)}
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:.4rem}
 .htitle{font-size:20px;font-weight:500;color:#fff}
@@ -257,31 +263,50 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .omrr-tot-bu{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .75rem;white-space:nowrap;border-right:2px solid #aaa}
 .omrr-hbu{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:100px;padding:.38rem .75rem;font-size:11px;font-weight:600}
 /* ── AR Tab ──────────────────────────────────────────────────── */
-.ar-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
+.ar-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:.75rem}
 @media(max-width:900px){.ar-cards{grid-template-columns:repeat(2,1fr)}}
-.ar-card{background:#fff;border:1px solid var(--brd);border-radius:8px;padding:.9rem 1.1rem;border-left:4px solid #e2e8f0}
+.ar-card{background:var(--card-bg);border:0.5px solid var(--line);border-radius:12px;padding:1rem 1.15rem 1rem 1.35rem;border-left:3px solid #e2e8f0;position:relative;cursor:pointer;transition:box-shadow .15s;overflow:visible}
+.ar-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.07)}
 .ar-card.c-total{border-left-color:#2563eb}
-.ar-card.c-overdue{border-left-color:#dc2626}
-.ar-card.c-current{border-left-color:#16a34a}
-.ar-card.c-synced{border-left-color:#7c3aed}
-.ar-card-val{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:.1rem;font-family:var(--mono);letter-spacing:-.01em}
-.ar-card-lbl{font-size:10px;color:var(--txt3);margin-bottom:.35rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
-.ar-card-sub{font-size:11px;color:var(--txt2)}
+.ar-card.c-overdue{border-left-color:var(--red)}
+.ar-card.c-current{border-left-color:var(--green)}
+.ar-card.kpi-active{outline:2px solid var(--action);outline-offset:1px}
+.ar-card-val{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:.05rem;font-family:var(--mono);letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.15}
+.ar-card-lbl{font-size:9.5px;color:var(--ink-faint);margin-bottom:.4rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.ar-card-sub{font-size:11px;color:var(--ink-soft);margin-top:.3rem;font-variant-numeric:tabular-nums}
+.ar-card-sub2{font-size:10.5px;color:var(--ink-faint);margin-top:.15rem;font-variant-numeric:tabular-nums}
+.ar-card-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#1a202c;color:#e2e8f0;font-family:var(--mono);font-size:10.5px;line-height:1.6;padding:.5rem .75rem;border-radius:7px;white-space:pre;z-index:300;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:none}
+.ar-card-tip::after{content:'';position:absolute;top:100%;left:16px;border:5px solid transparent;border-top-color:#1a202c}
+.ar-card:hover .ar-card-tip{display:block}
+/* Aging composition bar */
+.ar-aging-bar-wrap{margin-bottom:1.1rem}
+.ar-aging-bar{display:flex;border-radius:6px;overflow:hidden;height:10px;width:100%;background:var(--line)}
+.ar-aging-seg{height:100%;transition:flex .3s}
+.ar-aging-legend{display:flex;flex-wrap:wrap;gap:.3rem .65rem;margin-top:.45rem}
+.ar-aging-leg-item{display:flex;align-items:center;gap:.3rem;font-size:10px;color:var(--ink-soft);font-family:var(--mono)}
+.ar-aging-leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 /* ── AR modern table ─────────────────────────────────────────── */
 .ar-tbl{width:100%;border-collapse:collapse}
-.ar-tbl thead th{background:#f8fafc;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.6rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left;white-space:nowrap}
+.ar-tbl thead th{background:#FAFAFB;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);padding:.6rem .9rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 .ar-tbl thead th.r{text-align:right}
-.ar-tbl tbody tr{border-bottom:1px solid #f1f5f9;transition:background .1s}
-.ar-tbl tbody tr:hover{background:#f8fafc}
+.ar-tbl tbody tr{border-bottom:1px solid var(--line);transition:background .1s}
+.ar-tbl tbody tr:hover{background:#FAFBFC}
 .ar-tbl td{padding:.55rem .9rem;vertical-align:middle;text-align:left}
-.ar-tbl .td-cust{font-weight:500;font-size:11.5px;color:#0f172a;max-width:200px;white-space:normal;word-break:break-word;line-height:1.35}
-.ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--navy3);text-decoration:none}
+.ar-tbl .td-cust{font-weight:500;font-size:11.5px;color:var(--ink);max-width:200px;white-space:normal;word-break:break-word;line-height:1.35}
+.ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--action);text-decoration:none}
 .ar-tbl .td-inv a:hover{text-decoration:underline}
-.ar-tbl .td-date{font-size:12px;color:#64748b;white-space:nowrap}
-.ar-tbl .td-days{white-space:nowrap;font-size:12px}
-.ar-tbl .td-amt{text-align:right!important;font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap}
-.ar-tbl .td-tot{text-align:right!important;font-family:var(--mono);font-size:12px;color:#94a3b8;white-space:nowrap}
-.ar-tbl .td-fx{display:block;font-size:10px;color:#94a3b8;font-family:var(--mono);margin-top:1px}
+.ar-tbl .td-date{font-size:12px;color:var(--ink-soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ar-tbl .td-days{white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}
+.ar-tbl .td-amt{text-align:right!important;font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ar-tbl .td-tot{text-align:right!important;font-family:var(--mono);font-size:12px;color:var(--ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ar-tbl .td-fx{display:block;font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:1px}
+/* row severity left-edge accent */
+.ar-tbl tbody tr.sev-none td:first-child{border-left:3px solid transparent}
+.ar-tbl tbody tr.sev-current td:first-child{border-left:3px solid var(--green)}
+.ar-tbl tbody tr.sev-low td:first-child{border-left:3px solid #f59e0b}
+.ar-tbl tbody tr.sev-med td:first-child{border-left:3px solid #ea580c}
+.ar-tbl tbody tr.sev-high td:first-child{border-left:3px solid var(--red)}
+.ar-tbl tbody tr.sev-crit td:first-child{border-left:3px solid #7f1d1d}
 .ar-aging-tbl{width:100%;border-collapse:collapse;max-width:560px}
 .ar-aging-tbl thead th{background:#f8fafc;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;padding:.55rem .9rem;border-bottom:1.5px solid #e2e8f0;text-align:left}
 .ar-aging-tbl thead th.r{text-align:right}
@@ -388,8 +413,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 <main>
   <!-- ── AR Tab ──────────────────────────────────────────────── -->
   <div id="ar" class="pane active">
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-      <span class="slabel" style="margin:0">Accounts Receivable</span>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Accounts Receivable</span>
+        <div id="ar-synced-caption" style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem"></div>
+      </div>
       <button class="modal-csv" id="ar-sync-btn-in" onclick="syncARIndia()" style="margin-left:auto">⟳ Sync India</button>
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
       <button class="modal-csv" id="ar-upload-uk-btn" onclick="openUKARModal()">⬆ Upload UK AR</button>
@@ -402,11 +430,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <span id="ar-fx-status"></span>
     </div>
     <div class="ar-cards">
-      <div class="ar-card c-total"   id="ar-card-total"></div>
       <div class="ar-card c-overdue" id="ar-card-overdue"></div>
       <div class="ar-card c-current" id="ar-card-current"></div>
-      <div class="ar-card c-synced"  id="ar-card-synced"></div>
+      <div class="ar-card c-total"   id="ar-card-total"></div>
     </div>
+    <div class="ar-aging-bar-wrap" id="ar-aging-bar-wrap"></div>
     <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
       <select class="nret-sel" id="ar-f-entity" onchange="renderAR()" style="font-size:12px">
         <option value="">All Entities</option>
@@ -2002,38 +2030,117 @@ function renderAR() {
   renderARBuSummary(rows);
 }
 
+const AR_BUCKETS = [
+  { key: 'current', label: 'Current (not overdue)', color: '#1E6E45' },
+  { key: '1_30',    label: '1–30 days overdue',     color: '#d97706' },
+  { key: '31_60',   label: '31–60 days overdue',    color: '#ea580c' },
+  { key: '61_90',   label: '61–90 days overdue',    color: '#B3261E' },
+  { key: '90plus',  label: '90+ days overdue',      color: '#7f1d1d' },
+];
+
 function renderARSummary(rows) {
-  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
-  const inr = r => arInr(r);
+  const cr    = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const crFull = v => '₹' + v.toLocaleString('en-IN');
+  const inr   = r => arInr(r);
   const totalBal   = rows.reduce((s, r) => s + inr(r), 0);
   const overdue    = rows.filter(r => r.status === 'overdue');
   const overdueBal = overdue.reduce((s, r) => s + inr(r), 0);
   const current    = rows.filter(r => r.status !== 'overdue');
   const currentBal = current.reduce((s, r) => s + inr(r), 0);
+
+  // 90+ days overdue sub-line
+  const ninetyPlus    = overdue.filter(r => arOverdueDays(r.due_date) > 90);
+  const ninetyPlusBal = ninetyPlus.reduce((s, r) => s + inr(r), 0);
+
+  // synced caption
   const fmt = ts => ts ? new Date(ts).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}) : 'Never';
-  const inRows = _arAllRows.filter(r => r.entity === 'IN');
-  const ukRows = _arAllRows.filter(r => r.entity === 'UK');
+  const inRows  = _arAllRows.filter(r => r.entity === 'IN');
+  const ukRows  = _arAllRows.filter(r => r.entity === 'UK');
   const syncedIN = inRows[0]?.synced_at;
   const syncedUK = ukRows[0]?.synced_at;
-  document.getElementById('ar-card-total').innerHTML =
-    `<div class="ar-card-val">${cr(totalBal)}</div><div class="ar-card-lbl">Total Outstanding</div><div class="ar-card-sub">${rows.length} invoices</div>`;
-  document.getElementById('ar-card-overdue').innerHTML =
-    `<div class="ar-card-val" style="color:#b91c1c">${cr(overdueBal)}</div><div class="ar-card-lbl">Overdue</div><div class="ar-card-sub">${overdue.length} invoices</div>`;
-  document.getElementById('ar-card-current').innerHTML =
-    `<div class="ar-card-val" style="color:#15803d">${cr(currentBal)}</div><div class="ar-card-lbl">Current</div><div class="ar-card-sub">${current.length} invoices</div>`;
-  document.getElementById('ar-card-synced').innerHTML =
-    `<div class="ar-card-lbl" style="margin-bottom:.3rem">Last Synced</div>
-     <div style="font-size:11px;color:var(--txt2)"><span style="font-weight:600">IN:</span> ${fmt(syncedIN)}</div>
-     <div style="font-size:11px;color:var(--txt2)"><span style="font-weight:600">UK:</span> ${fmt(syncedUK)}</div>`;
+  const cap = document.getElementById('ar-synced-caption');
+  if (cap) cap.textContent = `IN: ${fmt(syncedIN)}  ·  UK: ${fmt(syncedUK)}`;
+
+  // helper: toggle KPI filter click
+  const kpiClick = (statusVal) => {
+    const sel = document.getElementById('ar-f-status');
+    if (!sel) return;
+    sel.value = sel.value === statusVal ? '' : statusVal;
+    renderAR();
+  };
+
+  // overdue card
+  const oCrd = document.getElementById('ar-card-overdue');
+  const overdueRatio = rows.length > 0 ? overdue.length + ' / ' + rows.length : '—';
+  const ninetyLine   = ninetyPlusBal > 0
+    ? `<div class="ar-card-sub2" style="color:var(--red)">90+d: ${cr(ninetyPlusBal)}</div>` : '';
+  if (oCrd) {
+    oCrd.innerHTML = `
+      <div class="ar-card-tip">Overdue: ${crFull(overdueBal)}\n90+ days: ${crFull(ninetyPlusBal)}</div>
+      <div class="ar-card-lbl">Overdue</div>
+      <div class="ar-card-val" style="color:var(--red)">${cr(overdueBal)}</div>
+      <div class="ar-card-sub">${overdueRatio} invoices</div>
+      ${ninetyLine}`;
+    oCrd.onclick = () => kpiClick('overdue');
+  }
+
+  // current card
+  const cCrd = document.getElementById('ar-card-current');
+  const currentRatio = rows.length > 0 ? current.length + ' / ' + rows.length : '—';
+  if (cCrd) {
+    cCrd.innerHTML = `
+      <div class="ar-card-tip">Current: ${crFull(currentBal)}</div>
+      <div class="ar-card-lbl">Current</div>
+      <div class="ar-card-val" style="color:var(--green)">${cr(currentBal)}</div>
+      <div class="ar-card-sub">${currentRatio} invoices</div>`;
+    cCrd.onclick = () => kpiClick('sent');
+  }
+
+  // total card
+  const tCrd = document.getElementById('ar-card-total');
+  if (tCrd) {
+    tCrd.innerHTML = `
+      <div class="ar-card-tip">Total outstanding: ${crFull(totalBal)}</div>
+      <div class="ar-card-lbl">Total Outstanding</div>
+      <div class="ar-card-val">${cr(totalBal)}</div>
+      <div class="ar-card-sub">${rows.length} invoices</div>`;
+    tCrd.onclick = () => { document.getElementById('ar-f-status').value = ''; renderAR(); };
+  }
+
+  // highlight active card
+  const currentStatus = document.getElementById('ar-f-status')?.value || '';
+  if (oCrd) oCrd.classList.toggle('kpi-active', currentStatus === 'overdue');
+  if (cCrd) cCrd.classList.toggle('kpi-active', currentStatus === 'sent');
+  if (tCrd) tCrd.classList.toggle('kpi-active', currentStatus === '');
+
+  // render aging composition bar
+  renderARAgingBar(rows);
 }
 
-const AR_BUCKETS = [
-  { key: 'current', label: 'Current (not overdue)', color: '#15803d' },
-  { key: '1_30',    label: '1–30 days overdue',     color: '#b45309' },
-  { key: '31_60',   label: '31–60 days overdue',    color: '#c2410c' },
-  { key: '61_90',   label: '61–90 days overdue',    color: '#b91c1c' },
-  { key: '90plus',  label: '90+ days overdue',      color: '#7f1d1d' },
-];
+function renderARAgingBar(rows) {
+  const wrap = document.getElementById('ar-aging-bar-wrap');
+  if (!wrap) return;
+  const inr   = r => arInr(r);
+  const total = rows.reduce((s, r) => s + inr(r), 0);
+  if (total === 0) { wrap.innerHTML = ''; return; }
+  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, 0]));
+  rows.forEach(r => { buckets[arAgeBucket(r.due_date)] += inr(r); });
+  const COLORS = { current:'#1E6E45', '1_30':'#d97706', '31_60':'#ea580c', '61_90':'var(--red)', '90plus':'#7f1d1d' };
+  const segs = AR_BUCKETS.map(b => {
+    const pct = total > 0 ? (buckets[b.key] / total * 100) : 0;
+    if (pct < 0.5) return '';
+    const col = COLORS[b.key] || b.color;
+    return `<div class="ar-aging-seg" title="${b.label}: ${cr(buckets[b.key])} (${pct.toFixed(1)}%)" style="flex:${pct};background:${col}"></div>`;
+  }).join('');
+  const legend = AR_BUCKETS.map(b => {
+    const pct = total > 0 ? (buckets[b.key] / total * 100) : 0;
+    if (pct < 0.1) return '';
+    const col = COLORS[b.key] || b.color;
+    return `<div class="ar-aging-leg-item"><div class="ar-aging-leg-dot" style="background:${col}"></div>${b.label.split('(')[0].trim()}: ${pct.toFixed(1)}%</div>`;
+  }).join('');
+  wrap.innerHTML = `<div class="ar-aging-bar">${segs}</div><div class="ar-aging-legend">${legend}</div>`;
+}
 
 function renderARAgingTable(rows) {
   const inr = r => arInr(r);
@@ -2049,13 +2156,13 @@ function renderARAgingTable(rows) {
     const cumPct = total > 0 ? (cumBal / total * 100).toFixed(1) + '%' : '—';
     return `<tr>
       <td style="font-weight:500;color:${b.color}">${b.label}</td>
-      <td class="r">${count}</td>
-      <td class="r">${cr(balance)}</td>
-      <td class="r" style="color:#94a3b8">${pct(balance)}</td>
-      <td class="r" style="color:#475569;font-weight:500">${cumPct}</td>
+      <td class="r" style="font-variant-numeric:tabular-nums">${count}</td>
+      <td class="r" style="font-variant-numeric:tabular-nums">${cr(balance)}</td>
+      <td class="r" style="color:var(--ink-faint);font-variant-numeric:tabular-nums">${pct(balance)}</td>
+      <td class="r" style="color:var(--ink-soft);font-weight:500;font-variant-numeric:tabular-nums">${cumPct}</td>
     </tr>`;
-  }).join('') + `<tr style="font-weight:700;border-top:1.5px solid var(--brd2)">
-    <td>Total</td><td class="r">${rows.length}</td><td class="r">${cr(total)}</td><td class="r">100%</td><td class="r">100%</td>
+  }).join('') + `<tr style="font-weight:700;border-top:1.5px solid var(--line-strong)">
+    <td>Total</td><td class="r" style="font-variant-numeric:tabular-nums">${rows.length}</td><td class="r" style="font-variant-numeric:tabular-nums">${cr(total)}</td><td class="r">100%</td><td class="r">100%</td>
   </tr>`;
   document.getElementById('ar-aging-body').innerHTML = trs;
 }
@@ -2505,31 +2612,32 @@ function renderARInvoiceList(rows) {
 
   const trs = sorted.map(r => {
     const days = arOverdueDays(r.due_date);
-    const daysCell = days > 0 ? `<span style="color:#b91c1c;font-weight:600">${days}d overdue</span>`
-      : days === 0 ? `<span style="color:#b45309;font-weight:600">Due today</span>`
-      : `<span style="color:#64748b">In ${-days}d</span>`;
+    const daysCell = days > 0 ? `<span style="color:var(--red);font-weight:600;font-variant-numeric:tabular-nums">${days}d overdue</span>`
+      : days === 0 ? `<span style="color:var(--amber);font-weight:600">Due today</span>`
+      : `<span style="color:var(--ink-soft)">In ${-days}d</span>`;
+    // status pill — rounded, semantic, sentence case
     const badge = r.status === 'overdue'
-      ? `<span style="font-size:9.5px;background:#fee2e2;color:#b91c1c;padding:.15rem .5rem;border-radius:10px;font-weight:700">OVERDUE</span>`
+      ? `<span style="font-size:10px;background:var(--red-bg);color:var(--red);padding:.2rem .55rem;border-radius:20px;font-weight:600;white-space:nowrap">Overdue</span>`
       : r.status === 'partially_paid'
-      ? `<span style="font-size:9.5px;background:#fef3c7;color:#92400e;padding:.15rem .5rem;border-radius:10px;font-weight:700">PARTIAL</span>`
-      : `<span style="font-size:9.5px;background:#eff6ff;color:#1d4ed8;padding:.15rem .5rem;border-radius:10px;font-weight:700">SENT</span>`;
-    const rev = r.revenue_type ? `<span style="font-size:9px;background:#f0fdf4;color:#15803d;padding:.15rem .4rem;border-radius:4px;font-weight:700">${r.revenue_type}</span>` : '';
+      ? `<span style="font-size:10px;background:var(--amber-bg);color:var(--amber);padding:.2rem .55rem;border-radius:20px;font-weight:600;white-space:nowrap">Partial</span>`
+      : `<span style="font-size:10px;background:#EFF6FF;color:#1d4ed8;padding:.2rem .55rem;border-radius:20px;font-weight:600;white-space:nowrap">Sent</span>`;
+    const rev = r.revenue_type ? `<span style="font-size:9px;background:var(--green-bg);color:var(--green);padding:.15rem .4rem;border-radius:4px;font-weight:600">${r.revenue_type}</span>` : '';
     const invLink = r.invoice_url
       ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener">${escHtml(r.invoice_number || '')}</a>`
       : escHtml(r.invoice_number || '');
-    const balStyle = days > 0 ? 'color:#b91c1c' : '';
+    const balStyle = days > 0 ? 'color:var(--red)' : '';
     const balINR  = arInr(r);
     const totINR  = arTotal(r);
     const isFx    = r.currency_code && r.currency_code !== 'INR';
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
     const bu = arGetBu(r.customer_name);
-    const buCell = bu ? `<span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:#ddd;font-size:10px">—</span>';
+    const buCell = bu ? `<span style="font-size:10px;background:#EEF2FF;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const collectorName = arGetCollector(r.customer_name);
     const collectorCell = collectorName
-      ? `<span style="font-size:10px;background:#f0fdf4;color:#15803d;padding:.12rem .4rem;border-radius:4px">${escHtml(collectorName)}</span>`
-      : '<span style="color:#ddd;font-size:10px">—</span>';
+      ? `<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:.12rem .4rem;border-radius:4px">${escHtml(collectorName)}</span>`
+      : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
     const invKey = `${r.invoice_number}||${r.entity}`;
     const tagCapsules = (_arInvTags[invKey] || []).map(t => {
       const tm = _tagMaster[t] || {};
@@ -2537,7 +2645,14 @@ function renderARInvoiceList(rows) {
       return `<span class="inv-tag-cap" style="background:${escHtml(bg)}20;color:${escHtml(bg)};border:1px solid ${escHtml(bg)}40" onclick="removeInvTag('${escHtml(r.invoice_number)}','${escHtml(r.entity)}','${escHtml(t)}')">${escHtml(t)} ×</span>`;
     }).join('');
     const addTagBtn = `<button class="inv-tag-add" onclick="openTagPicker(this,'${escHtml(r.invoice_number)}','${escHtml(r.entity)}')">+ Tag</button>`;
-    return `<tr>
+    // severity class for left-edge accent
+    let sevCls = 'sev-current';
+    if (days > 90)      sevCls = 'sev-crit';
+    else if (days > 60) sevCls = 'sev-high';
+    else if (days > 30) sevCls = 'sev-med';
+    else if (days > 0)  sevCls = 'sev-low';
+    else if (days === 0) sevCls = 'sev-low';
+    return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td>${buCell}</td>
       <td style="white-space:nowrap">${collectorCell}</td>
