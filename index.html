@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bizom AR</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -380,6 +380,26 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .tag-picker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .tag-picker-new{display:flex;gap:.35rem;padding:.35rem .4rem;border-top:1px solid var(--brd);margin-top:.3rem}
 .tag-picker-new input{flex:1;font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt)}
+/* ── Font Picker ──────────────────────────────────────────── */
+.fp-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;letter-spacing:.04em;transition:background .15s;white-space:nowrap}
+.fp-btn:hover{background:rgba(255,255,255,.22)}
+.fp-panel{display:none;position:fixed;top:60px;right:1.25rem;z-index:8000;background:#fff;border:0.5px solid var(--line);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);width:460px;max-width:calc(100vw - 2rem);padding:1.1rem}
+.fp-panel.open{display:block}
+.fp-title{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:.85rem;display:flex;align-items:center;justify-content:space-between}
+.fp-close{background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink-faint);line-height:1;padding:0}
+.fp-close:hover{color:var(--ink)}
+.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-bottom:.85rem}
+.fp-opt{border:1.5px solid var(--line);border-radius:10px;padding:.75rem .9rem;cursor:pointer;transition:border-color .15s,box-shadow .15s;background:#fafafa;user-select:none}
+.fp-opt:hover{border-color:var(--action);background:#fff}
+.fp-opt.active{border-color:var(--action);box-shadow:0 0 0 2px rgba(40,82,122,.18);background:#fff}
+.fp-opt-name{font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:.4rem;letter-spacing:.03em}
+.fp-opt-sans{font-size:15px;font-weight:500;color:var(--ink);line-height:1.25;margin-bottom:.2rem}
+.fp-opt-mono{font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.fp-actions{display:flex;gap:.5rem;align-items:center;justify-content:flex-end;border-top:1px solid var(--line);padding-top:.75rem}
+.fp-confirm{background:var(--action);color:#fff;border:none;padding:.38rem 1rem;border-radius:6px;cursor:pointer;font-size:12.5px;font-weight:600;font-family:var(--sans)}
+.fp-confirm:hover{opacity:.9}
+.fp-reset{background:none;border:1px solid var(--line-strong);color:var(--ink-soft);padding:.38rem .8rem;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--sans)}
+.fp-reset:hover{background:var(--page-bg)}
 </style>
 </head>
 <body>
@@ -405,9 +425,22 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div class="hsub" id="sub"></div>
   <div id="logout-area" style="display:none;position:absolute;right:1.25rem;top:50%;transform:translateY(-50%);align-items:center;gap:.65rem">
     <span id="logout-name" style="font-size:11px;color:rgba(255,255,255,.65)"></span>
+    <button class="fp-btn" onclick="toggleFontPicker()" title="Change font">Aa</button>
     <button class="rbtn" onclick="doLogout()" style="font-size:11px;padding:.28rem .75rem;background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.25)">Sign out</button>
   </div>
 </header>
+<!-- ── Font Picker Panel ──────────────────────────────────── -->
+<div id="fp-panel" class="fp-panel" onclick="event.stopPropagation()">
+  <div class="fp-title">
+    <span>Choose font style</span>
+    <button class="fp-close" onclick="closeFontPicker()">×</button>
+  </div>
+  <div class="fp-grid" id="fp-grid"></div>
+  <div class="fp-actions">
+    <button class="fp-reset" onclick="fpReset()">Reset to default</button>
+    <button class="fp-confirm" onclick="fpConfirm()">Apply</button>
+  </div>
+</div>
 
 <nav id="main-nav"></nav>
 <main>
@@ -2751,6 +2784,127 @@ function syncARIndia() { _runARSync(AR_SYNC_IN_URL, 'ar-sync-btn-in', 'ar-status
 
 initAuth();
 initARCapsuleListeners();
+initFontPicker();
+
+// ── Font Picker ──────────────────────────────────────────────
+const FP_COMBOS = [
+  {
+    id: 'inter-geist',
+    name: 'Inter + Geist Mono',
+    tag: 'Default',
+    sans: "'Inter', sans-serif",
+    mono: "'Geist Mono', 'Geist Mono Fallback', monospace",
+    sansPrev: 'Inter',
+    monoPrev: 'Geist Mono',
+    previewSans: 'Inter, sans-serif',
+    previewMono: "'Geist Mono', monospace",
+  },
+  {
+    id: 'jakarta-jetbrains',
+    name: 'Jakarta Sans + JetBrains',
+    sans: "'Plus Jakarta Sans', sans-serif",
+    mono: "'JetBrains Mono', monospace",
+    previewSans: "'Plus Jakarta Sans', sans-serif",
+    previewMono: "'JetBrains Mono', monospace",
+  },
+  {
+    id: 'dm-ibmplex',
+    name: 'DM Sans + IBM Plex Mono',
+    sans: "'DM Sans', sans-serif",
+    mono: "'IBM Plex Mono', monospace",
+    previewSans: "'DM Sans', sans-serif",
+    previewMono: "'IBM Plex Mono', monospace",
+  },
+  {
+    id: 'outfit-geist',
+    name: 'Outfit + Geist Mono',
+    sans: "'Outfit', sans-serif",
+    mono: "'Geist Mono', 'Geist Mono Fallback', monospace",
+    previewSans: "'Outfit', sans-serif",
+    previewMono: "'Geist Mono', monospace",
+  },
+  {
+    id: 'sora-jetbrains',
+    name: 'Sora + JetBrains',
+    sans: "'Sora', sans-serif",
+    mono: "'JetBrains Mono', monospace",
+    previewSans: "'Sora', sans-serif",
+    previewMono: "'JetBrains Mono', monospace",
+  },
+];
+
+let _fpSelected = null; // currently previewed combo id
+
+function initFontPicker() {
+  const saved = localStorage.getItem('bizar-font');
+  if (saved) {
+    const combo = FP_COMBOS.find(c => c.id === saved);
+    if (combo) _applyFont(combo, false);
+  }
+  _fpSelected = localStorage.getItem('bizar-font') || 'inter-geist';
+  _buildFpGrid();
+  // close on outside click
+  document.addEventListener('click', e => {
+    const panel = document.getElementById('fp-panel');
+    if (panel?.classList.contains('open') && !panel.contains(e.target)) closeFontPicker();
+  });
+}
+
+function _buildFpGrid() {
+  const grid = document.getElementById('fp-grid');
+  if (!grid) return;
+  grid.innerHTML = FP_COMBOS.map(c => {
+    const active = _fpSelected === c.id ? ' active' : '';
+    const tag = c.tag ? `<span style="font-size:9px;background:#EEF2FF;color:#3730a3;padding:.1rem .35rem;border-radius:4px;margin-left:.4rem;font-weight:600">${c.tag}</span>` : '';
+    return `<div class="fp-opt${active}" id="fp-opt-${c.id}" onclick="fpPreview('${c.id}')">
+      <div class="fp-opt-name">${c.name}${tag}</div>
+      <div class="fp-opt-sans" style="font-family:${c.previewSans}">Bizom AR · ₹12.45 Cr</div>
+      <div class="fp-opt-mono" style="font-family:${c.previewMono}">Total Outstanding · 38 invoices</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleFontPicker() {
+  const panel = document.getElementById('fp-panel');
+  if (!panel) return;
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) _buildFpGrid();
+}
+
+function closeFontPicker() {
+  document.getElementById('fp-panel')?.classList.remove('open');
+}
+
+function fpPreview(id) {
+  const combo = FP_COMBOS.find(c => c.id === id);
+  if (!combo) return;
+  _fpSelected = id;
+  _applyFont(combo, false);
+  // update active state in grid
+  document.querySelectorAll('.fp-opt').forEach(el => el.classList.remove('active'));
+  document.getElementById('fp-opt-' + id)?.classList.add('active');
+}
+
+function fpConfirm() {
+  if (!_fpSelected) return;
+  localStorage.setItem('bizar-font', _fpSelected);
+  closeFontPicker();
+}
+
+function fpReset() {
+  localStorage.removeItem('bizar-font');
+  _fpSelected = 'inter-geist';
+  const def = FP_COMBOS[0];
+  _applyFont(def, false);
+  _buildFpGrid();
+}
+
+function _applyFont(combo, save) {
+  const root = document.documentElement;
+  root.style.setProperty('--sans', combo.sans);
+  root.style.setProperty('--mono', combo.mono);
+  if (save) localStorage.setItem('bizar-font', combo.id);
+}
 </script>
 </body>
 </html>
