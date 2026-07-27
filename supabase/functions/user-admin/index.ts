@@ -60,7 +60,8 @@ Deno.serve(async (req) => {
 
   // create_user
   if (body.operation === 'create_user') {
-    const { email, password, display_name, allowed_tabs = [], allowed_bus = [], is_admin = false } = body as Record<string,unknown>;
+    const { email, password, display_name, allowed_tabs = [], allowed_bus = [], is_admin = false,
+            role = 'admin', collector_name = null } = body as Record<string,unknown>;
     if (!email || !password || !display_name) return json({ error: 'email, password, display_name required' }, 400);
     const aR = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
       method: 'POST', headers: authH,
@@ -70,7 +71,7 @@ Deno.serve(async (req) => {
     if (!aR.ok) return json({ error: authUser.message ?? authUser }, 400);
     const iR = await fetch(`${SUPABASE_URL}/rest/v1/user_access`, {
       method: 'POST', headers: sbH,
-      body: JSON.stringify({ user_id: authUser.id, display_name, allowed_tabs, allowed_bus, is_admin }),
+      body: JSON.stringify({ user_id: authUser.id, display_name, allowed_tabs, allowed_bus, is_admin, role, collector_name }),
     });
     if (!iR.ok) {
       await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUser.id}`, { method: 'DELETE', headers: authH });
@@ -81,13 +82,16 @@ Deno.serve(async (req) => {
 
   // update_user
   if (body.operation === 'update_user') {
-    const { user_id, display_name, allowed_tabs, allowed_bus, is_admin, password } = body as Record<string,unknown>;
+    const { user_id, display_name, allowed_tabs, allowed_bus, is_admin, password,
+            role, collector_name } = body as Record<string,unknown>;
     if (!user_id) return json({ error: 'user_id required' }, 400);
     const patch: Record<string,unknown> = { updated_at: new Date().toISOString() };
-    if (display_name !== undefined) patch.display_name = display_name;
-    if (allowed_tabs !== undefined) patch.allowed_tabs = allowed_tabs;
-    if (allowed_bus  !== undefined) patch.allowed_bus  = allowed_bus;
-    if (is_admin     !== undefined) patch.is_admin     = is_admin;
+    if (display_name   !== undefined) patch.display_name   = display_name;
+    if (allowed_tabs   !== undefined) patch.allowed_tabs   = allowed_tabs;
+    if (allowed_bus    !== undefined) patch.allowed_bus    = allowed_bus;
+    if (is_admin       !== undefined) patch.is_admin       = is_admin;
+    if (role           !== undefined) patch.role           = role;
+    if (collector_name !== undefined) patch.collector_name = collector_name;
     await fetch(`${SUPABASE_URL}/rest/v1/user_access?user_id=eq.${user_id}`, {
       method: 'PATCH', headers: sbH, body: JSON.stringify(patch),
     });
