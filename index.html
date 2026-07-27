@@ -2094,9 +2094,10 @@ function renderARSummary(rows) {
   const crFull = v => '₹' + v.toLocaleString('en-IN');
   const inr   = r => arInr(r);
   const totalBal   = rows.reduce((s, r) => s + inr(r), 0);
-  const overdue    = rows.filter(r => r.status === 'overdue');
+  // Use due_date (same as aging table) so KPI and aging rows always agree
+  const overdue    = rows.filter(r => arOverdueDays(r.due_date) > 0);
   const overdueBal = overdue.reduce((s, r) => s + inr(r), 0);
-  const current    = rows.filter(r => r.status !== 'overdue');
+  const current    = rows.filter(r => arOverdueDays(r.due_date) <= 0);
   const currentBal = current.reduce((s, r) => s + inr(r), 0);
 
   // 90+ days overdue sub-line
@@ -2140,11 +2141,11 @@ function renderARSummary(rows) {
   const currentRatio = rows.length > 0 ? current.length + ' / ' + rows.length : '—';
   if (cCrd) {
     cCrd.innerHTML = `
-      <div class="ar-card-tip">Current: ${crFull(currentBal)}</div>
+      <div class="ar-card-tip">Current (due date not passed): ${crFull(currentBal)}</div>
       <div class="ar-card-lbl">Current</div>
       <div class="ar-card-val" style="color:var(--green)">${cr(currentBal)}</div>
       <div class="ar-card-sub">${currentRatio} invoices</div>`;
-    cCrd.onclick = () => kpiClick('sent');
+    cCrd.onclick = () => { document.getElementById('ar-f-status').value = ''; renderAR(); };
   }
 
   // total card
