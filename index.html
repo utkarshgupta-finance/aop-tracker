@@ -509,14 +509,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <!-- GBP/INR Rate section -->
       <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">GBP / INR Exchange Rate</div>
-        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem">
-          <input type="month" id="ar-settings-fx-month" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff" onchange="arSettingsFxMonthChanged()">
-          <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP" min="1" step="0.01" style="font-size:12px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;width:115px;background:#fff">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">GBP / INR Exchange Rate</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">Used for all UK AR conversions. Enter the current rate and save.</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP  e.g. 107.5" min="1" step="0.01" style="font-size:12px;padding:.3rem .6rem;border:1px solid var(--brd);border-radius:5px;width:190px;background:#fff">
           <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
           <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
         </div>
-        <button class="rbtn" onclick="showFxRatesModal()" style="font-size:12px;padding:.28rem .8rem">📋 View / Edit All Rates</button>
       </div>
       <!-- Excluded customers section -->
       <div style="border:1px solid var(--brd);border-radius:7px;padding:.85rem 1rem">
@@ -2664,7 +2663,7 @@ async function uploadUKAR(file) {
 
     setStatus(`Parsed ${rows.length} invoices, saving to database…`);
 
-    const gbpRate = _arFxRates[snapshotMonth] ?? null;
+    const gbpRate = _arCurrentRate ?? null;
     const withFx  = r => ({
       ...r,
       exchange_rate: gbpRate ?? 1,
@@ -2737,7 +2736,8 @@ function downloadUKARTemplate() {
 const AR_SYNC_IN_URL = `${SUPABASE_URL}/functions/v1/sync-ar`;
 let _arInited   = false;
 let _arAllRows  = [];
-let _arFxRates  = {}; // { 'YYYY-MM': rate }
+let _arFxRates    = {}; // { 'YYYY-MM': rate }
+let _arCurrentRate = null; // latest GBP/INR rate from settings
 let _arInvView  = 'invoice'; // 'invoice' | 'customer'
 let _arBuMap        = {}; // { customer_name_lower: bu_name }
 let _arBuMapLoading = false;
@@ -2837,9 +2837,7 @@ function arGetBu(customerName) {
 // Returns INR balance for a row, applying GBP fx rate for UK invoices
 function arInr(r) {
   if (r.entity === 'UK') {
-    const month = (r.due_date || r.invoice_date || '').slice(0, 7);
-    const curMonth = new Date().toISOString().slice(0, 7);
-    const rate = _arFxRates[month] || _arFxRates[curMonth] || r.exchange_rate || null;
+    const rate = _arCurrentRate || r.exchange_rate || null;
     return rate ? r.balance * rate : (r.balance_inr ?? r.balance ?? 0);
   }
   return r.balance_inr ?? r.balance ?? 0;
@@ -2848,9 +2846,7 @@ function arInr(r) {
 // Returns INR total (invoice total, not balance) for a row
 function arTotal(r) {
   if (r.entity === 'UK') {
-    const month = (r.due_date || r.invoice_date || '').slice(0, 7);
-    const curMonth = new Date().toISOString().slice(0, 7);
-    const rate = _arFxRates[month] || _arFxRates[curMonth] || r.exchange_rate || null;
+    const rate = _arCurrentRate || r.exchange_rate || null;
     return rate ? r.total * rate : (r.total_inr ?? r.total ?? 0);
   }
   return r.total_inr ?? r.total ?? 0;
@@ -2874,11 +2870,16 @@ async function loadFxRates() {
     if (!rows.length) return; // don't blank out in-memory rates if DB returns nothing
     _arFxRates = {};
     for (const row of rows) _arFxRates[row.year_month] = Number(row.rate);
-    // Pre-fill month input with current month
+    // Set _arCurrentRate to the most recently saved rate
+    const latest = Object.keys(_arFxRates).sort().pop();
+    if (latest) _arCurrentRate = _arFxRates[latest];
+    // Pre-fill settings rate input
+    const sri = document.getElementById('ar-settings-fx-rate');
+    if (sri && _arCurrentRate) sri.value = _arCurrentRate;
+    // Pre-fill legacy inline rate inputs if present
     const curMonth = new Date().toISOString().slice(0, 7);
     const mi = document.getElementById('ar-fx-month');
     if (mi && !mi.value) mi.value = curMonth;
-    // Pre-fill rate input: use stored rate for the selected/current month, else the most recent
     arFxMonthChanged();
     renderAR(); // re-render with rates
   } catch(e) { console.warn('loadFxRates:', e); }
@@ -2935,27 +2936,18 @@ function showFxRatesModal() {
 
 // ── AR Settings modal ───────────────────────────────────────────────────
 function openArSettings() {
-  const curMonth = new Date().toISOString().slice(0, 7);
-  const mi = document.getElementById('ar-settings-fx-month');
-  mi.value = curMonth;
-  arSettingsFxMonthChanged();
+  const ri = document.getElementById('ar-settings-fx-rate');
+  if (ri && _arCurrentRate) ri.value = _arCurrentRate;
   renderArExcludedList();
   document.getElementById('ar-settings-ov').classList.add('open');
 }
 function closeArSettings() { document.getElementById('ar-settings-ov').classList.remove('open'); }
 
-function arSettingsFxMonthChanged() {
-  const m = document.getElementById('ar-settings-fx-month').value;
-  const ri = document.getElementById('ar-settings-fx-rate');
-  if (m && _arFxRates[m]) ri.value = _arFxRates[m];
-  else { const latest = Object.keys(_arFxRates).sort().pop(); ri.value = latest ? _arFxRates[latest] : ''; }
-}
-
 async function saveArSettingsFxRate() {
-  const month  = document.getElementById('ar-settings-fx-month').value;
   const rate   = parseFloat(document.getElementById('ar-settings-fx-rate').value);
   const status = document.getElementById('ar-settings-fx-status');
-  if (!month || !rate || rate < 1) { status.textContent = 'Enter valid month and rate'; status.style.color='#b91c1c'; return; }
+  if (!rate || rate < 1) { status.textContent = 'Enter a valid rate (e.g. 107.5)'; status.style.color='#b91c1c'; return; }
+  const month = new Date().toISOString().slice(0, 7);
   status.textContent = 'Saving…'; status.style.color = '';
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates`, {
@@ -2964,10 +2956,11 @@ async function saveArSettingsFxRate() {
     });
     if (!r.ok) throw new Error(await r.text());
     _arFxRates[month] = rate;
-    // sync hidden inputs so saveArFxRate() still works if called
+    _arCurrentRate = rate;
+    // sync legacy inline inputs if present
     const hm = document.getElementById('ar-fx-month'); if (hm) hm.value = month;
     const hr = document.getElementById('ar-fx-rate');  if (hr) hr.value = rate;
-    status.textContent = `Saved ${month}: ₹${rate}/GBP`; status.style.color='#15803d';
+    status.textContent = `Saved ₹${rate} / GBP`; status.style.color='#15803d';
     renderAR();
   } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color='#b91c1c'; }
 }
