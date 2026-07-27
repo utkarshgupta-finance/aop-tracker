@@ -2667,7 +2667,7 @@ async function uploadUKAR(file) {
     const gbpRate = _arFxRates[snapshotMonth] ?? null;
     const withFx  = r => ({
       ...r,
-      exchange_rate: gbpRate ?? null,
+      exchange_rate: gbpRate ?? 1,
       total_inr:     gbpRate ? Math.round(r.total   * gbpRate * 100) / 100 : null,
       balance_inr:   gbpRate ? Math.round(r.balance * gbpRate * 100) / 100 : null,
     });
