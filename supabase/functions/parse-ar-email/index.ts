@@ -92,14 +92,24 @@ Deno.serve(async (req) => {
   const b64 = String(xlsxAtt.Content ?? xlsxAtt.content ?? '');
   if (!b64) return json({ ok: true, skipped: true, message: 'Attachment content is empty' });
 
-  const binary = atob(b64);
-  const buffer = new ArrayBuffer(binary.length);
-  const view   = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+  let buffer: ArrayBuffer;
+  try {
+    const clean  = b64.replace(/\s/g, '');   // strip MIME line-wrap whitespace
+    const binary = atob(clean);
+    buffer = new ArrayBuffer(binary.length);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+  } catch (e) {
+    console.error('[parse-ar-email] base64 decode error:', e);
+    return json({ error: 'Failed to decode attachment: ' + String(e) }, 500);
+  }
 
   let rows: InvoiceRow[];
   try { rows = parseExcel(buffer); }
-  catch (e) { return json({ error: 'Failed to parse Excel: ' + String(e) }, 500); }
+  catch (e) {
+    console.error('[parse-ar-email] Excel parse error:', e);
+    return json({ error: 'Failed to parse Excel: ' + String(e) }, 500);
+  }
 
   if (rows.length === 0) return json({ ok: true, inserted: 0, message: 'No invoice rows found in file' });
 
@@ -131,7 +141,10 @@ Deno.serve(async (req) => {
   const { error: upsertErr } = await supabase
     .from('ar_invoices')
     .upsert(invoiceRows, { onConflict: 'invoice_id' });
-  if (upsertErr) return json({ error: 'Upsert failed: ' + upsertErr.message }, 500);
+  if (upsertErr) {
+    console.error('[parse-ar-email] ar_invoices upsert error:', upsertErr);
+    return json({ error: 'Upsert failed: ' + upsertErr.message }, 500);
+  }
 
   // Remove UK invoices no longer in the open list
   const ids = rows.map(r => r.invoice_id);
