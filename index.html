@@ -348,6 +348,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .cm-row-select,.cm-row-input{font-size:12px;padding:.22rem .45rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt);width:100%;box-sizing:border-box}
 .cm-unmapped{font-size:10px;background:#fef2f2;color:#b91c1c;padding:.1rem .38rem;border-radius:4px;font-weight:600;margin-left:.3rem;white-space:nowrap;vertical-align:middle}
 .cm-collector-badge{font-size:10px;background:#f0fdf4;color:#166534;padding:.1rem .38rem;border-radius:4px;margin-left:.3rem;vertical-align:middle}
+.inv-tag-cap{font-size:10px;padding:.15rem .45rem;border-radius:10px;cursor:pointer;white-space:nowrap;font-weight:500;transition:opacity .15s}.inv-tag-cap:hover{opacity:.7}
+.inv-tag-add{font-size:10px;padding:.15rem .45rem;border-radius:10px;border:1px dashed var(--brd2);background:none;color:var(--txt3);cursor:pointer;white-space:nowrap}.inv-tag-add:hover{background:var(--surf2);color:var(--txt)}
+.tag-picker{position:fixed;z-index:9000;background:var(--surf);border:1px solid var(--brd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:.5rem;min-width:180px;max-width:240px}
+.tag-picker-item{padding:.32rem .65rem;border-radius:5px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:.5rem}.tag-picker-item:hover{background:var(--surf2)}
+.tag-picker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.tag-picker-new{display:flex;gap:.35rem;padding:.35rem .4rem;border-top:1px solid var(--brd);margin-top:.3rem}
+.tag-picker-new input{flex:1;font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt)}
 </style>
 </head>
 <body>
@@ -549,10 +556,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
       <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
       <div style="display:flex;gap:.5rem;align-items:center">
-        <input type="text" id="ar-excl-input" placeholder="Customer name to exclude…" class="cust-input" style="font-size:12px;flex:1;max-width:340px;padding:.32rem .65rem">
-        <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+        <select id="ar-excl-input" class="nret-sel" style="font-size:12px;flex:1;max-width:360px"><option value="">— Select customer —</option></select>
+        <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Exclude</button>
       </div>
-      <div style="font-size:10.5px;color:var(--txt3);margin-top:.45rem">Partial match — e.g. "Mobisy UK" matches "Mobisy Technologies UK Limited"</div>
+    </div>
+    <!-- Tag Master -->
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.75rem">Tag Master</div>
+      <div id="tag-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px;margin-bottom:.65rem"></div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <input type="text" id="tag-add-name" placeholder="Tag name…" class="cust-input" style="font-size:12px;max-width:160px;padding:.3rem .65rem">
+        <input type="color" id="tag-add-color" value="#6366f1" title="Tag colour" style="width:32px;height:32px;padding:2px;border:1px solid var(--brd);border-radius:4px;cursor:pointer;background:#fff">
+        <button class="modal-csv" onclick="addTagMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add Tag</button>
+        <span id="tag-master-status" style="font-size:11px;color:var(--txt3)"></span>
+      </div>
     </div>
     <!-- BU Master -->
     <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
@@ -823,7 +840,7 @@ function renderNav() {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); }
   }
 }
 
@@ -968,6 +985,8 @@ async function loadSettingsPane() {
   const ri = document.getElementById('ar-settings-fx-rate');
   if (ri && _arCurrentRate) ri.value = _arCurrentRate;
   renderArExcludedList();
+  await loadTagMaster();
+  renderTagMasterList();
   // Load masters
   await Promise.all([loadBuList(), loadCollectorList()]);
   renderBuMasterList();
@@ -1337,6 +1356,9 @@ let _arInvView  = 'invoice'; // 'invoice' | 'customer'
 let _arCustMaster = {}; // { customer_name_lower: { customer_name, bu_name, collector_name } }
 let _arCustMasterLoading = false;
 let _cmData = []; // raw rows from ar_customer_master
+let _tagMaster = {}; // { tag_name: { color } }
+let _tagMasterList = []; // sorted array of tag names
+let _arInvTags = {}; // { 'invoice_number||entity': [tag_name,...] }
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices';
@@ -1359,7 +1381,7 @@ function showTab(id, btn) {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); }
   loadArCustMaster();
 }
 
@@ -1565,10 +1587,17 @@ function renderArExcludedList() {
       <button onclick="arExclRemove(${i})" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;line-height:1;padding:0 .2rem" title="Remove">×</button>
     </div>`
   ).join('');
+  // Repopulate dropdown with customers not already excluded
+  const sel = document.getElementById('ar-excl-input');
+  if (!sel) return;
+  const customers = [...new Set(_arAllRows.map(r => r.customer_name).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">— Select customer —</option>' +
+    customers.filter(c => !_arExcluded.includes(c))
+             .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
 }
 function arExclAdd() {
   const inp = document.getElementById('ar-excl-input');
-  const v = inp.value.trim();
+  const v = inp.value;
   if (!v || _arExcluded.includes(v)) return;
   _arExcluded.push(v);
   arSaveExcluded();
@@ -1678,6 +1707,152 @@ async function deleteCollectorMaster(idx) {
     st.textContent = 'Removed'; st.style.color = '#15803d';
     setTimeout(() => { st.textContent = ''; }, 2000);
   } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
+}
+
+/* ─── TAG MASTER + INVOICE TAGS ──────────────────────────────── */
+async function loadTagMaster() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/tag_master?select=tag_name,color&order=tag_name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _tagMaster = {};
+    _tagMasterList = [];
+    for (const row of rows) { _tagMaster[row.tag_name] = { color: row.color }; _tagMasterList.push(row.tag_name); }
+  } catch(e) { console.warn('loadTagMaster:', e); }
+}
+
+async function loadInvTags() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_tags?select=invoice_number,entity,tag_name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _arInvTags = {};
+    for (const row of rows) {
+      const k = `${row.invoice_number}||${row.entity}`;
+      if (!_arInvTags[k]) _arInvTags[k] = [];
+      _arInvTags[k].push(row.tag_name);
+    }
+  } catch(e) { console.warn('loadInvTags:', e); }
+}
+
+function renderTagMasterList() {
+  const el = document.getElementById('tag-master-list');
+  if (!el) return;
+  if (!_tagMasterList.length) { el.innerHTML = '<span style="font-size:12px;color:var(--txt3)">No tags yet.</span>'; return; }
+  el.innerHTML = _tagMasterList.map(name => {
+    const color = _tagMaster[name]?.color || '#6366f1';
+    return `<span style="display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:10px;font-size:12px;font-weight:500;background:${escHtml(color)}20;color:${escHtml(color)};border:1px solid ${escHtml(color)}40">
+      ${escHtml(name)}
+      <button onclick="deleteTagMaster('${escHtml(name)}')" style="background:none;border:none;cursor:pointer;font-size:13px;line-height:1;padding:0;color:${escHtml(color)};opacity:.7" title="Remove">×</button>
+    </span>`;
+  }).join('');
+}
+
+async function addTagMaster() {
+  const nameEl  = document.getElementById('tag-add-name');
+  const colorEl = document.getElementById('tag-add-color');
+  const st      = document.getElementById('tag-master-status');
+  const name = nameEl.value.trim();
+  if (!name) return;
+  st.textContent = 'Saving…'; st.style.color = '';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/tag_master`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ tag_name: name, color: colorEl.value }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    nameEl.value = '';
+    await loadTagMaster();
+    renderTagMasterList();
+    st.textContent = 'Added'; st.style.color = '#15803d';
+    setTimeout(() => { st.textContent = ''; }, 2000);
+  } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; }
+}
+
+async function deleteTagMaster(name) {
+  if (!confirm(`Delete tag "${name}"? It will be removed from all invoices.`)) return;
+  const st = document.getElementById('tag-master-status');
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/tag_master?tag_name=eq.${encodeURIComponent(name)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), 'Prefer': 'return=minimal' },
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadTagMaster(); await loadInvTags();
+    renderTagMasterList(); renderAR();
+    if (st) { st.textContent = 'Removed'; st.style.color = '#15803d'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { if (st) { st.textContent = 'Error: ' + e.message; st.style.color = '#b91c1c'; } }
+}
+
+let _tagPickerEl = null;
+function openTagPicker(btn, invNum, entity) {
+  closeTagPicker();
+  const picker = document.createElement('div');
+  picker.className = 'tag-picker';
+  const invKey = `${invNum}||${entity}`;
+  const applied = _arInvTags[invKey] || [];
+  const available = _tagMasterList.filter(t => !applied.includes(t));
+  picker.innerHTML =
+    (available.length ? available.map(name => {
+      const color = _tagMaster[name]?.color || '#6366f1';
+      return `<div class="tag-picker-item" onclick="applyInvTag('${escHtml(invNum)}','${escHtml(entity)}','${escHtml(name)}');closeTagPicker()">
+        <span class="tag-picker-dot" style="background:${escHtml(color)}"></span>${escHtml(name)}
+      </div>`;
+    }).join('') : '<div style="font-size:11.5px;color:var(--txt3);padding:.3rem .65rem">All tags applied</div>') +
+    `<div class="tag-picker-new">
+      <input id="tag-picker-new-inp" type="text" placeholder="New tag…" onkeydown="if(event.key==='Enter')applyNewTagFromPicker('${escHtml(invNum)}','${escHtml(entity)}')">
+      <input type="color" id="tag-picker-new-col" value="#6366f1" title="Color" style="width:28px;height:28px;padding:1px;border:1px solid var(--brd);border-radius:4px;cursor:pointer">
+      <button class="modal-csv" style="padding:.2rem .5rem;font-size:11px" onclick="applyNewTagFromPicker('${escHtml(invNum)}','${escHtml(entity)}')">+</button>
+    </div>`;
+  document.body.appendChild(picker);
+  _tagPickerEl = picker;
+  const rect = btn.getBoundingClientRect();
+  picker.style.top  = (rect.bottom + 4 + window.scrollY) + 'px';
+  picker.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 250) + 'px';
+  setTimeout(() => document.addEventListener('click', _tagPickerOutside), 0);
+}
+function _tagPickerOutside(e) { if (_tagPickerEl && !_tagPickerEl.contains(e.target)) closeTagPicker(); }
+function closeTagPicker() {
+  if (_tagPickerEl) { _tagPickerEl.remove(); _tagPickerEl = null; }
+  document.removeEventListener('click', _tagPickerOutside);
+}
+
+async function applyNewTagFromPicker(invNum, entity) {
+  const inp = document.getElementById('tag-picker-new-inp');
+  const col = document.getElementById('tag-picker-new-col');
+  const name = inp?.value.trim();
+  if (!name) return;
+  // Upsert into tag_master first
+  await fetch(`${SUPABASE_URL}/rest/v1/tag_master`, {
+    method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify({ tag_name: name, color: col?.value || '#6366f1' }),
+  });
+  await loadTagMaster();
+  closeTagPicker();
+  await applyInvTag(invNum, entity, name);
+}
+
+async function applyInvTag(invNum, entity, tagName) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_tags`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ invoice_number: invNum, entity, tag_name: tagName }),
+    });
+    const k = `${invNum}||${entity}`;
+    if (!_arInvTags[k]) _arInvTags[k] = [];
+    if (!_arInvTags[k].includes(tagName)) _arInvTags[k].push(tagName);
+    renderARInvoiceList(_arLastRows);
+  } catch(e) { console.warn('applyInvTag:', e); }
+}
+
+async function removeInvTag(invNum, entity, tagName) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_tags?invoice_number=eq.${encodeURIComponent(invNum)}&entity=eq.${encodeURIComponent(entity)}&tag_name=eq.${encodeURIComponent(tagName)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), 'Prefer': 'return=minimal' },
+    });
+    const k = `${invNum}||${entity}`;
+    _arInvTags[k] = (_arInvTags[k] || []).filter(t => t !== tagName);
+    renderARInvoiceList(_arLastRows);
+  } catch(e) { console.warn('removeInvTag:', e); }
 }
 
 function closeFxModal() { document.getElementById('fx-modal-ov').classList.remove('open'); }
@@ -2348,9 +2523,6 @@ function renderARInvoiceList(rows) {
     const isFx    = r.currency_code && r.currency_code !== 'INR';
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
-    const entityBadge = r.entity === 'UK'
-      ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:.15rem .45rem;border-radius:4px;font-weight:700">UK</span>`
-      : `<span style="font-size:9px;background:#ecfdf5;color:#065f46;padding:.15rem .45rem;border-radius:4px;font-weight:700">IN</span>`;
     const bu = arGetBu(r.customer_name);
     const buCell = bu ? `<span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:#ddd;font-size:10px">—</span>';
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
@@ -2358,11 +2530,17 @@ function renderARInvoiceList(rows) {
     const collectorCell = collectorName
       ? `<span style="font-size:10px;background:#f0fdf4;color:#15803d;padding:.12rem .4rem;border-radius:4px">${escHtml(collectorName)}</span>`
       : '<span style="color:#ddd;font-size:10px">—</span>';
+    const invKey = `${r.invoice_number}||${r.entity}`;
+    const tagCapsules = (_arInvTags[invKey] || []).map(t => {
+      const tm = _tagMaster[t] || {};
+      const bg = tm.color || '#6366f1';
+      return `<span class="inv-tag-cap" style="background:${escHtml(bg)}20;color:${escHtml(bg)};border:1px solid ${escHtml(bg)}40" onclick="removeInvTag('${escHtml(r.invoice_number)}','${escHtml(r.entity)}','${escHtml(t)}')">${escHtml(t)} ×</span>`;
+    }).join('');
+    const addTagBtn = `<button class="inv-tag-add" onclick="openTagPicker(this,'${escHtml(r.invoice_number)}','${escHtml(r.entity)}')">+ Tag</button>`;
     return `<tr>
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td>${buCell}</td>
       <td style="white-space:nowrap">${collectorCell}</td>
-      <td>${entityBadge}</td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
@@ -2371,6 +2549,7 @@ function renderARInvoiceList(rows) {
       <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
       <td>${badge}</td>
+      <td class="td-tags" style="min-width:120px"><div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center">${tagCapsules}${addTagBtn}</div></td>
     </tr>`;
   }).join('');
 
@@ -2379,7 +2558,6 @@ function renderARInvoiceList(rows) {
       ${th('Customer','customer')}
       ${th('BU','bu')}
       ${th('Collector','collector')}
-      ${th('Entity','entity')}
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}
       ${th('Due Date','due_date')}
@@ -2388,6 +2566,7 @@ function renderARInvoiceList(rows) {
       ${th('Total (INR)','total','r')}
       ${th('Type','type')}
       ${th('Status','status')}
+      <th>Tags</th>
     </tr></thead>
     <tbody>${trs}</tbody>
   </table>`;
