@@ -704,6 +704,11 @@ let AI_HISTORY = []; // [{role:'user'|'assistant', content:'...'}]
 let AI_CHARTS = []; // Chart.js instances to destroy on clear
 let AI_ACTIVE_AC = null; // AbortController for in-flight request — allows X to cancel it
 
+function cmrrHdr() {
+  const h = { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + (USER_JWT || SUPABASE_ANON_KEY) };
+  return h;
+}
+
 /* ─── AUTH + ACCESS CONTROL ─────────────────────────────────── */
 let SUPABASE_CLIENT = null;
 let CURRENT_USER    = null;   // { id, email }
