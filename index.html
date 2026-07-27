@@ -344,6 +344,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .user-chip{display:inline-block;font-size:10px;background:#e8eef7;color:var(--navy2);border-radius:4px;padding:.1rem .42rem;margin:.15rem .15rem 0 0;white-space:nowrap}
 .um-check-label{display:flex;align-items:center;gap:.35rem;font-size:12px;cursor:pointer;padding:.28rem .6rem;border:1px solid var(--brd);border-radius:5px;user-select:none}
 .um-check-label:hover{background:#f5f7fb}
+/* ── Settings / Customer Master ─────────────────────────────── */
+.cm-row-select,.cm-row-input{font-size:12px;padding:.22rem .45rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt);width:100%;box-sizing:border-box}
+.cm-unmapped{font-size:10px;background:#fef2f2;color:#b91c1c;padding:.1rem .38rem;border-radius:4px;font-weight:600;margin-left:.3rem;white-space:nowrap;vertical-align:middle}
+.cm-collector-badge{font-size:10px;background:#f0fdf4;color:#166534;padding:.1rem .38rem;border-radius:4px;margin-left:.3rem;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -558,6 +562,39 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
+  <!-- ── Settings Pane ──────────────────────────────────────── -->
+  <div id="settings" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <span class="slabel" style="margin:0">Customer Master</span>
+      <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="rbtn" onclick="downloadCustMaster()" style="font-size:12px">⬇ Export</button>
+        <label class="modal-csv" style="font-size:12px;cursor:pointer;padding:.32rem .75rem;display:inline-flex;align-items:center">
+          ⬆ Upload CSV/XLSX
+          <input type="file" id="cust-master-upload" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadCustMaster(this.files[0]);this.value=''">
+        </label>
+      </div>
+    </div>
+    <div id="cm-stats" style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;font-size:12.5px"></div>
+    <div style="display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center">
+      <input type="text" id="cm-search" placeholder="Search customer…" class="cust-input" style="flex:1;min-width:160px;font-size:12px;padding:.3rem .65rem" oninput="renderCustMasterTable()">
+      <select id="cm-filter-bu" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()"><option value="">All BUs</option></select>
+      <select id="cm-filter-mapped" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()">
+        <option value="">All</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option>
+      </select>
+    </div>
+    <div id="cm-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.4rem"></div>
+    <div style="overflow-x:auto">
+      <table class="ar-tbl" style="min-width:560px">
+        <thead><tr>
+          <th style="text-align:left">Customer</th>
+          <th style="text-align:left;width:175px">BU</th>
+          <th style="text-align:left;width:175px">Collector</th>
+          <th style="width:65px"></th>
+        </tr></thead>
+        <tbody id="cm-tbody"></tbody>
+      </table>
+    </div>
+  </div>
   <div id="manage-users" class="pane">
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <span class="slabel" style="margin:0">Manage Users</span>
@@ -596,13 +633,21 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <div id="um-tabs-wrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
         </div>
         <div>
-          <div class="flabel" style="margin-bottom:.4rem">BU Access <span style="font-weight:400;opacity:.65">(none checked = all BUs)</span></div>
+          <div class="flabel">Role</div>
+          <select id="um-role" class="cust-input" onchange="umRoleChanged()">
+            <option value="admin">Admin (full access + manages users)</option>
+            <option value="bu">BU (sees own BU customers only)</option>
+            <option value="collector">Collector (sees own + unmapped customers)</option>
+          </select>
+        </div>
+        <div id="um-bu-section">
+          <div class="flabel" style="margin-bottom:.4rem">BU Access <span style="font-weight:400;opacity:.65">(BUs this user can see)</span></div>
           <div id="um-bus-wrap" style="display:flex;flex-wrap:wrap;gap:.35rem"></div>
         </div>
-        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:12.5px">
-          <input type="checkbox" id="um-is-admin" style="width:15px;height:15px">
-          Admin (access to Manage Users tab)
-        </label>
+        <div id="um-collector-section" style="display:none">
+          <div class="flabel">Collector Name <span style="font-weight:400;opacity:.65">(must match Customer Master exactly)</span></div>
+          <input type="text" id="um-collector-name" class="cust-input" placeholder="e.g. Ravi Kumar">
+        </div>
         <div id="um-err" style="color:#a32d2d;font-size:12px;min-height:1rem"></div>
         <button class="modal-csv" id="um-save-btn" onclick="saveUser()" style="width:100%">Save</button>
       </div>
@@ -725,18 +770,19 @@ function renderNav() {
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
   if (USER_ACCESS.is_admin) {
+    nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
     nav.innerHTML += '<button class="tbtn" data-tab="manage-users" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
-  const allIds  = [...allowed, ...(USER_ACCESS.is_admin ? ['manage-users'] : [])];
+  const allIds  = [...allowed, ...(USER_ACCESS.is_admin ? ['settings', 'manage-users'] : [])];
   const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
   if (activeId) {
     const paneId = activeId;
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadArBuMap(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadArCustMaster(); }
   }
 }
 
@@ -760,18 +806,24 @@ async function loadUsersPanel() {
   if (!ok || !data.ok) { list.innerHTML = '<div style="color:#a32d2d;font-size:12px">Error: ' + (data.error || '?') + '</div>'; return; }
   if (!data.users.length) { list.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem">No users yet.</div>'; return; }
   list.innerHTML = data.users.map(function(u) {
-    const tabs = u.allowed_tabs.length ? u.allowed_tabs : ['All tabs'];
-    const bus  = u.allowed_bus.length  ? u.allowed_bus  : ['All BUs'];
+    const role = u.role || 'admin';
+    const roleChip = role === 'admin'
+      ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin</span>'
+      : role === 'bu'
+      ? '<span class="user-chip" style="background:#eff6ff;color:#1d4ed8">BU</span>'
+      : '<span class="user-chip" style="background:#f0fdf4;color:#166534">Collector</span>';
+    const extraChips = role === 'bu'
+      ? (u.allowed_bus.length ? u.allowed_bus.map(function(b){ return '<span class="user-chip" style="background:#f0fdf4;color:#166534">' + escHtml(b) + '</span>'; }).join('') : '<span class="user-chip" style="opacity:.6">All BUs</span>')
+      : role === 'collector' && u.collector_name
+      ? '<span class="user-chip">' + escHtml(u.collector_name) + '</span>'
+      : '';
+    const tabs = u.allowed_tabs.length ? u.allowed_tabs.map(function(t){ return '<span class="user-chip">' + escHtml(t) + '</span>'; }).join('') : '';
     const userJson = escHtml(JSON.stringify(u));
     return '<div class="user-row">' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-weight:600;font-size:13px">' + escHtml(u.display_name) + '</div>' +
         '<div style="font-size:11px;color:var(--txt3);margin-top:.1rem">' + escHtml(u.email || '') + '</div>' +
-        '<div style="margin-top:.4rem">' +
-          (u.is_admin ? '<span class="user-chip" style="background:#fef9c3;color:#854d0e">Admin</span>' : '') +
-          tabs.map(function(t){ return '<span class="user-chip">' + escHtml(t) + '</span>'; }).join('') +
-          bus.map(function(b){ return '<span class="user-chip" style="background:#f0fdf4;color:#166534">' + escHtml(b) + '</span>'; }).join('') +
-        '</div>' +
+        '<div style="margin-top:.4rem">' + roleChip + extraChips + tabs + '</div>' +
       '</div>' +
       '<div style="display:flex;gap:.35rem;flex-shrink:0">' +
         '<button class="rbtn" style="font-size:11px" onclick=\'openUserModal(' + userJson + ')\'>Edit</button>' +
@@ -792,17 +844,26 @@ function openUserModal(user) {
   emailEl.disabled = !!_editingUserId;
   document.getElementById('um-pwd-lbl').textContent = _editingUserId ? 'New Password (leave blank to keep)' : 'Password';
   document.getElementById('um-pwd').value = '';
-  document.getElementById('um-is-admin').checked = (user && user.is_admin) ? user.is_admin : false;
   document.getElementById('um-err').textContent = '';
   const allowedTabs = (user && user.allowed_tabs) ? user.allowed_tabs : [];
   document.getElementById('um-tabs-wrap').innerHTML = ALL_TABS_CFG.map(function(t) {
     return '<label class="um-check-label"><input type="checkbox" value="' + t.id + '"' + (allowedTabs.includes(t.id) ? ' checked' : '') + '> ' + t.label + '</label>';
   }).join('');
+  const role = (user && user.role) ? user.role : 'admin';
+  document.getElementById('um-role').value = role;
   const allowedBus = (user && user.allowed_bus) ? user.allowed_bus : [];
   document.getElementById('um-bus-wrap').innerHTML = BUS.map(function(b) {
     return '<label class="um-check-label"><input type="checkbox" value="' + b + '"' + (allowedBus.includes(b) ? ' checked' : '') + '> ' + b + '</label>';
   }).join('');
+  document.getElementById('um-collector-name').value = (user && user.collector_name) ? user.collector_name : '';
+  umRoleChanged();
   document.getElementById('user-modal').classList.remove('hidden');
+}
+
+function umRoleChanged() {
+  const role = document.getElementById('um-role').value;
+  document.getElementById('um-bu-section').style.display      = role === 'bu'        ? '' : 'none';
+  document.getElementById('um-collector-section').style.display = role === 'collector' ? '' : 'none';
 }
 
 function closeUserModal() { document.getElementById('user-modal').classList.add('hidden'); _editingUserId = null; }
@@ -811,11 +872,13 @@ async function saveUser() {
   const name = document.getElementById('um-name').value.trim();
   const email = document.getElementById('um-email').value.trim();
   const pwd = document.getElementById('um-pwd').value;
-  const isAdmin = document.getElementById('um-is-admin').checked;
+  const role = document.getElementById('um-role').value;
+  const isAdmin = role === 'admin';
   const err = document.getElementById('um-err');
   const btn = document.getElementById('um-save-btn');
   const allowedTabs = Array.from(document.querySelectorAll('#um-tabs-wrap input:checked')).map(function(c){ return c.value; });
-  const allowedBus  = Array.from(document.querySelectorAll('#um-bus-wrap input:checked')).map(function(c){ return c.value; });
+  const allowedBus  = role === 'bu' ? Array.from(document.querySelectorAll('#um-bus-wrap input:checked')).map(function(c){ return c.value; }) : [];
+  const collectorName = role === 'collector' ? document.getElementById('um-collector-name').value.trim() : null;
   if (!name) { err.textContent = 'Display name required'; return; }
   if (!_editingUserId && !email) { err.textContent = 'Email required'; return; }
   if (!_editingUserId && pwd.length < 8) { err.textContent = 'Password must be at least 8 characters'; return; }
@@ -823,10 +886,10 @@ async function saveUser() {
   const op = _editingUserId ? 'update_user' : 'create_user';
   let payload;
   if (_editingUserId) {
-    payload = { user_id: _editingUserId, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin };
+    payload = { user_id: _editingUserId, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin, role, collector_name: collectorName };
     if (pwd) payload.password = pwd;
   } else {
-    payload = { email: email, password: pwd, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin };
+    payload = { email, password: pwd, display_name: name, allowed_tabs: allowedTabs, allowed_bus: allowedBus, is_admin: isAdmin, role, collector_name: collectorName };
   }
   const { ok, data } = await userAdminCall(op, payload);
   btn.disabled = false; btn.textContent = 'Save';
@@ -841,6 +904,174 @@ async function deleteUser(userId, name) {
   await loadUsersPanel();
 }
 
+
+/* ─── SETTINGS / CUSTOMER MASTER ─────────────────────────────── */
+function showSettingsTab(btn) {
+  showTab('settings', btn);
+  loadSettingsPane();
+}
+
+async function loadSettingsPane() {
+  _cmData = [];
+  _arCustMaster = {};
+  _arCustMasterLoading = false;
+  await loadArCustMaster();
+  await renderCustMasterTable();
+}
+
+async function renderCustMasterTable() {
+  const tbody = document.getElementById('cm-tbody');
+  if (!tbody) return;
+  const search       = (document.getElementById('cm-search')?.value || '').toLowerCase();
+  const buFilter     = document.getElementById('cm-filter-bu')?.value || '';
+  const mappedFilter = document.getElementById('cm-filter-mapped')?.value || '';
+
+  const masterKeys = new Set(_cmData.map(r => r.customer_name.toLowerCase()));
+  const arCustomers = [...new Set(_arAllRows.map(r => r.customer_name).filter(Boolean))];
+  const unmapped = arCustomers.filter(n => !masterKeys.has(n.toLowerCase()));
+
+  let rows = [
+    ..._cmData.map(r => ({ name: r.customer_name, bu: r.bu_name || '', collector: r.collector_name || '', inMaster: true })),
+    ...unmapped.map(n => ({ name: n, bu: '', collector: '', inMaster: false }))
+  ];
+
+  if (search)      rows = rows.filter(r => r.name.toLowerCase().includes(search));
+  if (buFilter)    rows = rows.filter(r => r.bu === buFilter);
+  if (mappedFilter === 'mapped')   rows = rows.filter(r => r.inMaster && (r.bu || r.collector));
+  if (mappedFilter === 'unmapped') rows = rows.filter(r => !r.inMaster || (!r.bu && !r.collector));
+
+  rows.sort((a, b) => {
+    if (a.inMaster !== b.inMaster) return a.inMaster ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  tbody.innerHTML = rows.map(r => {
+    const buSel = `<select class="cm-row-select" data-name="${escHtml(r.name)}" onchange="saveCustMasterCell(this,'bu_name')">
+      <option value="">— None —</option>${BUS.map(b => `<option value="${escHtml(b)}"${r.bu === b ? ' selected' : ''}>${escHtml(b)}</option>`).join('')}
+    </select>`;
+    const colInput = `<input type="text" class="cm-row-input" data-name="${escHtml(r.name)}" value="${escHtml(r.collector)}" placeholder="Collector name"
+      onblur="saveCustMasterCell(this,'collector_name')" onkeydown="if(event.key==='Enter')this.blur()">`;
+    const badge = (!r.inMaster || (!r.bu && !r.collector)) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
+    const delBtn = r.inMaster ? `<button class="rbtn" style="font-size:11px;color:#a32d2d;padding:.2rem .45rem" onclick="deleteCustMasterRow('${escHtml(r.name)}')">✕</button>` : '';
+    return `<tr><td style="font-size:12px">${escHtml(r.name)}${badge}</td><td>${buSel}</td><td>${colInput}</td><td style="text-align:center">${delBtn}</td></tr>`;
+  }).join('');
+
+  const allBusSel = document.getElementById('cm-filter-bu');
+  if (allBusSel) {
+    const cur = allBusSel.value;
+    const buList = [...new Set(_cmData.map(r => r.bu_name).filter(Boolean))].sort();
+    allBusSel.innerHTML = '<option value="">All BUs</option>' +
+      buList.map(b => `<option value="${escHtml(b)}"${b === cur ? ' selected' : ''}>${escHtml(b)}</option>`).join('');
+  }
+  updateCmStats();
+}
+
+async function saveCustMasterCell(el, field) {
+  const name = el.dataset.name;
+  const val  = el.value.trim() || null;
+  const existing = _cmData.find(r => r.customer_name.toLowerCase() === name.toLowerCase());
+  const status = document.getElementById('cm-status');
+  try {
+    if (existing) {
+      await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master?customer_name=eq.${encodeURIComponent(name)}`, {
+        method: 'PATCH',
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ [field]: val, updated_at: new Date().toISOString() })
+      });
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master`, {
+        method: 'POST',
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ customer_name: name, [field]: val, updated_at: new Date().toISOString() })
+      });
+    }
+    if (status) { status.textContent = '✓ Saved'; setTimeout(() => { if (status.textContent === '✓ Saved') status.textContent = ''; }, 2000); }
+    _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
+    await loadArCustMaster();
+    renderCustMasterTable();
+  } catch(e) { if (status) status.textContent = 'Error: ' + e.message; }
+}
+
+async function deleteCustMasterRow(name) {
+  if (!confirm('Remove mapping for "' + name + '"?')) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master?customer_name=eq.${encodeURIComponent(name)}`, {
+    method: 'DELETE', headers: cmrrHdr()
+  });
+  _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
+  await loadArCustMaster();
+  renderCustMasterTable();
+}
+
+async function uploadCustMaster(file) {
+  if (!file) return;
+  const status = document.getElementById('cm-status');
+  if (status) status.textContent = 'Parsing…';
+  try {
+    let rows = [];
+    if (file.name.endsWith('.csv')) {
+      const text = await file.text();
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const hdr = lines[0].toLowerCase().split(',');
+      const ci = { name: hdr.findIndex(h => h.includes('customer')), bu: hdr.findIndex(h => h.includes('bu')), col: hdr.findIndex(h => h.includes('collector')) };
+      if (ci.name === -1) throw new Error('CSV must have a "customer" column');
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',').map(p => p.replace(/^"|"$/g,'').trim());
+        const cname = parts[ci.name] || '';
+        if (!cname) continue;
+        rows.push({ customer_name: cname, bu_name: ci.bu >= 0 ? (parts[ci.bu] || null) : null, collector_name: ci.col >= 0 ? (parts[ci.col] || null) : null });
+      }
+    } else {
+      const buf  = await file.arrayBuffer();
+      const wb   = XLSX.read(buf, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const findCol = (keys, ...terms) => keys.find(k => terms.some(t => k.toLowerCase().includes(t)));
+      const ks = Object.keys(data[0] || {});
+      const ck = findCol(ks,'customer'); const bk = findCol(ks,'bu'); const ok = findCol(ks,'collector');
+      if (!ck) throw new Error('Sheet must have a Customer column');
+      for (const row of data) {
+        const cname = String(row[ck] || '').trim();
+        if (!cname) continue;
+        rows.push({ customer_name: cname, bu_name: bk ? (String(row[bk]||'').trim() || null) : null, collector_name: ok ? (String(row[ok]||'').trim() || null) : null });
+      }
+    }
+    if (!rows.length) throw new Error('No data rows found');
+    if (status) status.textContent = `Upserting ${rows.length} rows…`;
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows.map(r => ({ ...r, updated_at: new Date().toISOString() })))
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error(e); }
+    if (status) status.textContent = `✓ ${rows.length} rows imported`;
+    _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
+    await loadArCustMaster();
+    renderCustMasterTable();
+  } catch(e) { if (status) status.textContent = 'Error: ' + e.message; }
+}
+
+function downloadCustMaster() {
+  const rows = _cmData.length
+    ? _cmData.map(r => ({ Customer: r.customer_name, BU: r.bu_name || '', Collector: r.collector_name || '' }))
+    : [{ Customer: '', BU: '', Collector: '' }];
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 45 }, { wch: 20 }, { wch: 25 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Customer Master');
+  XLSX.writeFile(wb, 'customer_master.xlsx');
+}
+
+function updateCmStats() {
+  const el = document.getElementById('cm-stats');
+  if (!el) return;
+  const total    = _cmData.length;
+  const mapped   = _cmData.filter(r => r.bu_name || r.collector_name).length;
+  const unmapped = [...new Set(_arAllRows.map(r => r.customer_name).filter(Boolean))].filter(n => !_arCustMaster[n.toLowerCase()]).length;
+  el.innerHTML =
+    `<span style="background:#f0fdf4;color:#166534;padding:.2rem .65rem;border-radius:20px">${mapped} mapped</span>` +
+    `<span style="background:#f8fafc;color:var(--txt2);padding:.2rem .65rem;border-radius:20px">${total} in master</span>` +
+    (unmapped ? `<span class="cm-unmapped" style="padding:.2rem .65rem;border-radius:20px">${unmapped} unmapped in AR</span>` : '');
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1041,10 +1272,9 @@ let _arAllRows  = [];
 let _arFxRates    = {}; // { 'YYYY-MM': rate }
 let _arCurrentRate = null; // latest GBP/INR rate from settings
 let _arInvView  = 'invoice'; // 'invoice' | 'customer'
-let _arBuMap        = {}; // { customer_name_lower: bu_name }
-let _arBuMapLoading = false;
-const _AR_BU_MAP_CACHE_KEY = 'ar_bu_map_cache';
-const _AR_BU_MAP_TTL_MS    = 5 * 60 * 1000; // 5 minutes
+let _arCustMaster = {}; // { customer_name_lower: { customer_name, bu_name, collector_name } }
+let _arCustMasterLoading = false;
+let _cmData = []; // raw rows from ar_customer_master
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices';
@@ -1068,7 +1298,7 @@ function showTab(id, btn) {
 function showARTab(btn) {
   showTab('ar', btn);
   if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); }
-  loadArBuMap(); // always try — guards internally against duplicate calls
+  loadArCustMaster();
 }
 
 
@@ -1085,51 +1315,60 @@ function showARSubTab(tab) {
   if (tab === 'daily') loadARSnapshots();
 }
 
-async function loadArBuMap() {
-  if (_arBuMapLoading || Object.keys(_arBuMap).length > 0) return;
-  // Serve from localStorage cache if fresh (TTL = 5 min)
-  try {
-    const cached = JSON.parse(localStorage.getItem(_AR_BU_MAP_CACHE_KEY) || 'null');
-    if (cached && cached.ts && (Date.now() - cached.ts) < _AR_BU_MAP_TTL_MS && cached.data) {
-      _arBuMap = cached.data;
-      renderAR();
-      return;
-    }
-  } catch(_) {}
-  _arBuMapLoading = true;
+async function loadArCustMaster() {
+  if (_arCustMasterLoading || _cmData.length > 0) return;
+  _arCustMasterLoading = true;
   try {
     const PAGE = 1000;
     let offset = 0;
+    _cmData = [];
     while (true) {
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_customer_bu_map?select=customer_key,bu_name&order=customer_key&limit=${PAGE}&offset=${offset}`,
+        `${SUPABASE_URL}/rest/v1/ar_customer_master?select=customer_name,bu_name,collector_name&order=customer_name&limit=${PAGE}&offset=${offset}`,
         { headers: cmrrHdr() }
       );
-      if (!r.ok) { console.warn('loadArBuMap: HTTP', r.status); break; }
+      if (!r.ok) { console.warn('loadArCustMaster: HTTP', r.status); break; }
       const rows = await r.json();
-      for (const row of rows) {
-        if (row.customer_key && row.bu_name) _arBuMap[row.customer_key] = row.bu_name;
-      }
+      _cmData.push(...rows);
       if (rows.length < PAGE) break;
       offset += PAGE;
     }
-    // Persist to localStorage with timestamp
-    try {
-      localStorage.setItem(_AR_BU_MAP_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: _arBuMap }));
-    } catch(_) {}
+    _arCustMaster = {};
+    for (const row of _cmData) {
+      if (row.customer_name) _arCustMaster[row.customer_name.toLowerCase().trim()] = row;
+    }
     renderAR();
-  } catch(e) { console.warn('loadArBuMap:', e); }
-  finally { _arBuMapLoading = false; }
+  } catch(e) { console.warn('loadArCustMaster:', e); }
+  finally { _arCustMasterLoading = false; }
 }
 
-function arGetBu(customerName) {
+function _cmLookup(customerName) {
   const key = (customerName || '').toLowerCase().trim();
-  if (_arBuMap[key]) return _arBuMap[key];
-  // try contains match
-  for (const [k, v] of Object.entries(_arBuMap)) {
+  if (_arCustMaster[key]) return _arCustMaster[key];
+  for (const [k, v] of Object.entries(_arCustMaster)) {
     if (key.includes(k) || k.includes(key)) return v;
   }
-  return '';
+  return null;
+}
+
+function arGetBu(customerName)        { return _cmLookup(customerName)?.bu_name || ''; }
+function arGetCollector(customerName) { return _cmLookup(customerName)?.collector_name || ''; }
+function arIsMapped(customerName)     { const m = _cmLookup(customerName); return !!(m && (m.bu_name || m.collector_name)); }
+
+function arPassesRoleFilter(r) {
+  const role = USER_ACCESS.role || 'admin';
+  if (role === 'admin') return true;
+  if (role === 'bu') {
+    if (!arIsMapped(r.customer_name)) return false;
+    const bu = arGetBu(r.customer_name);
+    const allowed = USER_ACCESS.allowed_bus || [];
+    return allowed.length === 0 || allowed.includes(bu);
+  }
+  if (role === 'collector') {
+    if (!arIsMapped(r.customer_name)) return true; // unmapped shown to all collectors
+    return arGetCollector(r.customer_name) === (USER_ACCESS.collector_name || '');
+  }
+  return true;
 }
 
 // Returns INR balance for a row, applying GBP fx rate for UK invoices
@@ -1423,6 +1662,7 @@ function renderAR() {
   _arBuCapsuleHTML('ar-daily-bu-row', allBus);
 
   const rows = _arAllRows.filter(r => {
+    if (!arPassesRoleFilter(r)) return false;
     const cn = (r.customer_name || '').toLowerCase();
     if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
     if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name) || 'Uncategorised')) return false;
@@ -1962,8 +2202,11 @@ function renderARInvoiceList(rows) {
       : `<span style="font-size:9px;background:#ecfdf5;color:#065f46;padding:.15rem .45rem;border-radius:4px;font-weight:700">IN</span>`;
     const bu = arGetBu(r.customer_name);
     const buCell = bu ? `<span style="font-size:10px;background:#f0f4ff;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:#ddd;font-size:10px">—</span>';
+    const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
+    const collectorName = arGetCollector(r.customer_name);
+    const collectorBadge = collectorName ? `<span class="cm-collector-badge">${escHtml(collectorName)}</span>` : '';
     return `<tr>
-      <td class="td-cust">${escHtml(r.customer_name)}</td>
+      <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}${collectorBadge}</td>
       <td>${buCell}</td>
       <td>${entityBadge}</td>
       <td class="td-inv">${invLink}</td>
