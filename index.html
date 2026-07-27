@@ -338,6 +338,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-tbl thead th.sortable:hover{background:#eef2f7}
 .ar-tbl thead th.sort-asc::after{content:' ▲';font-size:8px;opacity:.6}
 .ar-tbl thead th.sort-desc::after{content:' ▼';font-size:8px;opacity:.6}
+/* ── UK AR Upload modal ─────────────────────────────────────── */
+.uk-drop{border:2px dashed var(--brd2);border-radius:8px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.uk-drop:hover,.uk-drop.drag{border-color:var(--navy3);background:#f0f6ff}
+.uk-drop-icon{font-size:28px;margin-bottom:.4rem;opacity:.55}
+.uk-drop-lbl{font-size:12.5px;color:var(--txt2);margin-bottom:.25rem}
+.uk-drop-sub{font-size:11px;color:var(--txt3)}
+.uk-last-box{background:var(--surf2);border:1px solid var(--brd);border-radius:7px;padding:.7rem .9rem;font-size:12px}
+.uk-last-row{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+.uk-last-label{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem}
 /* ── FX rates modal ──────────────────────────────────────────── */
 .fx-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:600;align-items:flex-start;justify-content:center;padding-top:8vh}
 .fx-ov.open{display:flex}
@@ -401,8 +410,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <span class="slabel" style="margin:0">Accounts Receivable</span>
       <button class="modal-csv" id="ar-sync-btn-in" onclick="syncARIndia()" style="margin-left:auto">⟳ Sync India</button>
       <span id="ar-status-in" style="font-size:11.5px;color:var(--txt3)"></span>
-      <button class="modal-csv" id="ar-upload-uk-btn" onclick="document.getElementById('uk-ar-upload').click()">⬆ Upload UK AR</button>
-      <input type="file" id="uk-ar-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadUKAR(this)">
+      <button class="modal-csv" id="ar-upload-uk-btn" onclick="openUKARModal()">⬆ Upload UK AR</button>
       <span id="ar-status-uk" style="font-size:11.5px;color:var(--txt3)"></span>
       <button class="rbtn" onclick="openArSettings()" style="font-size:12px;padding:.28rem .8rem">⚙ Settings</button>
     </div>
@@ -543,6 +551,40 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <thead><tr><th>Month</th><th>Rate (₹/GBP)</th><th></th></tr></thead>
           <tbody id="fx-rate-tbody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+  <!-- ── UK AR Upload Modal ──────────────────────────────────── -->
+  <div id="uk-ar-modal-ov" class="fx-ov" onclick="if(event.target===this)closeUKARModal()">
+    <div class="fx-box" style="width:480px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:600;color:var(--navy)">Upload UK AR</span>
+        <button onclick="closeUKARModal()" style="background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:var(--txt3);padding:.1rem .3rem">×</button>
+      </div>
+      <!-- Last upload info -->
+      <div class="uk-last-box">
+        <div class="uk-last-label">Last Upload</div>
+        <div id="uk-last-content" class="uk-last-row">
+          <span style="color:var(--txt3)">Loading…</span>
+        </div>
+      </div>
+      <!-- Drop zone -->
+      <div class="uk-drop" id="uk-drop-zone"
+           onclick="document.getElementById('uk-ar-upload').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="this.classList.remove('drag');handleUKARDrop(event)">
+        <div class="uk-drop-icon">📂</div>
+        <div class="uk-drop-lbl">Click to browse or drag &amp; drop</div>
+        <div class="uk-drop-sub">Accepts .xlsx · .xls · .csv</div>
+        <input type="file" id="uk-ar-upload" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadUKAR(this.files[0])">
+      </div>
+      <!-- Status -->
+      <div id="uk-modal-status" style="font-size:12px;min-height:1.2rem;text-align:center"></div>
+      <!-- Template download -->
+      <div style="border-top:1px solid var(--brd);padding-top:.65rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+        <span style="font-size:11.5px;color:var(--txt3)">Need the expected format?</span>
+        <button class="rbtn" onclick="downloadUKARTemplate()" style="font-size:12px;padding:.28rem .8rem">⬇ Download Template</button>
       </div>
     </div>
   </div>
@@ -2503,57 +2545,95 @@ async function qbDisconnect() {
   await qbLoadStatus();
 }
 
-/* ─── UK AR FILE UPLOAD ─────────────────────────────────────── */
+/* ─── UK AR FILE UPLOAD MODAL ────────────────────────────────── */
+function openUKARModal() {
+  document.getElementById('uk-ar-modal-ov').classList.add('open');
+  document.getElementById('uk-modal-status').textContent = '';
+  loadUKLastUpload();
+}
+function closeUKARModal() {
+  document.getElementById('uk-ar-modal-ov').classList.remove('open');
+}
+function handleUKARDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) uploadUKAR(file);
+}
+
+async function loadUKLastUpload() {
+  const el = document.getElementById('uk-last-content');
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_invoices?entity=eq.UK&select=synced_at,balance_inr,balance&order=synced_at.desc&limit=1`,
+      { headers: cmrrHdr() }
+    );
+    const rows = await r.json();
+    const countR = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_invoices?entity=eq.UK&select=invoice_id`,
+      { headers: { ...cmrrHdr(), 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' } }
+    );
+    const count = parseInt(countR.headers.get('Content-Range')?.split('/')[1] ?? '0');
+    if (!rows.length) {
+      el.innerHTML = '<span style="color:var(--txt3);font-size:12px">No UK invoices uploaded yet</span>';
+      return;
+    }
+    const syncedAt = new Date(rows[0].synced_at);
+    const dateStr  = syncedAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const timeStr  = syncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    el.innerHTML = `
+      <span style="color:var(--txt2)">${dateStr}, ${timeStr}</span>
+      <span style="color:var(--txt2);font-family:var(--mono)">${count} invoices</span>`;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--txt3)">—</span>';
+  }
+}
+
 function parseUKDate(val) {
   if (!val) return null;
   if (val instanceof Date) return val.toISOString().slice(0, 10);
   if (typeof val === 'number') {
-    // Excel serial date → JS Date (Excel epoch is Dec 30 1899)
     try {
-      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-      return d.toISOString().slice(0, 10);
+      return new Date(Math.round((val - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
     } catch { return null; }
   }
   if (typeof val === 'string') {
     const s = val.trim();
-    // DD/MM/YYYY
     const parts = s.split('/');
     if (parts.length === 3) {
       const [d, m, y] = parts;
       return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
     }
-    // ISO already
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   }
   return null;
 }
 
-async function uploadUKAR(input) {
-  const file = input.files[0];
+async function uploadUKAR(file) {
   if (!file) return;
-  input.value = '';
+  const modalStatus = document.getElementById('uk-modal-status');
+  const topStatus   = document.getElementById('ar-status-uk');
+  const btn         = document.getElementById('ar-upload-uk-btn');
 
-  const btn    = document.getElementById('ar-upload-uk-btn');
-  const status = document.getElementById('ar-status-uk');
+  const setStatus = (msg, color = 'var(--txt3)') => {
+    modalStatus.textContent = msg;
+    modalStatus.style.color = color;
+  };
+
   btn.disabled = true;
-  status.style.color = 'var(--txt3)';
-  status.textContent = 'Parsing…';
+  setStatus('Parsing file…');
 
   try {
     const buffer = await file.arrayBuffer();
-    const isCsv = file.name.toLowerCase().endsWith('.csv');
-    let wb;
-    if (isCsv) {
-      wb = XLSX.read(new TextDecoder().decode(buffer), { type: 'string', cellDates: true });
-    } else {
-      wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
-    }
+    const isCsv  = file.name.toLowerCase().endsWith('.csv');
+    const wb = isCsv
+      ? XLSX.read(new TextDecoder().decode(buffer), { type: 'string', cellDates: true })
+      : XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
 
     const ws  = wb.Sheets[wb.SheetNames[0]];
     const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    const syncedAt     = new Date().toISOString();
-    const snapshotDate = new Date().toISOString().slice(0, 10);
+    const syncedAt      = new Date().toISOString();
+    const snapshotDate  = new Date().toISOString().slice(0, 10);
     const snapshotMonth = snapshotDate.slice(0, 7);
 
     const rows = [];
@@ -2562,28 +2642,27 @@ async function uploadUKAR(input) {
       const invoiceNo = String(row[1] ?? '').trim();
       if (!invoiceNo) continue;
       rows.push({
-        invoice_id:    invoiceNo,
+        invoice_id:     invoiceNo,
         invoice_number: invoiceNo,
-        customer_name: String(row[2] ?? '').trim(),
-        invoice_date:  parseUKDate(row[0]),
-        due_date:      parseUKDate(row[3]),
-        status:        'open',
-        total:         Number(row[4]) || 0,
-        balance:       Number(row[5]) || 0,
-        currency_code: 'GBP',
-        entity:        'UK',
-        synced_at:     syncedAt,
+        customer_name:  String(row[2] ?? '').trim(),
+        invoice_date:   parseUKDate(row[0]),
+        due_date:       parseUKDate(row[3]),
+        status:         'open',
+        total:          Number(row[4]) || 0,
+        balance:        Number(row[5]) || 0,
+        currency_code:  'GBP',
+        entity:         'UK',
+        synced_at:      syncedAt,
       });
     }
 
     if (rows.length === 0) {
-      status.textContent = 'No invoice rows found — check file format (expects data from row 6)';
-      status.style.color = '#a32d2d';
+      setStatus('No invoice rows found — data should start at row 6 (after 5 header rows)', '#a32d2d');
       btn.disabled = false;
       return;
     }
 
-    status.textContent = `Parsed ${rows.length} invoices, saving…`;
+    setStatus(`Parsed ${rows.length} invoices, saving to database…`);
 
     const gbpRate = _arFxRates[snapshotMonth] ?? null;
     const withFx  = r => ({
@@ -2601,46 +2680,57 @@ async function uploadUKAR(input) {
       { method: 'POST', headers: jhdr, body: JSON.stringify(rows.map(withFx)) });
     if (!up.ok) {
       const e = await up.json().catch(() => ({}));
-      throw new Error(e.message || 'Upsert failed (HTTP ' + up.status + ')');
+      throw new Error(e.message || 'Save failed (HTTP ' + up.status + ')');
     }
 
-    // 2. Delete UK invoices no longer open
+    // 2. Delete UK invoices no longer in the open list
     const ids = rows.map(r => r.invoice_id).join(',');
     await fetch(
       `${SUPABASE_URL}/rest/v1/ar_invoices?entity=eq.UK&invoice_id=not.in.(${ids})`,
       { method: 'DELETE', headers: hdr }
     );
 
-    // 3. Write snapshot
-    const snapRows = rows.map(r => ({
-      snapshot_date:  snapshotDate,
-      entity:         'UK',
-      invoice_id:     r.invoice_id,
-      invoice_number: r.invoice_number,
-      customer_name:  r.customer_name,
-      invoice_date:   r.invoice_date,
-      due_date:       r.due_date,
-      status:         r.status,
-      total:          r.total,
-      balance:        r.balance,
-      currency_code:  'GBP',
-      ...withFx(r),
-    }));
+    // 3. Write daily snapshot
+    const snapRows = rows.map(r => ({ snapshot_date: snapshotDate, entity: 'UK',
+      invoice_id: r.invoice_id, invoice_number: r.invoice_number,
+      customer_name: r.customer_name, invoice_date: r.invoice_date,
+      due_date: r.due_date, status: r.status, total: r.total, balance: r.balance,
+      currency_code: 'GBP', ...withFx(r) }));
     await fetch(
       `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?on_conflict=invoice_id,snapshot_date,entity`,
       { method: 'POST', headers: jhdr, body: JSON.stringify(snapRows) }
     );
 
-    status.textContent = `✓ ${rows.length} UK invoices loaded${gbpRate ? ` · rate: ${gbpRate} ₹/GBP` : ' · set GBP rate in ⚙ Settings'}`;
-    status.style.color = '#3b6d11';
+    const rateNote = gbpRate ? ` · ${gbpRate} ₹/GBP` : ' · no GBP rate set';
+    setStatus(`✓ ${rows.length} invoices uploaded successfully${rateNote}`, '#3b6d11');
+    topStatus.textContent = `UK: ${rows.length} invoices · ${snapshotDate}`;
+    topStatus.style.color = '#3b6d11';
+    loadUKLastUpload();
     _arInited = false;
     loadAR();
 
   } catch(e) {
-    status.textContent = 'Error: ' + e.message;
-    status.style.color = '#a32d2d';
+    setStatus('Error: ' + e.message, '#a32d2d');
   }
   btn.disabled = false;
+}
+
+function downloadUKARTemplate() {
+  // Matches the exact QuickBooks Open AR export format
+  const data = [
+    ['Open AR'],
+    ['Mobisy Technologies UK Limited'],
+    ['All Dates'],
+    [],
+    ['Date', 'No.', 'Customer', 'Due date', 'Amount', 'Open balance', 'Shipping date'],
+    ['15/07/2025', 'MU250001', 'Sample Customer Ltd', '14/09/2025', 5000, 5000, ''],
+    ['20/07/2025', 'MU250002', 'Another Customer Ltd', '19/09/2025', 3500, 1750, ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [12, 12, 40, 12, 12, 14, 12].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Open AR');
+  XLSX.writeFile(wb, 'QB_OpenAR_template.xlsx');
 }
 
 /* ─── AR (Accounts Receivable) ──────────────────────────────── */
