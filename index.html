@@ -380,6 +380,61 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .tag-picker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .tag-picker-new{display:flex;gap:.35rem;padding:.35rem .4rem;border-top:1px solid var(--brd);margin-top:.3rem}
 .tag-picker-new input{flex:1;font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt)}
+/* ── Collector Console ───────────────────────────────────── */
+.cc-subtabs{display:flex;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
+.cc-stbtn{padding:.65rem 1.35rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s;white-space:nowrap}
+.cc-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.cc-stbtn:hover:not(.active){color:var(--txt)}
+.cc-section{background:var(--card-bg);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.25rem;margin-bottom:.85rem}
+.cc-branch{border-left:3px solid var(--navy3);background:#f7f9ff}
+.cc-sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin-bottom:.85rem}
+.cc-branch-title{color:var(--navy2)}
+.cc-label{display:block;font-size:12px;font-weight:500;color:var(--ink-soft);margin-bottom:.35rem}
+.cc-req{color:var(--red)}
+.cc-field{margin-bottom:.85rem}
+.cc-field:last-child{margin-bottom:0}
+.cc-input{font-size:13px;padding:.4rem .65rem;border:1px solid var(--brd2);border-radius:6px;background:#fff;color:var(--ink);font-family:var(--sans);width:100%;transition:border-color .12s;outline:none}
+.cc-input:focus{border-color:var(--action)}
+.cc-select{font-size:13px;padding:.4rem .65rem;border:1px solid var(--brd2);border-radius:6px;background:#fff;color:var(--ink);font-family:var(--sans);width:100%;max-width:360px}
+.cc-textarea{font-size:13px;padding:.4rem .65rem;border:1px solid var(--brd2);border-radius:6px;background:#fff;color:var(--ink);font-family:var(--sans);width:100%;resize:vertical;transition:border-color .12s;outline:none}
+.cc-textarea:focus{border-color:var(--action)}
+.cc-btn-group{display:flex;gap:.5rem;flex-wrap:wrap}
+.cc-opt-btn{padding:.4rem .9rem;font-size:12.5px;font-family:var(--sans);border:1.5px solid var(--brd2);border-radius:20px;background:#fff;color:var(--ink-soft);cursor:pointer;transition:all .12s;white-space:nowrap}
+.cc-opt-btn:hover{border-color:var(--action);color:var(--action)}
+.cc-opt-btn.selected{background:var(--action);border-color:var(--action);color:#fff}
+.cc-opt-btn.cc-sm{font-size:11.5px;padding:.28rem .7rem}
+.cc-opt-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.cc-submit-btn{margin-top:.85rem;padding:.55rem 1.75rem;font-size:13.5px;font-weight:600;font-family:var(--sans);background:var(--action);color:#fff;border:none;border-radius:8px;cursor:pointer;transition:background .12s}
+.cc-submit-btn:hover{background:var(--navy2)}
+.cc-submit-btn:disabled{opacity:.45;cursor:not-allowed}
+.cc-add-btn{padding:.3rem .75rem;font-size:12px;background:var(--action);color:#fff;border:none;border-radius:5px;cursor:pointer}
+.cc-cancel-btn{padding:.3rem .75rem;font-size:12px;background:none;color:var(--txt3);border:1px solid var(--brd);border-radius:5px;cursor:pointer}
+.cc-err{color:var(--red);font-size:12px;min-height:1rem;margin-bottom:.35rem}
+.cc-hint{font-size:11px;color:var(--ink-faint);margin-top:.3rem}
+.cc-summary-line{font-size:12px;color:var(--ink-soft);background:var(--surf2);border:1px solid var(--brd);border-radius:6px;padding:.5rem .75rem;margin-bottom:.85rem;font-family:var(--mono)}
+.cc-invoice-row{display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border-radius:5px;cursor:pointer;transition:background .1s}
+.cc-invoice-row:hover{background:var(--surf2)}
+.cc-invoice-row input[type=checkbox]{width:15px;height:15px;cursor:pointer;flex-shrink:0}
+.cc-invoice-row label{font-size:12px;font-family:var(--mono);cursor:pointer;display:flex;gap:.65rem;align-items:center;flex-wrap:wrap;flex:1;pointer-events:none}
+.cc-inv-tag{font-size:10px;padding:.1rem .4rem;border-radius:4px;white-space:nowrap}
+.cc-check-label{display:flex;align-items:center;gap:.5rem;font-size:12.5px;color:var(--ink);cursor:pointer}
+.cc-check-label input{width:15px;height:15px}
+.cc-confirm-line{background:#fef9c3;border:1px solid #f59e0b;border-radius:6px;padding:.6rem .85rem;font-size:12.5px;color:#7c5800;margin-bottom:.65rem}
+.cc-cust-wrap{position:relative}
+.cc-cust-dd{position:absolute;z-index:500;background:#fff;border:1px solid var(--brd2);border-radius:7px;box-shadow:0 6px 20px rgba(0,0,0,.1);max-height:240px;overflow-y:auto;width:100%;max-width:440px;margin-top:2px}
+.cc-cust-dd-item{padding:.45rem .75rem;font-size:12.5px;cursor:pointer;color:var(--ink)}
+.cc-cust-dd-item:hover{background:var(--surf2)}
+.cc-timeline{display:flex;flex-direction:column}
+.cc-tl-item{display:flex;gap:.85rem;padding:.75rem 0;border-bottom:1px solid var(--brd)}
+.cc-tl-item:last-child{border-bottom:none}
+.cc-tl-dot-col{display:flex;flex-direction:column;align-items:center;padding-top:.3rem;width:16px;flex-shrink:0}
+.cc-tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cc-tl-line{flex:1;width:1.5px;background:var(--brd);margin-top:3px}
+.cc-tl-body{flex:1}
+.cc-tl-date{font-size:11px;color:var(--txt3);font-family:var(--mono)}
+.cc-tl-pill{display:inline-block;padding:.12rem .5rem;border-radius:10px;font-size:10.5px;font-weight:600;margin-right:.35rem;vertical-align:middle}
+.cc-inv-list{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.35rem}
+.cc-inv-chip{font-size:10.5px;padding:.1rem .45rem;border-radius:4px;background:var(--surf2);border:1px solid var(--brd);font-family:var(--mono);color:var(--ink-soft)}
 </style>
 </head>
 <body>
@@ -665,6 +720,233 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
+  <!-- ── Collector Console Pane ───────────────────────────── -->
+  <div id="collector-console" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Collector Console</span>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">Log customer interactions for overdue invoices</div>
+      </div>
+    </div>
+    <div class="cc-subtabs">
+      <button class="cc-stbtn active" id="cc-st-log"     onclick="ccShowSubTab('log')">Log Interaction</button>
+      <button class="cc-stbtn"        id="cc-st-history" onclick="ccShowSubTab('history')">Interaction History</button>
+    </div>
+
+    <!-- ── LOG INTERACTION ──────────────────────────────── -->
+    <div id="cc-pane-log">
+      <!-- Section 1: Customer + Invoices -->
+      <div class="cc-section" id="cc-sec1">
+        <div class="cc-sec-title">1 · Contact Target</div>
+        <div class="cc-field">
+          <label class="cc-label">Customer <span class="cc-req">*</span></label>
+          <div class="cc-cust-wrap" style="max-width:440px">
+            <input type="text" id="cc-cust-input" class="cc-input" placeholder="Type to search customer…"
+              oninput="ccFilterCustomers()" onfocus="ccFilterCustomers()" onblur="ccHideDD('cc-cust-dd')" autocomplete="off">
+            <div id="cc-cust-dd" class="cc-cust-dd" style="display:none"></div>
+          </div>
+        </div>
+        <div id="cc-cust-summary" class="cc-summary-line" style="display:none"></div>
+        <div id="cc-invoices-wrap" style="display:none">
+          <label class="cc-label">Select invoices to discuss <span class="cc-req">*</span></label>
+          <div id="cc-invoice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:.25rem .15rem"></div>
+        </div>
+      </div>
+
+      <!-- Section 2: Connection Status -->
+      <div class="cc-section" id="cc-sec2" style="display:none">
+        <div class="cc-sec-title">2 · Connection Status</div>
+        <div class="cc-btn-group" id="cc-connected-btns">
+          <button type="button" class="cc-opt-btn" data-val="yes"          onclick="ccSetConnected('yes')">Yes — Connected</button>
+          <button type="button" class="cc-opt-btn" data-val="no_answer"    onclick="ccSetConnected('no_answer')">No Answer</button>
+          <button type="button" class="cc-opt-btn" data-val="voicemail"    onclick="ccSetConnected('voicemail')">Voicemail</button>
+          <button type="button" class="cc-opt-btn" data-val="wrong_number" onclick="ccSetConnected('wrong_number')">Wrong Number</button>
+        </div>
+      </div>
+
+      <!-- Not-connected follow-up (shown only if not yes) -->
+      <div id="cc-sec-noconn" style="display:none">
+        <div class="cc-section">
+          <div class="cc-sec-title">Next Follow-up</div>
+          <div class="cc-field">
+            <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
+            <input type="date" id="cc-fu-date-nc" class="cc-input" style="max-width:200px">
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Note (optional)</label>
+            <textarea id="cc-note-nc" class="cc-textarea" rows="2" placeholder="Any notes…"></textarea>
+          </div>
+          <div id="cc-err-nc" class="cc-err"></div>
+          <button type="button" class="cc-submit-btn" id="cc-submit-nc" onclick="ccSubmit()">Submit</button>
+        </div>
+      </div>
+
+      <!-- Section 3: Contact Details (connected=yes) -->
+      <div id="cc-sec3" style="display:none">
+        <div class="cc-section">
+          <div class="cc-sec-title">3 · Contact Details</div>
+          <div class="cc-field">
+            <label class="cc-label">Who did you speak with? <span class="cc-req">*</span></label>
+            <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
+              <option value="">— Select contact —</option>
+            </select>
+            <div id="cc-new-contact-form" style="display:none;margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+              <input type="text" id="cc-new-contact-name" class="cc-input" placeholder="Full name" style="max-width:220px">
+              <input type="text" id="cc-new-contact-role" class="cc-input" placeholder="Role (optional)" style="max-width:180px">
+              <button type="button" class="cc-add-btn" onclick="ccSaveNewContact()">Save</button>
+              <button type="button" class="cc-cancel-btn" onclick="ccCancelNewContact()">Cancel</button>
+            </div>
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Channel <span class="cc-req">*</span></label>
+            <div class="cc-btn-group" id="cc-channel-btns">
+              <button type="button" class="cc-opt-btn" data-val="call"      onclick="ccSetChannel('call')">Call</button>
+              <button type="button" class="cc-opt-btn" data-val="whatsapp"  onclick="ccSetChannel('whatsapp')">WhatsApp</button>
+              <button type="button" class="cc-opt-btn" data-val="email"     onclick="ccSetChannel('email')">Email</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Outcome -->
+      <div id="cc-sec4" style="display:none">
+        <div class="cc-section">
+          <div class="cc-sec-title">4 · Outcome</div>
+          <div class="cc-btn-group" id="cc-outcome-btns">
+            <button type="button" class="cc-opt-btn" data-val="payment_committed"                  onclick="ccSetOutcome('payment_committed')">Payment Committed</button>
+            <button type="button" class="cc-opt-btn" data-val="payment_acknowledged_no_commitment" onclick="ccSetOutcome('payment_acknowledged_no_commitment')">Payment Acknowledged, No Commitment</button>
+            <button type="button" class="cc-opt-btn" data-val="dispute_raised"                     onclick="ccSetOutcome('dispute_raised')">Issue / Dispute Raised</button>
+            <button type="button" class="cc-opt-btn" data-val="callback_requested"                 onclick="ccSetOutcome('callback_requested')">Asked for Time / Callback</button>
+            <button type="button" class="cc-opt-btn" data-val="no_clear_answer"                    onclick="ccSetOutcome('no_clear_answer')">No Clear Answer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Branch: Payment Committed -->
+      <div id="cc-branch-payment" style="display:none">
+        <div class="cc-section cc-branch">
+          <div class="cc-sec-title cc-branch-title">Payment Details</div>
+          <div class="cc-field">
+            <label class="cc-label">Payment Type <span class="cc-req">*</span></label>
+            <div class="cc-btn-group" id="cc-paytype-btns">
+              <button type="button" class="cc-opt-btn" data-val="full"    onclick="ccSetPaymentType('full')">Full Payment</button>
+              <button type="button" class="cc-opt-btn" data-val="partial" onclick="ccSetPaymentType('partial')">Partial Payment</button>
+            </div>
+          </div>
+          <div id="cc-full-confirm" class="cc-confirm-line" style="display:none">
+            <div id="cc-full-confirm-txt"></div>
+            <div style="display:flex;gap:.5rem;margin-top:.45rem">
+              <button type="button" class="cc-opt-btn cc-sm" data-val="yes" onclick="ccSetFullConfirm(true)">Yes, correct</button>
+              <button type="button" class="cc-opt-btn cc-sm" data-val="no"  onclick="ccSetFullConfirm(false)">No — let me recheck</button>
+            </div>
+          </div>
+          <div id="cc-partial-amount" class="cc-field" style="display:none">
+            <label class="cc-label">Promised Amount (₹) <span class="cc-req">*</span></label>
+            <input type="number" id="cc-promised-amount" class="cc-input" placeholder="0" min="1" style="max-width:200px">
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Promise Date <span class="cc-req">*</span></label>
+            <input type="date" id="cc-promised-date" class="cc-input" style="max-width:200px" oninput="ccUpdateFollowUpSuggestion()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Branch: Payment Acknowledged, No Commitment -->
+      <div id="cc-branch-ack" style="display:none">
+        <div class="cc-section cc-branch">
+          <div class="cc-sec-title cc-branch-title">Acknowledgement Reason</div>
+          <div class="cc-btn-group" id="cc-ack-btns">
+            <button type="button" class="cc-opt-btn" data-val="cash_flow"          onclick="ccSetAckReason('cash_flow')">Cash Flow Issue</button>
+            <button type="button" class="cc-opt-btn" data-val="internal_approval"  onclick="ccSetAckReason('internal_approval')">Internal Approval Pending</button>
+            <button type="button" class="cc-opt-btn" data-val="other"              onclick="ccSetAckReason('other')">Other</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Branch: Dispute Raised -->
+      <div id="cc-branch-dispute" style="display:none">
+        <div class="cc-section cc-branch">
+          <div class="cc-sec-title cc-branch-title">Dispute Details</div>
+          <div class="cc-field">
+            <label class="cc-label">Dispute Type <span class="cc-req">*</span></label>
+            <div class="cc-btn-group" id="cc-dispute-btns">
+              <button type="button" class="cc-opt-btn" data-val="invoice_po_documentation" onclick="ccSetDisputeType('invoice_po_documentation')">Invoice / PO Documentation</button>
+              <button type="button" class="cc-opt-btn" data-val="service_quality"          onclick="ccSetDisputeType('service_quality')">Service Quality</button>
+              <button type="button" class="cc-opt-btn" data-val="commercial"               onclick="ccSetDisputeType('commercial')">Commercial</button>
+              <button type="button" class="cc-opt-btn" data-val="payment_reconciliation"   onclick="ccSetDisputeType('payment_reconciliation')">Payment Reconciliation</button>
+              <button type="button" class="cc-opt-btn" data-val="other"                    onclick="ccSetDisputeType('other')">Other</button>
+            </div>
+          </div>
+          <div class="cc-field">
+            <label class="cc-check-label">
+              <input type="checkbox" id="cc-needs-help" onchange="ccNeedsHelpChanged()">
+              <span>Needs internal help to resolve (will auto-trigger escalation)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Escalation -->
+      <div id="cc-sec5" style="display:none">
+        <div class="cc-section">
+          <div class="cc-sec-title">5 · Escalation</div>
+          <div id="cc-esc-prompt" class="cc-field">
+            <label class="cc-label">Does anyone else need to act on this?</label>
+            <div class="cc-btn-group" id="cc-esc-btns">
+              <button type="button" class="cc-opt-btn" data-val="yes" onclick="ccSetEscalation(true)">Yes</button>
+              <button type="button" class="cc-opt-btn" data-val="no"  onclick="ccSetEscalation(false)">No</button>
+            </div>
+          </div>
+          <div id="cc-esc-fields" style="display:none">
+            <div class="cc-field">
+              <label class="cc-label">Who needs to act? <span class="cc-req">*</span></label>
+              <input type="text" id="cc-esc-who" class="cc-input" placeholder="Name or team" style="max-width:320px">
+            </div>
+            <div class="cc-field">
+              <label class="cc-label">What do they need to do? <span class="cc-req">*</span></label>
+              <input type="text" id="cc-esc-what" class="cc-input" placeholder="One-line action">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 6: Follow-up + Note -->
+      <div id="cc-sec6" style="display:none">
+        <div class="cc-section">
+          <div class="cc-sec-title">6 · Next Steps</div>
+          <div class="cc-field">
+            <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
+            <input type="date" id="cc-fu-date" class="cc-input" style="max-width:200px" oninput="ccFuDateManualEdit()">
+            <div id="cc-fu-hint" class="cc-hint"></div>
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Note (optional)</label>
+            <textarea id="cc-note" class="cc-textarea" rows="2" placeholder="Any additional notes…"></textarea>
+          </div>
+          <div id="cc-err" class="cc-err"></div>
+          <button type="button" class="cc-submit-btn" id="cc-submit-conn" onclick="ccSubmit()">Submit</button>
+        </div>
+      </div>
+    </div><!-- end #cc-pane-log -->
+
+    <!-- ── INTERACTION HISTORY ───────────────────────────── -->
+    <div id="cc-pane-history" style="display:none">
+      <div class="cc-section">
+        <div class="cc-sec-title">Search Customer</div>
+        <div class="cc-field" style="margin:0">
+          <div class="cc-cust-wrap" style="max-width:440px">
+            <input type="text" id="cc-hist-cust-input" class="cc-input" placeholder="Type customer name…"
+              oninput="ccHistFilter()" onfocus="ccHistFilter()" onblur="ccHideDD('cc-hist-cust-dd')" autocomplete="off">
+            <div id="cc-hist-cust-dd" class="cc-cust-dd" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+      <div id="cc-hist-content">
+        <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Select a customer above to view their interaction history.</div>
+      </div>
+    </div>
+  </div><!-- end #collector-console -->
+
   <div id="manage-users" class="pane">
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <span class="slabel" style="margin:0">Manage Users</span>
@@ -756,7 +1038,8 @@ let USER_ACCESS     = null;   // { allowed_tabs, allowed_bus, is_admin, display_
 let USER_JWT        = null;   // Bearer token for all API calls
 const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
 const ALL_TABS_CFG = [
-  { id: 'ar',      label: 'AR',     fn: 'showARTab(this)' },
+  { id: 'ar',               label: 'AR',                fn: 'showARTab(this)' },
+  { id: 'collector-console', label: 'Collector Console', fn: 'showCollectorConsoleTab(this)' },
 ];
 
 
@@ -1421,6 +1704,11 @@ function showARTab(btn) {
   showTab('ar', btn);
   if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); }
   loadArCustMaster();
+}
+
+function showCollectorConsoleTab(btn) {
+  showTab('collector-console', btn);
+  if (!_ccInited) { _ccInited = true; ccInit(); }
 }
 
 
@@ -2876,6 +3164,608 @@ function openCustTagPicker(btn, customerName) {
   </div>`;
   document.body.appendChild(div);
   setTimeout(() => document.addEventListener('click', closeTagPickerOutside, { once: true }), 10);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COLLECTOR CONSOLE
+   ══════════════════════════════════════════════════════════════ */
+
+const CC_CADENCE = { NO_CONN: 2, DISPUTE: 2, NO_CLEAR: 2, ACK: 5 };
+
+const CC_OUTCOME_COLORS = {
+  payment_committed:                  { bg:'#dcfce7', fg:'#166534' },
+  payment_acknowledged_no_commitment: { bg:'#fef9c3', fg:'#854d0e' },
+  dispute_raised:                     { bg:'#fee2e2', fg:'#991b1b' },
+  callback_requested:                 { bg:'#eff6ff', fg:'#1d4ed8' },
+  no_clear_answer:                    { bg:'#f3f4f6', fg:'#374151' },
+};
+const CC_OUTCOME_LABELS = {
+  payment_committed:                  'Payment Committed',
+  payment_acknowledged_no_commitment: 'Payment Acknowledged',
+  dispute_raised:                     'Dispute Raised',
+  callback_requested:                 'Callback Requested',
+  no_clear_answer:                    'No Clear Answer',
+};
+const CC_CONNECTED_LABELS = {
+  yes:'Connected', no_answer:'No Answer', voicemail:'Voicemail', wrong_number:'Wrong Number',
+};
+
+let _ccInited    = false;
+let _ccState     = {};
+let _ccCustNames = [];
+let _ccHistCust  = null;
+
+function ccMakeState() {
+  return {
+    customerName: null, invoices: [], selectedInvIds: new Set(),
+    connected: null, contactId: null, channel: null, outcome: null,
+    paymentType: null, fullConfirmed: false, ackReason: null,
+    disputeType: null, needsHelp: false, escalationNeeded: false,
+    contacts: [], fuAutoSet: false,
+  };
+}
+
+async function ccInit() {
+  if (!_cmData.length) await loadArCustMaster();
+  _ccCustNames = _cmData.map(r => r.customer_name).filter(Boolean).sort();
+  if (!_collectorList.length) await loadCollectorList();
+  ccResetForm();
+}
+
+function ccShowSubTab(tab) {
+  document.getElementById('cc-pane-log').style.display     = tab === 'log'     ? '' : 'none';
+  document.getElementById('cc-pane-history').style.display = tab === 'history' ? '' : 'none';
+  document.getElementById('cc-st-log').classList.toggle('active',     tab === 'log');
+  document.getElementById('cc-st-history').classList.toggle('active', tab === 'history');
+}
+
+function ccResetForm() {
+  _ccState = ccMakeState();
+  const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
+                'cc-promised-amount','cc-promised-date','cc-esc-who','cc-esc-what',
+                'cc-new-contact-name','cc-new-contact-role'];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('cc-needs-help').checked = false;
+  document.getElementById('cc-cust-summary').style.display    = 'none';
+  document.getElementById('cc-invoices-wrap').style.display   = 'none';
+  document.getElementById('cc-invoice-list').innerHTML        = '';
+  document.getElementById('cc-sec2').style.display            = 'none';
+  document.getElementById('cc-sec-noconn').style.display      = 'none';
+  document.getElementById('cc-sec3').style.display            = 'none';
+  document.getElementById('cc-sec4').style.display            = 'none';
+  document.getElementById('cc-branch-payment').style.display  = 'none';
+  document.getElementById('cc-branch-ack').style.display      = 'none';
+  document.getElementById('cc-branch-dispute').style.display  = 'none';
+  document.getElementById('cc-sec5').style.display            = 'none';
+  document.getElementById('cc-sec6').style.display            = 'none';
+  document.getElementById('cc-full-confirm').style.display    = 'none';
+  document.getElementById('cc-partial-amount').style.display  = 'none';
+  document.getElementById('cc-esc-fields').style.display      = 'none';
+  document.getElementById('cc-esc-prompt').style.display      = '';
+  document.getElementById('cc-new-contact-form').style.display = 'none';
+  document.getElementById('cc-fu-hint').textContent  = '';
+  document.getElementById('cc-err').textContent      = '';
+  document.getElementById('cc-err-nc').textContent   = '';
+  document.querySelectorAll('.cc-opt-btn').forEach(b => b.classList.remove('selected'));
+}
+
+/* ── Customer dropdown ───────────────────────────────────── */
+function ccHideDD(ddId) { setTimeout(() => { const el = document.getElementById(ddId); if (el) el.style.display = 'none'; }, 160); }
+
+function ccFilterCustomers() {
+  const input = document.getElementById('cc-cust-input');
+  const dd    = document.getElementById('cc-cust-dd');
+  const q     = (input.value || '').toLowerCase().trim();
+  if (!q) { dd.style.display = 'none'; return; }
+  const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(n =>
+    `<div class="cc-cust-dd-item" onmousedown="event.preventDefault();ccSelectCustomer(${JSON.stringify(n)})">${escHtml(n)}</div>`
+  ).join('');
+  dd.style.display = '';
+}
+
+async function ccSelectCustomer(name) {
+  _ccState.customerName = name;
+  _ccState.selectedInvIds = new Set();
+  document.getElementById('cc-cust-input').value  = name;
+  document.getElementById('cc-cust-dd').style.display = 'none';
+  // Reset sections below customer
+  document.getElementById('cc-sec2').style.display = 'none';
+  document.getElementById('cc-sec-noconn').style.display = 'none';
+  document.getElementById('cc-sec3').style.display = 'none';
+  document.getElementById('cc-sec4').style.display = 'none';
+  ccHideBranches();
+  document.getElementById('cc-sec5').style.display = 'none';
+  document.getElementById('cc-sec6').style.display = 'none';
+  document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+  _ccState.connected = null;
+
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&status=not.eq.paid&order=due_date.asc`,
+    { headers: cmrrHdr() }
+  );
+  const invoices = r.ok ? await r.json() : [];
+  _ccState.invoices = invoices;
+
+  const totalBal   = invoices.reduce((s, inv) => s + (inv.balance_inr || inv.balance || 0), 0);
+  const overdueCnt = invoices.filter(inv => arOverdueDays(inv.due_date) > 0).length;
+  const maxAging   = invoices.reduce((mx, inv) => Math.max(mx, arOverdueDays(inv.due_date)), 0);
+  const summaryEl  = document.getElementById('cc-cust-summary');
+  summaryEl.innerHTML = `Total outstanding: <strong>₹${f(totalBal)}</strong> across ${invoices.length} open invoice${invoices.length !== 1 ? 's' : ''}`
+    + (maxAging > 0 ? ` · Oldest overdue: <strong>${maxAging}d</strong>` : '');
+  summaryEl.style.display = '';
+
+  const listEl = document.getElementById('cc-invoice-list');
+  if (!invoices.length) {
+    listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3);padding:.5rem .65rem">No open invoices found for this customer.</div>';
+  } else {
+    listEl.innerHTML = invoices.map(inv => {
+      const days = arOverdueDays(inv.due_date);
+      const tagStyle = days > 90
+        ? 'background:#fee2e2;color:#991b1b'
+        : days > 60 ? 'background:#fef2f2;color:#b91c1c'
+        : days > 30 ? 'background:#fef9c3;color:#854d0e'
+        : days > 0  ? 'background:#fef9c3;color:#92400e'
+        : 'background:#dcfce7;color:#166534';
+      const tagText = days > 0 ? `${days}d overdue` : 'Current';
+      const amt = inv.balance_inr || inv.balance || 0;
+      const cbId = `cc-inv-${CSS.escape(inv.invoice_id)}`;
+      return `<div class="cc-invoice-row" onclick="ccToggleInvoice(${JSON.stringify(inv.invoice_id)})">
+        <input type="checkbox" id="${cbId}" value="${escHtml(inv.invoice_id)}">
+        <label for="${cbId}">
+          <span style="font-weight:600">${escHtml(inv.invoice_number || inv.invoice_id)}</span>
+          <span style="color:var(--txt3)">${inv.due_date || '—'}</span>
+          <span class="cc-inv-tag" style="${tagStyle}">${tagText}</span>
+          <span style="margin-left:auto">₹${f(amt)}</span>
+        </label>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('cc-invoices-wrap').style.display = '';
+  document.getElementById('cc-sec2').style.display = '';
+  ccUpdateConnectedBtnState();
+  ccLoadContacts(name);
+}
+
+function ccToggleInvoice(invId) {
+  const cbId = `cc-inv-${CSS.escape(invId)}`;
+  const cb   = document.getElementById(cbId);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  if (cb.checked) _ccState.selectedInvIds.add(invId);
+  else            _ccState.selectedInvIds.delete(invId);
+  ccUpdateConnectedBtnState();
+}
+
+function ccUpdateConnectedBtnState() {
+  const disabled = _ccState.invoices.length > 0 && _ccState.selectedInvIds.size === 0;
+  document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.disabled = disabled);
+}
+
+async function ccLoadContacts(customerName) {
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/contacts?customer_name=eq.${encodeURIComponent(customerName)}&order=name`,
+    { headers: cmrrHdr() }
+  );
+  _ccState.contacts = r.ok ? await r.json() : [];
+  ccRenderContactSelect();
+}
+
+function ccRenderContactSelect() {
+  const sel = document.getElementById('cc-contact-sel');
+  sel.innerHTML = '<option value="">— Select contact —</option>'
+    + _ccState.contacts.map(c =>
+        `<option value="${escHtml(c.id)}">${escHtml(c.name)}${c.role ? ' (' + escHtml(c.role) + ')' : ''}</option>`
+      ).join('')
+    + '<option value="__new__">+ Add new contact…</option>';
+}
+
+function ccContactChanged() {
+  const val = document.getElementById('cc-contact-sel').value;
+  if (val === '__new__') {
+    document.getElementById('cc-new-contact-form').style.display = 'flex';
+    _ccState.contactId = null;
+  } else {
+    document.getElementById('cc-new-contact-form').style.display = 'none';
+    _ccState.contactId = val || null;
+  }
+}
+
+async function ccSaveNewContact() {
+  const name = document.getElementById('cc-new-contact-name').value.trim();
+  const role = document.getElementById('cc-new-contact-role').value.trim();
+  if (!name) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ customer_name: _ccState.customerName, name, role: role || null }),
+  });
+  if (r.ok) {
+    const [contact] = await r.json();
+    _ccState.contacts.push(contact);
+    ccRenderContactSelect();
+    document.getElementById('cc-contact-sel').value = contact.id;
+    _ccState.contactId = contact.id;
+  }
+  document.getElementById('cc-new-contact-form').style.display = 'none';
+  document.getElementById('cc-new-contact-name').value = '';
+  document.getElementById('cc-new-contact-role').value = '';
+}
+
+function ccCancelNewContact() {
+  document.getElementById('cc-new-contact-form').style.display = 'none';
+  document.getElementById('cc-contact-sel').value = '';
+  _ccState.contactId = null;
+}
+
+/* ── Connection status ───────────────────────────────────── */
+function ccSetConnected(val) {
+  _ccState.connected = val;
+  document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+  const isYes = val === 'yes';
+  document.getElementById('cc-sec-noconn').style.display = isYes ? 'none' : '';
+  document.getElementById('cc-sec3').style.display       = isYes ? ''     : 'none';
+  document.getElementById('cc-sec4').style.display       = isYes ? ''     : 'none';
+  document.getElementById('cc-sec5').style.display       = isYes ? ''     : 'none';
+  document.getElementById('cc-sec6').style.display       = isYes ? ''     : 'none';
+  if (!isYes) {
+    ccHideBranches();
+    _ccState.outcome = null;
+    document.querySelectorAll('#cc-outcome-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+    const fu = ccAddBizDays(new Date(), CC_CADENCE.NO_CONN);
+    document.getElementById('cc-fu-date-nc').value = fu;
+  }
+}
+
+/* ── Channel ─────────────────────────────────────────────── */
+function ccSetChannel(val) {
+  _ccState.channel = val;
+  document.querySelectorAll('#cc-channel-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+}
+
+/* ── Outcome ─────────────────────────────────────────────── */
+function ccSetOutcome(val) {
+  _ccState.outcome      = val;
+  _ccState.paymentType  = null;
+  _ccState.fullConfirmed = false;
+  _ccState.ackReason    = null;
+  _ccState.disputeType  = null;
+  _ccState.needsHelp    = false;
+  _ccState.fuAutoSet    = false;
+  document.getElementById('cc-needs-help').checked = false;
+  document.querySelectorAll('#cc-outcome-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+  ccHideBranches();
+  if (val === 'payment_committed')                  document.getElementById('cc-branch-payment').style.display  = '';
+  else if (val === 'payment_acknowledged_no_commitment') document.getElementById('cc-branch-ack').style.display = '';
+  else if (val === 'dispute_raised')                document.getElementById('cc-branch-dispute').style.display  = '';
+
+  if (val !== 'dispute_raised') {
+    _ccState.escalationNeeded = false;
+    document.getElementById('cc-esc-prompt').style.display  = '';
+    document.getElementById('cc-esc-fields').style.display  = 'none';
+    document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+  }
+  ccUpdateFollowUpSuggestion();
+}
+
+function ccHideBranches() {
+  document.getElementById('cc-branch-payment').style.display  = 'none';
+  document.getElementById('cc-branch-ack').style.display      = 'none';
+  document.getElementById('cc-branch-dispute').style.display  = 'none';
+  document.getElementById('cc-full-confirm').style.display    = 'none';
+  document.getElementById('cc-partial-amount').style.display  = 'none';
+  document.querySelectorAll('#cc-paytype-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+}
+
+/* ── Payment type ────────────────────────────────────────── */
+function ccSetPaymentType(val) {
+  _ccState.paymentType   = val;
+  _ccState.fullConfirmed = false;
+  document.querySelectorAll('#cc-paytype-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+  document.getElementById('cc-full-confirm').style.display   = val === 'full'    ? '' : 'none';
+  document.getElementById('cc-partial-amount').style.display = val === 'partial' ? '' : 'none';
+  if (val === 'full') {
+    const total = [..._ccState.selectedInvIds].reduce((s, id) => {
+      const inv = _ccState.invoices.find(i => i.invoice_id === id);
+      return s + (inv ? (inv.balance_inr || inv.balance || 0) : 0);
+    }, 0);
+    const n = _ccState.selectedInvIds.size;
+    document.getElementById('cc-full-confirm-txt').textContent =
+      `Full payment = ₹${f(total)} across ${n} invoice${n !== 1 ? 's' : ''} — correct?`;
+    document.querySelectorAll('#cc-full-confirm .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+  }
+}
+
+function ccSetFullConfirm(yes) {
+  _ccState.fullConfirmed = yes;
+  document.querySelectorAll('#cc-full-confirm .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', (b.dataset.val === 'yes') === yes)
+  );
+  document.getElementById('cc-err').textContent = yes ? '' : 'Please recheck the selected invoices before proceeding.';
+}
+
+/* ── Ack reason ──────────────────────────────────────────── */
+function ccSetAckReason(val) {
+  _ccState.ackReason = val;
+  document.querySelectorAll('#cc-ack-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+}
+
+/* ── Dispute type ────────────────────────────────────────── */
+function ccSetDisputeType(val) {
+  _ccState.disputeType = val;
+  document.querySelectorAll('#cc-dispute-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.val === val)
+  );
+}
+
+function ccNeedsHelpChanged() {
+  const checked = document.getElementById('cc-needs-help').checked;
+  _ccState.needsHelp = checked;
+  if (checked) {
+    _ccState.escalationNeeded = true;
+    document.getElementById('cc-esc-prompt').style.display  = 'none';
+    document.getElementById('cc-esc-fields').style.display  = '';
+    document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b =>
+      b.classList.toggle('selected', b.dataset.val === 'yes')
+    );
+  } else {
+    _ccState.escalationNeeded = false;
+    document.getElementById('cc-esc-prompt').style.display  = '';
+    document.getElementById('cc-esc-fields').style.display  = 'none';
+    document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+  }
+}
+
+/* ── Escalation ──────────────────────────────────────────── */
+function ccSetEscalation(yes) {
+  _ccState.escalationNeeded = yes;
+  document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b =>
+    b.classList.toggle('selected', (b.dataset.val === 'yes') === yes)
+  );
+  document.getElementById('cc-esc-fields').style.display = yes ? '' : 'none';
+}
+
+/* ── Follow-up date suggestion ───────────────────────────── */
+function ccAddBizDays(date, n) {
+  const d = new Date(date);
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+function ccFuDateManualEdit() { _ccState.fuAutoSet = false; }
+
+function ccUpdateFollowUpSuggestion() {
+  const outcome  = _ccState.outcome;
+  const promDate = document.getElementById('cc-promised-date').value;
+  const hintEl   = document.getElementById('cc-fu-hint');
+  const fuInput  = document.getElementById('cc-fu-date');
+  let suggested  = null;
+  let hint       = '';
+  if (outcome === 'payment_committed' && promDate) {
+    const d = new Date(promDate); d.setDate(d.getDate() + 1);
+    suggested = d.toISOString().slice(0, 10);
+    hint = `Day after promise date (${promDate})`;
+  } else if (outcome === 'payment_acknowledged_no_commitment') {
+    suggested = ccAddBizDays(new Date(), CC_CADENCE.ACK);
+    hint = `Suggested: +${CC_CADENCE.ACK} business days`;
+  } else if (outcome === 'dispute_raised') {
+    suggested = ccAddBizDays(new Date(), CC_CADENCE.DISPUTE);
+    hint = `Suggested: +${CC_CADENCE.DISPUTE} business days (escalation cadence)`;
+  } else if (outcome === 'no_clear_answer') {
+    suggested = ccAddBizDays(new Date(), CC_CADENCE.NO_CLEAR);
+    hint = `Suggested: +${CC_CADENCE.NO_CLEAR} business days`;
+  } else if (outcome === 'callback_requested') {
+    hint = 'Enter the date the customer requested';
+  }
+  if (suggested && (!fuInput.value || _ccState.fuAutoSet)) {
+    fuInput.value = suggested;
+    _ccState.fuAutoSet = true;
+  }
+  hintEl.textContent = hint;
+}
+
+/* ── Validation ──────────────────────────────────────────── */
+function ccValidate() {
+  const s = _ccState;
+  if (!s.customerName)                                    return 'Please select a customer.';
+  if (s.invoices.length > 0 && s.selectedInvIds.size === 0) return 'Please select at least one invoice.';
+  if (!s.connected)                                       return 'Please select a connection status.';
+  const fuDate = s.connected === 'yes'
+    ? document.getElementById('cc-fu-date').value
+    : document.getElementById('cc-fu-date-nc').value;
+  if (!fuDate) return 'Follow-up date is required.';
+  if (s.connected !== 'yes') return null;
+  if (!s.contactId) return 'Please select who you spoke with.';
+  if (!s.channel)   return 'Please select the channel.';
+  if (!s.outcome)   return 'Please select an outcome.';
+  if (s.outcome === 'payment_committed') {
+    if (!s.paymentType)                       return 'Please select Full or Partial payment.';
+    if (s.paymentType === 'full' && !s.fullConfirmed) return 'Please confirm the full payment amount is correct.';
+    if (s.paymentType === 'partial') {
+      const amt = parseFloat(document.getElementById('cc-promised-amount').value);
+      if (!amt || amt <= 0) return 'Please enter the promised amount.';
+    }
+    const pd = document.getElementById('cc-promised-date').value;
+    if (!pd) return 'Please enter a promise date.';
+    if (pd < new Date().toISOString().slice(0,10)) return 'Promise date must be today or in the future.';
+  }
+  if (s.outcome === 'payment_acknowledged_no_commitment' && !s.ackReason) return 'Please select an acknowledgement reason.';
+  if (s.outcome === 'dispute_raised' && !s.disputeType) return 'Please select a dispute type.';
+  if (s.escalationNeeded) {
+    if (!document.getElementById('cc-esc-who').value.trim())  return 'Please specify who needs to act.';
+    if (!document.getElementById('cc-esc-what').value.trim()) return 'Please specify what they need to do.';
+  }
+  return null;
+}
+
+/* ── Submit ──────────────────────────────────────────────── */
+async function ccSubmit() {
+  const isConn = _ccState.connected === 'yes';
+  const errEl  = document.getElementById(isConn ? 'cc-err' : 'cc-err-nc');
+  const errMsg = ccValidate();
+  if (errMsg) { errEl.textContent = errMsg; return; }
+  errEl.textContent = '';
+  const submitBtnId = isConn ? 'cc-submit-conn' : 'cc-submit-nc';
+  const btn = document.getElementById(submitBtnId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+  try {
+    const s       = _ccState;
+    const fuDate  = isConn
+      ? document.getElementById('cc-fu-date').value
+      : document.getElementById('cc-fu-date-nc').value;
+    const note    = (isConn
+      ? document.getElementById('cc-note').value
+      : document.getElementById('cc-note-nc').value).trim();
+    const payload = {
+      customer_name:       s.customerName,
+      collector_id:        CURRENT_USER.id,
+      connected:           s.connected,
+      contact_id:          isConn ? (s.contactId || null) : null,
+      channel:             isConn ? s.channel : null,
+      outcome:             isConn ? s.outcome : null,
+      payment_type:        (isConn && s.outcome === 'payment_committed') ? s.paymentType : null,
+      promised_amount:     (isConn && s.outcome === 'payment_committed' && s.paymentType === 'partial')
+                             ? parseFloat(document.getElementById('cc-promised-amount').value) : null,
+      promised_date:       (isConn && s.outcome === 'payment_committed')
+                             ? document.getElementById('cc-promised-date').value : null,
+      ack_reason:          (isConn && s.outcome === 'payment_acknowledged_no_commitment') ? s.ackReason : null,
+      dispute_type:        (isConn && s.outcome === 'dispute_raised') ? s.disputeType : null,
+      needs_internal_help: (isConn && s.outcome === 'dispute_raised') ? s.needsHelp : null,
+      escalation_needed:   isConn ? s.escalationNeeded : false,
+      escalation_who:      (isConn && s.escalationNeeded) ? document.getElementById('cc-esc-who').value.trim() : null,
+      escalation_what:     (isConn && s.escalationNeeded) ? document.getElementById('cc-esc-what').value.trim() : null,
+      follow_up_date:      fuDate,
+      note:                note || null,
+    };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/interactions`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const [interaction] = await r.json();
+    if (s.selectedInvIds.size > 0) {
+      const joinRows = [...s.selectedInvIds].map(invId => ({ interaction_id: interaction.id, invoice_id: invId }));
+      await fetch(`${SUPABASE_URL}/rest/v1/interaction_invoices`, {
+        method: 'POST',
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify(joinRows),
+      });
+    }
+    ccResetForm();
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;background:#166534;color:#fff;font-size:13px;padding:.65rem 1.25rem;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:9999;font-family:var(--sans)';
+    toast.textContent = 'Interaction logged successfully.';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3200);
+  } catch(e) {
+    errEl.textContent = 'Error: ' + (e.message || 'submission failed');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit'; }
+  }
+}
+
+/* ── History sub-tab ─────────────────────────────────────── */
+function ccHistFilter() {
+  const input = document.getElementById('cc-hist-cust-input');
+  const dd    = document.getElementById('cc-hist-cust-dd');
+  const q     = (input.value || '').toLowerCase().trim();
+  if (!q) { dd.style.display = 'none'; return; }
+  const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(n =>
+    `<div class="cc-cust-dd-item" onmousedown="event.preventDefault();ccHistSelectCustomer(${JSON.stringify(n)})">${escHtml(n)}</div>`
+  ).join('');
+  dd.style.display = '';
+}
+
+async function ccHistSelectCustomer(name) {
+  _ccHistCust = name;
+  document.getElementById('cc-hist-cust-input').value      = name;
+  document.getElementById('cc-hist-cust-dd').style.display = 'none';
+  const contentEl = document.getElementById('cc-hist-content');
+  contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/interactions?customer_name=eq.${encodeURIComponent(name)}&order=created_at.desc&limit=50`,
+    { headers: cmrrHdr() }
+  );
+  if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
+  const interactions = await r.json();
+  if (!interactions.length) {
+    contentEl.innerHTML = `<div class="cc-section" style="font-size:12.5px;color:var(--txt3)">No interactions logged for <strong>${escHtml(name)}</strong> yet.</div>`;
+    return;
+  }
+  const ids = interactions.map(i => i.id);
+  const jr  = await fetch(
+    `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
+    { headers: cmrrHdr() }
+  );
+  const joinRows = jr.ok ? await jr.json() : [];
+  const invMap   = {};
+  joinRows.forEach(j => { if (!invMap[j.interaction_id]) invMap[j.interaction_id] = []; invMap[j.interaction_id].push(j.invoice_id); });
+  const contactIds = [...new Set(interactions.filter(i => i.contact_id).map(i => i.contact_id))];
+  let contactMap = {};
+  if (contactIds.length) {
+    const cr = await fetch(
+      `${SUPABASE_URL}/rest/v1/contacts?id=in.(${contactIds.map(encodeURIComponent).join(',')})&select=id,name,role`,
+      { headers: cmrrHdr() }
+    );
+    if (cr.ok) { (await cr.json()).forEach(c => contactMap[c.id] = c); }
+  }
+  contentEl.innerHTML = `
+    <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <span class="slabel" style="margin:0;font-size:13px">${escHtml(name)}</span>
+      <span style="font-size:11.5px;color:var(--txt3)">${interactions.length} interaction${interactions.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="cc-timeline">
+      ${interactions.map(i => ccRenderTLItem(i, invMap[i.id] || [], contactMap)).join('')}
+    </div>`;
+}
+
+function ccRenderTLItem(i, invoiceIds, contactMap) {
+  const oc      = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
+  const opill   = i.outcome
+    ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
+  const dotCol  = i.connected === 'yes' ? '#166534' : '#9ca3af';
+  const connLbl = CC_CONNECTED_LABELS[i.connected] || i.connected;
+  const connCol = i.connected === 'yes' ? '#166534' : '#6b7280';
+  const ch      = i.channel ? ({call:'Call',whatsapp:'WhatsApp',email:'Email'})[i.channel] : '';
+  const contact = i.contact_id ? contactMap[i.contact_id] : null;
+  const dt      = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const chips   = invoiceIds.length
+    ? `<div class="cc-inv-list">${invoiceIds.map(id=>`<span class="cc-inv-chip">${escHtml(id)}</span>`).join('')}</div>` : '';
+  const lines = [];
+  if (contact) lines.push(`Spoke with: <strong>${escHtml(contact.name)}${contact.role?' ('+escHtml(contact.role)+')':''}</strong>${ch?' · '+ch:''}`);
+  if (i.promised_date) lines.push(`Promise: <strong>${i.promised_date}</strong>${i.promised_amount?' · ₹'+f(i.promised_amount):''}`);
+  if (i.ack_reason) lines.push(`Reason: ${i.ack_reason.replace(/_/g,' ')}`);
+  if (i.dispute_type) lines.push(`Dispute type: ${i.dispute_type.replace(/_/g,' ')}`);
+  if (i.escalation_needed && i.escalation_who) lines.push(`Escalation → <strong>${escHtml(i.escalation_who)}</strong>: ${escHtml(i.escalation_what||'')}`);
+  if (i.note) lines.push(`<em>${escHtml(i.note)}</em>`);
+  lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
+  return `<div class="cc-tl-item">
+    <div class="cc-tl-dot-col"><div class="cc-tl-dot" style="background:${dotCol}"></div><div class="cc-tl-line"></div></div>
+    <div class="cc-tl-body">
+      <div class="cc-tl-date">${dt}</div>
+      <div style="margin:.2rem 0"><span style="font-size:12px;font-weight:600;color:${connCol}">${connLbl}</span> ${opill}</div>
+      ${chips}
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:.3rem;line-height:1.7">${lines.map(l=>`<div>${l}</div>`).join('')}</div>
+    </div>
+  </div>`;
 }
 
 async function createTagAndAddCust(customerName, rawName) {
