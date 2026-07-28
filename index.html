@@ -3233,8 +3233,23 @@ function ccMakeState() {
 }
 
 async function ccInit() {
-  if (!_cmData.length) await loadArCustMaster();
-  _ccCustNames = _cmData.map(r => r.customer_name).filter(Boolean).sort();
+  try {
+    // Fetch customer master directly — don't rely on loadArCustMaster's loading state
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_customer_master?select=customer_name,collector_name&order=customer_name`,
+      { headers: cmrrHdr() }
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      const isCollector = (USER_ACCESS.role || '') === 'collector';
+      const myName      = USER_ACCESS.collector_name || '';
+      _ccCustNames = rows
+        .filter(row => !isCollector || (row.collector_name || '') === myName)
+        .map(row => row.customer_name)
+        .filter(Boolean)
+        .sort();
+    }
+  } catch(e) { console.warn('ccInit:', e); }
   if (!_collectorList.length) await loadCollectorList();
   ccResetForm();
 }
