@@ -263,23 +263,23 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .omrr-tot-bu{position:sticky;left:0;z-index:2;background:#d8d8d8;font-family:var(--sans);font-size:11px;font-weight:600;padding:.42rem .75rem;white-space:nowrap;border-right:2px solid #aaa}
 .omrr-hbu{position:sticky;left:0;z-index:4;background:#f0f0f0;text-align:left!important;border-right:2px solid #bbb;min-width:100px;padding:.38rem .75rem;font-size:11px;font-weight:600}
 /* ── AR Tab ──────────────────────────────────────────────────── */
-.ar-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:.75rem}
+.ar-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.5rem}
 @media(max-width:900px){.ar-cards{grid-template-columns:repeat(2,1fr)}}
-.ar-card{background:var(--card-bg);border:0.5px solid var(--line);border-radius:12px;padding:1rem 1.15rem 1rem 1.35rem;border-left:3px solid #e2e8f0;position:relative;cursor:pointer;transition:box-shadow .15s;overflow:visible}
+.ar-card{background:var(--card-bg);border:0.5px solid var(--line);border-radius:10px;padding:.55rem .9rem .6rem 1rem;border-left:3px solid #e2e8f0;position:relative;cursor:pointer;transition:box-shadow .15s;overflow:visible}
 .ar-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.07)}
 .ar-card.c-total{border-left-color:#2563eb}
 .ar-card.c-overdue{border-left-color:var(--red)}
 .ar-card.c-current{border-left-color:var(--green)}
 .ar-card.kpi-active{outline:2px solid var(--action);outline-offset:1px}
-.ar-card-val{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:.05rem;font-family:var(--mono);letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.15}
-.ar-card-lbl{font-size:9.5px;color:var(--ink-faint);margin-bottom:.4rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-.ar-card-sub{font-size:11px;color:var(--ink-soft);margin-top:.3rem;font-variant-numeric:tabular-nums}
-.ar-card-sub2{font-size:10.5px;color:var(--ink-faint);margin-top:.15rem;font-variant-numeric:tabular-nums}
+.ar-card-val{font-size:18px;font-weight:700;color:var(--ink);margin-bottom:.02rem;font-family:var(--mono);letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.15}
+.ar-card-lbl{font-size:9px;color:var(--ink-faint);margin-bottom:.25rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.ar-card-sub{font-size:10.5px;color:var(--ink-soft);margin-top:.2rem;font-variant-numeric:tabular-nums}
+.ar-card-sub2{font-size:10px;color:var(--ink-faint);margin-top:.1rem;font-variant-numeric:tabular-nums}
 .ar-card-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#1a202c;color:#e2e8f0;font-family:var(--mono);font-size:10.5px;line-height:1.6;padding:.5rem .75rem;border-radius:7px;white-space:pre;z-index:300;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:none}
 .ar-card-tip::after{content:'';position:absolute;top:100%;left:16px;border:5px solid transparent;border-top-color:#1a202c}
 .ar-card:hover .ar-card-tip{display:block}
 /* Aging composition bar */
-.ar-aging-bar-wrap{margin-bottom:1.1rem}
+.ar-aging-bar-wrap{margin-bottom:.65rem}
 .ar-aging-bar{display:flex;border-radius:6px;overflow:hidden;height:10px;width:100%;background:var(--line)}
 .ar-aging-seg{height:100%;transition:flex .3s}
 .ar-aging-legend{display:flex;flex-wrap:wrap;gap:.3rem .65rem;margin-top:.45rem}
@@ -516,7 +516,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     </div>
     <!-- Collector capsule filter -->
-    <div style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem">
+    <div id="ar-collector-filter-wrap" style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem">
       <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px">Collector</span>
       <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
     </div>
@@ -2340,9 +2340,12 @@ function renderAR() {
     !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase()))
   );
 
-  // Compute all available BUs for capsule rendering (before BU/collector filter)
+  // Role-filter before computing capsule options so a collector only sees their own BUs
+  const isCollector = (USER_ACCESS.role || '') === 'collector';
+  const capsuleBase = isCollector ? nonExcluded.filter(r => arPassesRoleFilter(r)) : nonExcluded;
+
   const allBus = [...new Set(
-    nonExcluded.map(r => arGetBu(r.customer_name) || 'Uncategorised')
+    capsuleBase.map(r => arGetBu(r.customer_name) || 'Uncategorised')
   )].sort((a, b) => {
     if (a === 'Uncategorised') return 1;
     if (b === 'Uncategorised') return -1;
@@ -2352,11 +2355,15 @@ function renderAR() {
   _arBuCapsuleHTML('ar-aging-bu-row', allBus);
   _arBuCapsuleHTML('ar-daily-bu-row', allBus);
 
-  // Compute all available collectors
-  const allCollectors = [...new Set(
-    nonExcluded.map(r => arGetCollector(r.customer_name)).filter(Boolean)
-  )].sort();
-  _arCollectorCapsuleHTML('ar-collector-row', allCollectors);
+  // Collectors only see their own data — no need for a collector filter capsule
+  const collectorWrap = document.getElementById('ar-collector-filter-wrap');
+  if (collectorWrap) collectorWrap.style.display = isCollector ? 'none' : '';
+  if (!isCollector) {
+    const allCollectors = [...new Set(
+      nonExcluded.map(r => arGetCollector(r.customer_name)).filter(Boolean)
+    )].sort();
+    _arCollectorCapsuleHTML('ar-collector-row', allCollectors);
+  }
 
   const rows = _arAllRows.filter(r => {
     if (!arPassesRoleFilter(r)) return false;
