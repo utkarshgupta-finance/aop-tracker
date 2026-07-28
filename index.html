@@ -742,7 +742,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <label class="cc-label">Customer <span class="cc-req">*</span></label>
           <div class="cc-cust-wrap" style="max-width:440px">
             <input type="text" id="cc-cust-input" class="cc-input" placeholder="Type to search customer…"
-              oninput="ccFilterCustomers()" onfocus="ccFilterCustomers()" onblur="ccHideDD('cc-cust-dd')" autocomplete="off">
+              oninput="ccFilterCustomers()" onfocus="ccFilterCustomers()" autocomplete="off">
             <div id="cc-cust-dd" class="cc-cust-dd" style="display:none"></div>
           </div>
         </div>
@@ -936,7 +936,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="cc-field" style="margin:0">
           <div class="cc-cust-wrap" style="max-width:440px">
             <input type="text" id="cc-hist-cust-input" class="cc-input" placeholder="Type customer name…"
-              oninput="ccHistFilter()" onfocus="ccHistFilter()" onblur="ccHideDD('cc-hist-cust-dd')" autocomplete="off">
+              oninput="ccHistFilter()" onfocus="ccHistFilter()" autocomplete="off">
             <div id="cc-hist-cust-dd" class="cc-cust-dd" style="display:none"></div>
           </div>
         </div>
@@ -3294,82 +3294,98 @@ function ccResetForm() {
 }
 
 /* ── Customer dropdown ───────────────────────────────────── */
-function ccHideDD(ddId) { setTimeout(() => { const el = document.getElementById(ddId); if (el) el.style.display = 'none'; }, 160); }
+let _ccDDListenerAttached = false;
 
-function ccFilterCustomers() {
-  const input = document.getElementById('cc-cust-input');
-  const dd    = document.getElementById('cc-cust-dd');
-  const q     = (input.value || '').toLowerCase().trim();
-  if (!q) { dd.style.display = 'none'; return; }
-  const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
-  if (!matches.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = matches.map(n =>
-    `<div class="cc-cust-dd-item" onmousedown="event.preventDefault();ccSelectCustomer(${JSON.stringify(n)})">${escHtml(n)}</div>`
+function ccHideDD() {} // kept for onblur="" attrs in HTML; actual close handled by click-outside
+
+function ccOpenDD(ddId, inputId, items, onSelect) {
+  const dd = document.getElementById(ddId);
+  if (!dd || !items.length) { if (dd) dd.style.display = 'none'; return; }
+  dd.innerHTML = items.map(n =>
+    `<div class="cc-cust-dd-item" onclick="event.stopPropagation();${onSelect}(${JSON.stringify(n)})">${escHtml(n)}</div>`
   ).join('');
   dd.style.display = '';
+  if (!_ccDDListenerAttached) {
+    _ccDDListenerAttached = true;
+    document.addEventListener('click', function ccOutsideClose(e) {
+      if (!e.target.closest('.cc-cust-wrap')) {
+        document.querySelectorAll('.cc-cust-dd').forEach(el => el.style.display = 'none');
+      }
+    });
+  }
+}
+
+function ccFilterCustomers() {
+  const q = (document.getElementById('cc-cust-input').value || '').toLowerCase().trim();
+  if (!q) { document.getElementById('cc-cust-dd').style.display = 'none'; return; }
+  const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
+  ccOpenDD('cc-cust-dd', 'cc-cust-input', matches, 'ccSelectCustomer');
 }
 
 async function ccSelectCustomer(name) {
-  _ccState.customerName = name;
-  _ccState.selectedInvIds = new Set();
-  document.getElementById('cc-cust-input').value  = name;
-  document.getElementById('cc-cust-dd').style.display = 'none';
-  // Reset sections below customer
-  document.getElementById('cc-sec2').style.display = 'none';
-  document.getElementById('cc-sec-noconn').style.display = 'none';
-  document.getElementById('cc-sec3').style.display = 'none';
-  document.getElementById('cc-sec4').style.display = 'none';
-  ccHideBranches();
-  document.getElementById('cc-sec5').style.display = 'none';
-  document.getElementById('cc-sec6').style.display = 'none';
-  document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
-  _ccState.connected = null;
+  try {
+    _ccState.customerName = name;
+    _ccState.selectedInvIds = new Set();
+    document.getElementById('cc-cust-input').value = name;
+    document.getElementById('cc-cust-dd').style.display = 'none';
+    document.getElementById('cc-sec2').style.display = 'none';
+    document.getElementById('cc-sec-noconn').style.display = 'none';
+    document.getElementById('cc-sec3').style.display = 'none';
+    document.getElementById('cc-sec4').style.display = 'none';
+    ccHideBranches();
+    document.getElementById('cc-sec5').style.display = 'none';
+    document.getElementById('cc-sec6').style.display = 'none';
+    document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+    _ccState.connected = null;
 
-  const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&status=not.eq.paid&order=due_date.asc`,
-    { headers: cmrrHdr() }
-  );
-  const invoices = r.ok ? await r.json() : [];
-  _ccState.invoices = invoices;
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&status=neq.paid&order=due_date.asc`,
+      { headers: cmrrHdr() }
+    );
+    const invoices = r.ok ? await r.json() : [];
+    _ccState.invoices = invoices;
 
-  const totalBal   = invoices.reduce((s, inv) => s + (inv.balance_inr || inv.balance || 0), 0);
-  const overdueCnt = invoices.filter(inv => arOverdueDays(inv.due_date) > 0).length;
-  const maxAging   = invoices.reduce((mx, inv) => Math.max(mx, arOverdueDays(inv.due_date)), 0);
-  const summaryEl  = document.getElementById('cc-cust-summary');
-  summaryEl.innerHTML = `Total outstanding: <strong>₹${f(totalBal)}</strong> across ${invoices.length} open invoice${invoices.length !== 1 ? 's' : ''}`
-    + (maxAging > 0 ? ` · Oldest overdue: <strong>${maxAging}d</strong>` : '');
-  summaryEl.style.display = '';
+    const totalBal = invoices.reduce((s, inv) => s + (inv.balance_inr || inv.balance || 0), 0);
+    const maxAging = invoices.reduce((mx, inv) => Math.max(mx, arOverdueDays(inv.due_date)), 0);
+    const summaryEl = document.getElementById('cc-cust-summary');
+    summaryEl.innerHTML = `Total outstanding: <strong>₹${f(totalBal)}</strong> across ${invoices.length} open invoice${invoices.length !== 1 ? 's' : ''}`
+      + (maxAging > 0 ? ` · Oldest overdue: <strong>${maxAging}d</strong>` : '');
+    summaryEl.style.display = '';
 
-  const listEl = document.getElementById('cc-invoice-list');
-  if (!invoices.length) {
-    listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3);padding:.5rem .65rem">No open invoices found for this customer.</div>';
-  } else {
-    listEl.innerHTML = invoices.map(inv => {
-      const days = arOverdueDays(inv.due_date);
-      const tagStyle = days > 90
-        ? 'background:#fee2e2;color:#991b1b'
-        : days > 60 ? 'background:#fef2f2;color:#b91c1c'
-        : days > 30 ? 'background:#fef9c3;color:#854d0e'
-        : days > 0  ? 'background:#fef9c3;color:#92400e'
-        : 'background:#dcfce7;color:#166534';
-      const tagText = days > 0 ? `${days}d overdue` : 'Current';
-      const amt = inv.balance_inr || inv.balance || 0;
-      const cbId = `cc-inv-${CSS.escape(inv.invoice_id)}`;
-      return `<div class="cc-invoice-row" onclick="ccToggleInvoice(${JSON.stringify(inv.invoice_id)})">
-        <input type="checkbox" id="${cbId}" value="${escHtml(inv.invoice_id)}">
-        <label for="${cbId}">
-          <span style="font-weight:600">${escHtml(inv.invoice_number || inv.invoice_id)}</span>
-          <span style="color:var(--txt3)">${inv.due_date || '—'}</span>
-          <span class="cc-inv-tag" style="${tagStyle}">${tagText}</span>
-          <span style="margin-left:auto">₹${f(amt)}</span>
-        </label>
-      </div>`;
-    }).join('');
+    const listEl = document.getElementById('cc-invoice-list');
+    if (!invoices.length) {
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3);padding:.5rem .65rem">No open invoices found for this customer.</div>';
+    } else {
+      listEl.innerHTML = invoices.map(inv => {
+        const days = arOverdueDays(inv.due_date);
+        const tagStyle = days > 90 ? 'background:#fee2e2;color:#991b1b'
+          : days > 60 ? 'background:#fef2f2;color:#b91c1c'
+          : days > 0  ? 'background:#fef9c3;color:#854d0e'
+          : 'background:#dcfce7;color:#166534';
+        const tagText = days > 0 ? `${days}d overdue` : 'Current';
+        const amt   = inv.balance_inr || inv.balance || 0;
+        const invId = inv.invoice_id || '';
+        const cbId  = 'cc-inv-' + invId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        return `<div class="cc-invoice-row" onclick="ccToggleInvoice(${JSON.stringify(invId)})">
+          <input type="checkbox" id="${cbId}" value="${escHtml(invId)}">
+          <label for="${cbId}">
+            <span style="font-weight:600">${escHtml(inv.invoice_number || invId)}</span>
+            <span style="color:var(--txt3)">${inv.due_date || '—'}</span>
+            <span class="cc-inv-tag" style="${tagStyle}">${tagText}</span>
+            <span style="margin-left:auto">₹${f(amt)}</span>
+          </label>
+        </div>`;
+      }).join('');
+    }
+    document.getElementById('cc-invoices-wrap').style.display = '';
+    document.getElementById('cc-sec2').style.display = '';
+    ccUpdateConnectedBtnState();
+    ccLoadContacts(name);
+  } catch(e) {
+    console.error('ccSelectCustomer error:', e);
+    document.getElementById('cc-cust-summary').innerHTML = 'Error loading customer data: ' + escHtml(e.message);
+    document.getElementById('cc-cust-summary').style.display = '';
   }
-  document.getElementById('cc-invoices-wrap').style.display = '';
-  document.getElementById('cc-sec2').style.display = '';
-  ccUpdateConnectedBtnState();
-  ccLoadContacts(name);
 }
 
 function ccToggleInvoice(invId) {
@@ -3726,16 +3742,10 @@ async function ccSubmit() {
 
 /* ── History sub-tab ─────────────────────────────────────── */
 function ccHistFilter() {
-  const input = document.getElementById('cc-hist-cust-input');
-  const dd    = document.getElementById('cc-hist-cust-dd');
-  const q     = (input.value || '').toLowerCase().trim();
-  if (!q) { dd.style.display = 'none'; return; }
+  const q = (document.getElementById('cc-hist-cust-input').value || '').toLowerCase().trim();
+  if (!q) { document.getElementById('cc-hist-cust-dd').style.display = 'none'; return; }
   const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
-  if (!matches.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = matches.map(n =>
-    `<div class="cc-cust-dd-item" onmousedown="event.preventDefault();ccHistSelectCustomer(${JSON.stringify(n)})">${escHtml(n)}</div>`
-  ).join('');
-  dd.style.display = '';
+  ccOpenDD('cc-hist-cust-dd', 'cc-hist-cust-input', matches, 'ccHistSelectCustomer');
 }
 
 async function ccHistSelectCustomer(name) {
