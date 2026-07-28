@@ -1159,7 +1159,7 @@ function renderNav() {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
   }
 }
 
@@ -1303,6 +1303,7 @@ async function loadSettingsPane() {
   // Pre-populate GBP rate input with current value
   const ri = document.getElementById('ar-settings-fx-rate');
   if (ri && _arCurrentRate) ri.value = _arCurrentRate;
+  await loadARExcluded();
   renderArExcludedList();
   await loadTagMaster();
   renderTagMasterList();
@@ -1684,9 +1685,16 @@ let _arSubTab   = 'invoices';
 let _arLastRows = []; // last filtered set for re-sort
 let _arCvSortCol = 'totalBal'; // customer view sort column
 let _arCvSortDir = -1; // -1=desc, 1=asc
-// Excluded customer substrings (persisted to localStorage)
-let _arExcluded = JSON.parse(localStorage.getItem('ar_excluded') || '["Mobisy Technologies UK"]');
-function arSaveExcluded() { localStorage.setItem('ar_excluded', JSON.stringify(_arExcluded)); }
+// Excluded customers — persisted to Supabase (ar_excluded_customers table)
+let _arExcluded = [];
+async function loadARExcluded() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_excluded_customers?select=customer_name&order=customer_name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    _arExcluded = rows.map(r => r.customer_name);
+  } catch(e) { console.warn('loadARExcluded:', e); }
+}
 let _arBuSelected        = new Set(); // empty = all BUs
 let _arCollectorSelected = new Set(); // empty = all collectors
 let _arCustTags          = {};        // { customer_name: [tag_name, ...] }
@@ -1702,7 +1710,7 @@ function showTab(id, btn) {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); }
   loadArCustMaster();
 }
 
@@ -1921,21 +1929,28 @@ function renderArExcludedList() {
     customers.filter(c => !_arExcluded.includes(c))
              .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
 }
-function arExclAdd() {
+async function arExclAdd() {
   const inp = document.getElementById('ar-excl-input');
   const v = inp.value;
   if (!v || _arExcluded.includes(v)) return;
   _arExcluded.push(v);
-  arSaveExcluded();
   inp.value = '';
   renderArExcludedList();
   renderAR();
+  await fetch(`${SUPABASE_URL}/rest/v1/ar_excluded_customers`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ customer_name: v }),
+  });
 }
-function arExclRemove(i) {
+async function arExclRemove(i) {
+  const name = _arExcluded[i];
   _arExcluded.splice(i, 1);
-  arSaveExcluded();
   renderArExcludedList();
   renderAR();
+  await fetch(`${SUPABASE_URL}/rest/v1/ar_excluded_customers?customer_name=eq.${encodeURIComponent(name)}`, {
+    method: 'DELETE', headers: cmrrHdr(),
+  });
 }
 
 /* ─── BU / COLLECTOR MASTER MANAGEMENT ───────────────────────── */
