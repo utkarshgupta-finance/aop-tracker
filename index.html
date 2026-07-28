@@ -1914,20 +1914,25 @@ async function saveArSettingsFxRate() {
 function renderArExcludedList() {
   const el = document.getElementById('ar-excl-list');
   if (!el) return;
-  if (!_arExcluded.length) { el.innerHTML = '<div style="font-size:11.5px;color:var(--txt3);font-style:italic">No exclusions</div>'; return; }
-  el.innerHTML = _arExcluded.map((ex, i) =>
-    `<div style="display:flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid var(--brd);border-radius:5px;padding:.3rem .7rem">
-      <span style="flex:1;font-size:12px;font-family:var(--mono)">${escHtml(ex)}</span>
-      <button onclick="arExclRemove(${i})" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;line-height:1;padding:0 .2rem" title="Remove">×</button>
-    </div>`
-  ).join('');
-  // Repopulate dropdown with customers not already excluded
+  if (!_arExcluded.length) {
+    el.innerHTML = '<div style="font-size:11.5px;color:var(--txt3);font-style:italic">No exclusions</div>';
+  } else {
+    el.innerHTML = _arExcluded.map((ex, i) =>
+      `<div style="display:flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid var(--brd);border-radius:5px;padding:.3rem .7rem">
+        <span style="flex:1;font-size:12px;font-family:var(--mono)">${escHtml(ex)}</span>
+        <button onclick="arExclRemove(${i})" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;line-height:1;padding:0 .2rem" title="Remove">×</button>
+      </div>`
+    ).join('');
+  }
+  // Populate dropdown — prefer customer master (always loaded in Settings), fall back to invoice rows
   const sel = document.getElementById('ar-excl-input');
   if (!sel) return;
-  const customers = [...new Set(_arAllRows.map(r => r.customer_name).filter(Boolean))].sort();
+  const fromMaster  = _cmData.map(r => r.customer_name).filter(Boolean);
+  const fromInvoices = _arAllRows.map(r => r.customer_name).filter(Boolean);
+  const allNames    = [...new Set([...fromMaster, ...fromInvoices])].sort();
   sel.innerHTML = '<option value="">— Select customer —</option>' +
-    customers.filter(c => !_arExcluded.includes(c))
-             .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    allNames.filter(c => !_arExcluded.includes(c))
+            .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
 }
 async function arExclAdd() {
   const inp = document.getElementById('ar-excl-input');
