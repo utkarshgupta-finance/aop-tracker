@@ -1038,8 +1038,9 @@ let USER_ACCESS     = null;   // { allowed_tabs, allowed_bus, is_admin, display_
 let USER_JWT        = null;   // Bearer token for all API calls
 const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
 const ALL_TABS_CFG = [
-  { id: 'ar',               label: 'AR',                fn: 'showARTab(this)' },
-  { id: 'collector-console', label: 'Collector Console', fn: 'showCollectorConsoleTab(this)' },
+  { id: 'ar',                label: 'AR',                fn: 'showARTab(this)' },
+  { id: 'collector-console', label: 'Collector Console', fn: 'showCollectorConsoleTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector'] },
 ];
 
 
@@ -1137,12 +1138,13 @@ function renderNav() {
   const allowed = USER_ACCESS.allowed_tabs.length === 0
     ? ALL_TABS_CFG.map(t => t.id)
     : USER_ACCESS.allowed_tabs;
+  const role = USER_ACCESS.role || 'admin-edit';
   const nav = document.getElementById('main-nav');
   nav.innerHTML = ALL_TABS_CFG
     .filter(t => allowed.includes(t.id))
+    .filter(t => !t.roles || t.roles.includes(role))
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
-  const role = USER_ACCESS.role || 'admin-edit';
   if (role === 'admin-edit') {
     nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
   }
