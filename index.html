@@ -380,6 +380,22 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .tag-picker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .tag-picker-new{display:flex;gap:.35rem;padding:.35rem .4rem;border-top:1px solid var(--brd);margin-top:.3rem}
 .tag-picker-new input{flex:1;font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt)}
+/* ── Collections Analysis ───────────────────────────────── */
+.ca-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+@media(max-width:900px){.ca-chart-row{grid-template-columns:1fr}}
+.ca-chart-card{background:var(--card-bg);border:1px solid var(--line);border-radius:10px;padding:1rem 1.15rem}
+.ca-chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin-bottom:.75rem}
+.ca-chart-wrap{position:relative;height:240px}
+.ca-tbl-wrap{overflow-x:auto;background:var(--card-bg);border:1px solid var(--line);border-radius:10px;margin-bottom:1rem}
+.ca-tbl{border-collapse:collapse;font-size:11px;font-family:var(--mono);min-width:100%;font-variant-numeric:tabular-nums}
+.ca-tbl th{padding:.4rem .75rem;background:var(--surf2);font-weight:600;color:var(--txt3);white-space:nowrap;text-align:right;border-bottom:1px solid var(--brd);font-size:10.5px;position:sticky;top:0}
+.ca-tbl th:first-child{text-align:left;position:sticky;left:0;background:var(--surf2);z-index:2}
+.ca-tbl td{padding:.35rem .75rem;border-bottom:1px solid var(--brd);text-align:right;white-space:nowrap;color:var(--ink-soft)}
+.ca-tbl td:first-child{text-align:left;font-weight:500;color:var(--ink);position:sticky;left:0;background:var(--card-bg);z-index:1}
+.ca-tbl tbody tr:last-child td{border-bottom:none}
+.ca-tbl tr.ca-section-hdr td{background:var(--surf2);font-weight:700;color:var(--ink);font-size:10.5px;letter-spacing:.04em}
+.ca-tbl tr.ca-section-hdr td:first-child{color:var(--navy2)}
+.ca-seg-pill{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:.35rem;vertical-align:middle;flex-shrink:0}
 /* ── Collector Console ───────────────────────────────────── */
 .cc-subtabs{display:flex;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .cc-stbtn{padding:.65rem 1.35rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s;white-space:nowrap}
@@ -629,6 +645,52 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
+  <!-- ── Collections Analysis Pane ───────────────────────────── -->
+  <div id="collections-analysis" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Collections Analysis</span>
+        <div id="ca-last-updated" style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem"></div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <span style="font-size:11px;color:var(--txt3)">Show last</span>
+          <select id="ca-months-sel" class="nret-sel" style="font-size:12px" onchange="renderCollectionsCharts()">
+            <option value="6">6 months</option>
+            <option value="12" selected>12 months</option>
+            <option value="24">24 months</option>
+            <option value="0">All</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Segment legend -->
+    <div style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
+      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#28527A"></span>Overall</span>
+      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#9A6416"></span>BAT</span>
+      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#1E6E45"></span>SME BU</span>
+      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#6B7894"></span>Others</span>
+    </div>
+
+    <!-- Charts -->
+    <div class="ca-chart-row">
+      <div class="ca-chart-card">
+        <div class="ca-chart-title">Collection as % of AR</div>
+        <div class="ca-chart-wrap"><canvas id="ca-chart-pct"></canvas></div>
+      </div>
+      <div class="ca-chart-card">
+        <div class="ca-chart-title">Rolling 6-Month Collections Average</div>
+        <div class="ca-chart-wrap"><canvas id="ca-chart-rolling"></canvas></div>
+      </div>
+    </div>
+
+    <!-- AR & Collections table -->
+    <div class="ca-tbl-wrap" id="ca-tbl-wrap">
+      <div style="padding:1.5rem;text-align:center;color:var(--txt3);font-size:12px">Loading…</div>
+    </div>
+  </div>
+
   <!-- ── Settings Pane ──────────────────────────────────────── -->
   <div id="settings" class="pane">
     <!-- GBP/INR Rate -->
@@ -1038,9 +1100,11 @@ let USER_ACCESS     = null;   // { allowed_tabs, allowed_bus, is_admin, display_
 let USER_JWT        = null;   // Bearer token for all API calls
 const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
 const ALL_TABS_CFG = [
-  { id: 'ar',                label: 'AR',                fn: 'showARTab(this)' },
-  { id: 'collector-console', label: 'Collector Console', fn: 'showCollectorConsoleTab(this)',
+  { id: 'ar',                  label: 'AR',                  fn: 'showARTab(this)' },
+  { id: 'collector-console',   label: 'Collector Console',   fn: 'showCollectorConsoleTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
+  { id: 'collections-analysis',label: 'Collections Analysis', fn: 'showCollectionsTab(this)',
+    roles: ['admin-edit','admin-view','admin'] },
 ];
 
 
@@ -1719,6 +1783,11 @@ function showARTab(btn) {
 function showCollectorConsoleTab(btn) {
   showTab('collector-console', btn);
   if (!_ccInited) { _ccInited = true; ccInit(); }
+}
+
+function showCollectionsTab(btn) {
+  showTab('collections-analysis', btn);
+  if (!_caInited) { _caInited = true; loadCollectionsData(); }
 }
 
 
@@ -3193,6 +3262,158 @@ function openCustTagPicker(btn, customerName) {
   </div>`;
   document.body.appendChild(div);
   setTimeout(() => document.addEventListener('click', closeTagPickerOutside, { once: true }), 10);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COLLECTIONS ANALYSIS
+   ══════════════════════════════════════════════════════════════ */
+
+let _caInited = false;
+let _caData   = [];   // sorted by month_order asc
+let _caChartPct     = null;
+let _caChartRolling = null;
+
+const CA_SEGS = [
+  { key: 'total',  label: 'Overall', color: '#28527A' },
+  { key: 'bat',    label: 'BAT',     color: '#9A6416' },
+  { key: 'sme_bu', label: 'SME BU',  color: '#1E6E45' },
+  { key: 'other',  label: 'Others',  color: '#6B7894' },
+];
+
+async function loadCollectionsData() {
+  const wrap = document.getElementById('ca-tbl-wrap');
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/collections_analysis?select=*&order=month_order.asc`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _caData = await r.json();
+    if (!_caData.length) {
+      wrap.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--txt3);font-size:12px">No data yet. Push from Google Sheets using the Apps Script.</div>';
+      return;
+    }
+    const latest = _caData.reduce((mx, d) => d.updated_at > mx ? d.updated_at : mx, '');
+    const luEl = document.getElementById('ca-last-updated');
+    if (luEl && latest) luEl.textContent = 'Last synced: ' + new Date(latest).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    renderCollectionsCharts();
+  } catch(e) {
+    wrap.innerHTML = `<div style="padding:1.5rem;color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function caVisibleData() {
+  const n = parseInt(document.getElementById('ca-months-sel')?.value || '12');
+  return n === 0 ? _caData : _caData.slice(-n);
+}
+
+function renderCollectionsCharts() {
+  if (!_caData.length) return;
+  const data   = caVisibleData();
+  const labels = data.map(d => d.month);
+
+  function makeDatasets(metricPrefix) {
+    return CA_SEGS.map(seg => ({
+      label:           seg.label,
+      data:            data.map(d => d[`${metricPrefix}_${seg.key}`] ?? null),
+      borderColor:     seg.color,
+      backgroundColor: seg.color + '22',
+      borderWidth:     2,
+      pointRadius:     3,
+      pointHoverRadius: 5,
+      tension:         0.35,
+      fill:            false,
+    }));
+  }
+
+  const chartOpts = (yLabel) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10, padding: 12 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + '%' : '—'}`,
+        },
+      },
+    },
+    scales: {
+      x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+      y: {
+        ticks: { font: { size: 10 }, callback: v => v + '%' },
+        title: { display: false },
+        grid: { color: '#e5e7eb' },
+      },
+    },
+  });
+
+  if (_caChartPct)     { _caChartPct.destroy();     _caChartPct = null; }
+  if (_caChartRolling) { _caChartRolling.destroy();  _caChartRolling = null; }
+
+  const ctxPct = document.getElementById('ca-chart-pct');
+  if (ctxPct) {
+    _caChartPct = new Chart(ctxPct, {
+      type: 'line',
+      data: { labels, datasets: makeDatasets('collection_pct') },
+      options: chartOpts('Collection %'),
+    });
+  }
+
+  const ctxRol = document.getElementById('ca-chart-rolling');
+  if (ctxRol) {
+    _caChartRolling = new Chart(ctxRol, {
+      type: 'line',
+      data: { labels, datasets: makeDatasets('rolling_avg') },
+      options: chartOpts('Rolling Avg %'),
+    });
+  }
+
+  renderCollectionsTable(data);
+}
+
+function renderCollectionsTable(data) {
+  const wrap = document.getElementById('ca-tbl-wrap');
+  if (!data.length) { wrap.innerHTML = ''; return; }
+
+  const fN  = v => (v == null || v === '') ? '—' : parseFloat(v).toFixed(2);
+  const fPct = v => (v == null || v === '') ? '—' : parseFloat(v).toFixed(1) + '%';
+
+  const months = data.map(d => d.month);
+  const thCols = months.map(m => `<th>${escHtml(m)}</th>`).join('');
+
+  function row(label, field, fmt, cls) {
+    const cells = data.map(d => `<td>${fmt(d[field])}</td>`).join('');
+    return `<tr class="${cls||''}"><td>${escHtml(label)}</td>${cells}</tr>`;
+  }
+  function sectionHdr(label) {
+    return `<tr class="ca-section-hdr"><td colspan="${months.length + 1}">${escHtml(label)}</td></tr>`;
+  }
+
+  wrap.innerHTML = `<table class="ca-tbl">
+    <thead><tr><th style="min-width:230px">Metric</th>${thCols}</tr></thead>
+    <tbody>
+      ${sectionHdr('AR (₹ Cr)')}
+      ${row('Total AR',   'ar_total',  fN)}
+      ${row('AR – Others','ar_other',  fN)}
+      ${row('AR – BAT',   'ar_bat',    fN)}
+      ${row('AR – SME BU','ar_sme_bu', fN)}
+      ${sectionHdr('Collections (₹ Cr)')}
+      ${row('Total Collections',       'collections_total',  fN)}
+      ${row('Collections – Others',    'collections_other',  fN)}
+      ${row('Collections – BAT',       'collections_bat',    fN)}
+      ${row('Collections – SME BU',    'collections_sme_bu', fN)}
+      ${sectionHdr('Collection as % of AR')}
+      ${row('Overall',  'collection_pct_total',  fPct)}
+      ${row('Others',   'collection_pct_other',  fPct)}
+      ${row('BAT',      'collection_pct_bat',     fPct)}
+      ${row('SME BU',   'collection_pct_sme_bu',  fPct)}
+      ${sectionHdr('Rolling 6-Month Collections Average')}
+      ${row('Overall',  'rolling_avg_total',  fPct)}
+      ${row('Others',   'rolling_avg_other',  fPct)}
+      ${row('BAT',      'rolling_avg_bat',    fPct)}
+      ${row('SME BU',   'rolling_avg_sme_bu', fPct)}
+    </tbody>
+  </table>`;
 }
 
 /* ══════════════════════════════════════════════════════════════
