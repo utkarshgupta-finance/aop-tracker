@@ -1230,6 +1230,8 @@ function renderNav() {
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
+    if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
+    if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
   }
 }
 
