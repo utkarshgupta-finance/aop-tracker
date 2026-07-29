@@ -3580,6 +3580,11 @@ async function loadCollectorLevel() {
     );
     if (!r.ok) throw new Error(await r.text());
     _clData = await r.json();
+    if (!_clData.length) {
+      if (hmMom)  hmMom.innerHTML  = '<div style="padding:1.2rem;color:var(--txt3);font-size:13px">No data yet — run the Apps Script to push collector performance data.</div>';
+      if (hmRoll) hmRoll.innerHTML = '';
+      return;
+    }
     renderCollectorLevel();
   } catch(e) {
     if (hmMom) hmMom.innerHTML = `<div style="padding:1.2rem;color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
