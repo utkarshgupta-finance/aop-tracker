@@ -3633,8 +3633,20 @@ function renderCollectorLevel() {
 function clHeatColor(v, lo, hi) {
   if (v == null || hi === lo) return '';
   const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
-  const h = Math.round(t * 120);
-  return `hsl(${h},72%,${88 - t * 10}%)`;
+  // Red #E06666 → Yellow #FFE599 → Green #57BB8A (matches Google Sheets scale)
+  let r, g, b;
+  if (t < 0.5) {
+    const s = t * 2;
+    r = Math.round(0xE0 + (0xFF - 0xE0) * s);
+    g = Math.round(0x66 + (0xE5 - 0x66) * s);
+    b = Math.round(0x66 + (0x99 - 0x66) * s);
+  } else {
+    const s = (t - 0.5) * 2;
+    r = Math.round(0xFF + (0x57 - 0xFF) * s);
+    g = Math.round(0xE5 + (0xBB - 0xE5) * s);
+    b = Math.round(0x99 + (0x8A - 0x99) * s);
+  }
+  return `rgb(${r},${g},${b})`;
 }
 
 function clRenderHeatmap(lookup, collectors, months) {
