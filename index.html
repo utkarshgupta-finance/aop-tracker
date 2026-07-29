@@ -3620,7 +3620,10 @@ function renderCollectorLevel() {
   const lookup = {};
   data.forEach(d => {
     if (!lookup[d.collector_name]) lookup[d.collector_name] = {};
-    lookup[d.collector_name][d.month] = { mom_pct: d.mom_pct, rolling_3m_avg: d.rolling_3m_avg };
+    lookup[d.collector_name][d.month] = {
+      mom_pct:       d.mom_pct        != null ? parseFloat(d.mom_pct)        : null,
+      rolling_3m_avg: d.rolling_3m_avg != null ? parseFloat(d.rolling_3m_avg) : null
+    };
   });
   if (_clView === 'heatmap') clRenderHeatmap(lookup, collectors, months);
   if (_clView === 'chart')   clRenderChart(lookup, collectors, months);
