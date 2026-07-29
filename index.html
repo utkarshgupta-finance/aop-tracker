@@ -396,6 +396,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ca-tbl tr.ca-section-hdr td{background:var(--surf2);font-weight:700;color:var(--ink);font-size:10.5px;letter-spacing:.04em}
 .ca-tbl tr.ca-section-hdr td:first-child{color:var(--navy2)}
 .ca-seg-pill{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:.35rem;vertical-align:middle;flex-shrink:0}
+.ca-seg-btn{display:inline-flex;align-items:center;gap:.35rem;font-size:11.5px;padding:.18rem .6rem;border-radius:999px;border:1.5px solid var(--col,#888);background:transparent;color:var(--txt3);cursor:pointer;transition:background .15s,color .15s,opacity .15s}
+.ca-seg-btn.active{background:var(--col,#888);color:#fff}
+.ca-seg-btn:not(.active){opacity:.45}
 /* ── Collector Console ───────────────────────────────────── */
 .cc-subtabs{display:flex;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .cc-stbtn{padding:.65rem 1.35rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s;white-space:nowrap}
@@ -666,11 +669,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
 
     <!-- Segment legend -->
-    <div style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
-      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#28527A"></span>Overall</span>
-      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#9A6416"></span>BAT</span>
-      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#1E6E45"></span>SME BU</span>
-      <span style="display:flex;align-items:center;gap:.35rem;font-size:11.5px;color:var(--ink-soft)"><span class="ca-seg-pill" style="background:#6B7894"></span>Others</span>
+    <div style="display:flex;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--txt3);margin-right:.15rem">Segments:</span>
+      <button class="ca-seg-btn active" data-seg="total"  style="--col:#28527A" onclick="caToggleSeg('total')"><span class="ca-seg-pill" style="background:#28527A"></span>Overall</button>
+      <button class="ca-seg-btn active" data-seg="bat"    style="--col:#9A6416" onclick="caToggleSeg('bat')"><span class="ca-seg-pill" style="background:#9A6416"></span>BAT</button>
+      <button class="ca-seg-btn active" data-seg="sme_bu" style="--col:#1E6E45" onclick="caToggleSeg('sme_bu')"><span class="ca-seg-pill" style="background:#1E6E45"></span>SME BU</button>
+      <button class="ca-seg-btn active" data-seg="other"  style="--col:#6B7894" onclick="caToggleSeg('other')"><span class="ca-seg-pill" style="background:#6B7894"></span>Others</button>
     </div>
 
     <!-- Charts -->
@@ -3307,65 +3311,86 @@ function caVisibleData() {
   return n === 0 ? _caData : _caData.slice(-n);
 }
 
+let _caActiveSegs = new Set(['total', 'bat', 'sme_bu', 'other']);
+
+function caToggleSeg(key) {
+  if (_caActiveSegs.has(key)) {
+    if (_caActiveSegs.size > 1) _caActiveSegs.delete(key);
+  } else {
+    _caActiveSegs.add(key);
+  }
+  document.querySelectorAll('.ca-seg-btn').forEach(btn => {
+    btn.classList.toggle('active', _caActiveSegs.has(btn.dataset.seg));
+  });
+  renderCollectionsCharts();
+}
+
 function renderCollectionsCharts() {
   if (!_caData.length) return;
   const data   = caVisibleData();
   const labels = data.map(d => d.month);
+  const activeSegs = CA_SEGS.filter(s => _caActiveSegs.has(s.key));
 
   function makeDatasets(metricPrefix) {
-    return CA_SEGS.map(seg => ({
-      label:           seg.label,
-      data:            data.map(d => d[`${metricPrefix}_${seg.key}`] ?? null),
-      borderColor:     seg.color,
-      backgroundColor: seg.color + '22',
-      borderWidth:     2,
-      pointRadius:     3,
+    return activeSegs.map(seg => ({
+      label:            seg.label,
+      data:             data.map(d => d[`${metricPrefix}_${seg.key}`] ?? null),
+      borderColor:      seg.color,
+      backgroundColor:  seg.color + '22',
+      borderWidth:      2,
+      pointRadius:      3,
       pointHoverRadius: 5,
-      tension:         0.35,
-      fill:            false,
+      tension:          0.35,
+      fill:             false,
     }));
   }
 
-  const chartOpts = (yLabel) => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10, padding: 12 } },
-      tooltip: {
-        callbacks: {
-          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + '%' : '—'}`,
+  function dynYAxis(datasets) {
+    const vals = datasets.flatMap(ds => ds.data).filter(v => v != null);
+    if (!vals.length) return {};
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = Math.max((hi - lo) * 0.12, 2);
+    return { min: Math.max(0, Math.floor(lo - pad)), max: Math.ceil(hi + pad) };
+  }
+
+  const chartOpts = (datasets) => {
+    const yBounds = dynYAxis(datasets);
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + '%' : '—'}`,
+          },
         },
       },
-    },
-    scales: {
-      x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
-      y: {
-        ticks: { font: { size: 10 }, callback: v => v + '%' },
-        title: { display: false },
-        grid: { color: '#e5e7eb' },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+        y: {
+          ...yBounds,
+          ticks: { font: { size: 10 }, callback: v => v + '%' },
+          title: { display: false },
+          grid: { color: '#e5e7eb' },
+        },
       },
-    },
-  });
+    };
+  };
 
   if (_caChartPct)     { _caChartPct.destroy();     _caChartPct = null; }
   if (_caChartRolling) { _caChartRolling.destroy();  _caChartRolling = null; }
 
   const ctxPct = document.getElementById('ca-chart-pct');
   if (ctxPct) {
-    _caChartPct = new Chart(ctxPct, {
-      type: 'line',
-      data: { labels, datasets: makeDatasets('collection_pct') },
-      options: chartOpts('Collection %'),
-    });
+    const ds = makeDatasets('pct');
+    _caChartPct = new Chart(ctxPct, { type: 'line', data: { labels, datasets: ds }, options: chartOpts(ds) });
   }
 
   const ctxRol = document.getElementById('ca-chart-rolling');
   if (ctxRol) {
-    _caChartRolling = new Chart(ctxRol, {
-      type: 'line',
-      data: { labels, datasets: makeDatasets('rolling_avg') },
-      options: chartOpts('Rolling Avg %'),
-    });
+    const ds = makeDatasets('rolling_avg');
+    _caChartRolling = new Chart(ctxRol, { type: 'line', data: { labels, datasets: ds }, options: chartOpts(ds) });
   }
 
   renderCollectionsTable(data);
@@ -3403,15 +3428,15 @@ function renderCollectionsTable(data) {
       ${row('Collections – BAT',       'collections_bat',    fN)}
       ${row('Collections – SME BU',    'collections_sme_bu', fN)}
       ${sectionHdr('Collection as % of AR')}
-      ${row('Overall',  'collection_pct_total',  fPct)}
-      ${row('Others',   'collection_pct_other',  fPct)}
-      ${row('BAT',      'collection_pct_bat',     fPct)}
-      ${row('SME BU',   'collection_pct_sme_bu',  fPct)}
+      ${_caActiveSegs.has('total')  ? row('Overall', 'pct_total',  fPct) : ''}
+      ${_caActiveSegs.has('other')  ? row('Others',  'pct_other',  fPct) : ''}
+      ${_caActiveSegs.has('bat')    ? row('BAT',     'pct_bat',    fPct) : ''}
+      ${_caActiveSegs.has('sme_bu') ? row('SME BU',  'pct_sme_bu', fPct) : ''}
       ${sectionHdr('Rolling 6-Month Collections Average')}
-      ${row('Overall',  'rolling_avg_total',  fPct)}
-      ${row('Others',   'rolling_avg_other',  fPct)}
-      ${row('BAT',      'rolling_avg_bat',    fPct)}
-      ${row('SME BU',   'rolling_avg_sme_bu', fPct)}
+      ${_caActiveSegs.has('total')  ? row('Overall', 'rolling_avg_total',  fPct) : ''}
+      ${_caActiveSegs.has('other')  ? row('Others',  'rolling_avg_other',  fPct) : ''}
+      ${_caActiveSegs.has('bat')    ? row('BAT',     'rolling_avg_bat',    fPct) : ''}
+      ${_caActiveSegs.has('sme_bu') ? row('SME BU',  'rolling_avg_sme_bu', fPct) : ''}
     </tbody>
   </table>`;
 }
