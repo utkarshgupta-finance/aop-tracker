@@ -381,8 +381,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .tag-picker-new{display:flex;gap:.35rem;padding:.35rem .4rem;border-top:1px solid var(--brd);margin-top:.3rem}
 .tag-picker-new input{flex:1;font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--bg);color:var(--txt)}
 /* ── Collections Analysis ───────────────────────────────── */
-.ca-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
-@media(max-width:900px){.ca-chart-row{grid-template-columns:1fr}}
+.ca-chart-row{display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:1rem}
 .ca-chart-card{background:var(--card-bg);border:1px solid var(--line);border-radius:10px;padding:1rem 1.15rem}
 .ca-chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin-bottom:.75rem}
 .ca-chart-wrap{position:relative;height:240px}
@@ -404,6 +403,17 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ca-view-btn:last-child{border-radius:0 6px 6px 0}
 .ca-view-btn:only-child{border-radius:6px}
 .ca-view-btn.active{background:var(--navy2,#28527A);color:#fff;border-color:var(--navy2,#28527A)}
+.ca-subtab-bar{display:flex;border-bottom:2px solid var(--brd);margin-bottom:1.1rem;gap:0}
+.ca-subtab{font-size:13px;padding:.45rem 1.2rem;border:none;border-bottom:2.5px solid transparent;margin-bottom:-2px;background:none;color:var(--txt3);cursor:pointer;font-weight:500;transition:.15s}
+.ca-subtab.active{color:var(--navy2,#28527A);border-bottom-color:var(--navy2,#28527A);font-weight:700}
+.ca-hm-wrap{overflow-x:auto;background:var(--card-bg);border:1px solid var(--line);border-radius:10px;margin-bottom:1rem}
+.ca-hm-tbl{border-collapse:collapse;font-size:11px;font-family:var(--mono);min-width:100%;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ca-hm-tbl th{padding:.4rem .75rem;background:var(--surf2);font-weight:600;color:var(--txt3);text-align:right;border-bottom:1px solid var(--brd);font-size:10.5px;position:sticky;top:0}
+.ca-hm-tbl th:first-child{text-align:left;position:sticky;left:0;background:var(--surf2);z-index:2}
+.ca-hm-tbl td{padding:.35rem .75rem;border-bottom:1px solid var(--brd);text-align:right}
+.ca-hm-tbl td:first-child{text-align:left;font-weight:600;color:var(--ink);position:sticky;left:0;background:var(--card-bg);z-index:1}
+.ca-hm-tbl tr:last-child td{border-bottom:none}
+.ca-hm-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin:.1rem 0 .4rem}
 /* ── Collector Console ───────────────────────────────────── */
 .cc-subtabs{display:flex;border-bottom:1px solid var(--brd);margin-bottom:1.25rem}
 .cc-stbtn{padding:.65rem 1.35rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s;white-space:nowrap}
@@ -655,59 +665,96 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   </div>
   <!-- ── Collections Analysis Pane ───────────────────────────── -->
   <div id="collections-analysis" class="pane">
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
-      <div>
-        <span class="slabel" style="margin:0">Collections Analysis</span>
-        <div id="ca-last-updated" style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem"></div>
-      </div>
-      <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
-        <!-- Chart / Table toggle -->
-        <div style="display:flex">
-          <button id="ca-view-chart" class="ca-view-btn active" onclick="caSetView('chart')">Charts</button>
-          <button id="ca-view-table" class="ca-view-btn" onclick="caSetView('table')">Table</button>
+    <span class="slabel" style="margin:0 0 .75rem">Collections Analysis</span>
+    <!-- Sub-tabs -->
+    <div class="ca-subtab-bar">
+      <button class="ca-subtab active" onclick="caSubTab('overall',this)">Overall Analysis</button>
+      <button class="ca-subtab"        onclick="caSubTab('collector',this)">Collector Level</button>
+    </div>
+
+    <!-- ── Overall Analysis ─────────────────────────────── -->
+    <div id="ca-sec-overall">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+        <div id="ca-last-updated" style="font-size:10px;color:var(--ink-faint);font-family:var(--mono)"></div>
+        <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <div style="display:flex">
+            <button id="ca-view-chart" class="ca-view-btn active" onclick="caSetView('chart')">Charts</button>
+            <button id="ca-view-table" class="ca-view-btn"        onclick="caSetView('table')">Table</button>
+          </div>
+          <button id="ca-show-labels-btn" class="ca-view-btn" style="border-radius:6px" onclick="caToggleLabels()">Show values</button>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span style="font-size:11px;color:var(--txt3)">Show last</span>
+            <select id="ca-months-sel" class="nret-sel" style="font-size:12px" onchange="renderCollectionsCharts()">
+              <option value="6">6 months</option>
+              <option value="12" selected>12 months</option>
+              <option value="24">24 months</option>
+              <option value="0">All</option>
+            </select>
+          </div>
         </div>
-        <!-- Show values toggle (charts only) -->
-        <button id="ca-show-labels-btn" class="ca-view-btn" style="border-radius:6px" onclick="caToggleLabels()">Show values</button>
-        <!-- Month range -->
-        <div style="display:flex;gap:.5rem;align-items:center">
-          <span style="font-size:11px;color:var(--txt3)">Show last</span>
-          <select id="ca-months-sel" class="nret-sel" style="font-size:12px" onchange="renderCollectionsCharts()">
-            <option value="6">6 months</option>
-            <option value="12" selected>12 months</option>
-            <option value="24">24 months</option>
-            <option value="0">All</option>
-          </select>
+      </div>
+      <div style="display:flex;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--txt3);margin-right:.15rem">Segments:</span>
+        <button class="ca-seg-btn active" data-seg="total"  style="--col:#28527A" onclick="caToggleSeg('total')"><span class="ca-seg-pill" style="background:#28527A"></span>Overall</button>
+        <button class="ca-seg-btn active" data-seg="bat"    style="--col:#9A6416" onclick="caToggleSeg('bat')"><span class="ca-seg-pill" style="background:#9A6416"></span>BAT</button>
+        <button class="ca-seg-btn active" data-seg="sme_bu" style="--col:#1E6E45" onclick="caToggleSeg('sme_bu')"><span class="ca-seg-pill" style="background:#1E6E45"></span>SME BU</button>
+        <button class="ca-seg-btn active" data-seg="other"  style="--col:#6B7894" onclick="caToggleSeg('other')"><span class="ca-seg-pill" style="background:#6B7894"></span>Others</button>
+      </div>
+      <div id="ca-charts-section">
+        <div class="ca-chart-row">
+          <div class="ca-chart-card">
+            <div class="ca-chart-title">Collection as % of AR</div>
+            <div class="ca-chart-wrap"><canvas id="ca-chart-pct"></canvas></div>
+          </div>
+          <div class="ca-chart-card">
+            <div class="ca-chart-title">Rolling 6-Month Collections Average</div>
+            <div class="ca-chart-wrap"><canvas id="ca-chart-rolling"></canvas></div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Segment legend -->
-    <div style="display:flex;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap;align-items:center">
-      <span style="font-size:11px;color:var(--txt3);margin-right:.15rem">Segments:</span>
-      <button class="ca-seg-btn active" data-seg="total"  style="--col:#28527A" onclick="caToggleSeg('total')"><span class="ca-seg-pill" style="background:#28527A"></span>Overall</button>
-      <button class="ca-seg-btn active" data-seg="bat"    style="--col:#9A6416" onclick="caToggleSeg('bat')"><span class="ca-seg-pill" style="background:#9A6416"></span>BAT</button>
-      <button class="ca-seg-btn active" data-seg="sme_bu" style="--col:#1E6E45" onclick="caToggleSeg('sme_bu')"><span class="ca-seg-pill" style="background:#1E6E45"></span>SME BU</button>
-      <button class="ca-seg-btn active" data-seg="other"  style="--col:#6B7894" onclick="caToggleSeg('other')"><span class="ca-seg-pill" style="background:#6B7894"></span>Others</button>
-    </div>
-
-    <!-- Charts -->
-    <div id="ca-charts-section">
-    <div class="ca-chart-row">
-      <div class="ca-chart-card">
-        <div class="ca-chart-title">Collection as % of AR</div>
-        <div class="ca-chart-wrap"><canvas id="ca-chart-pct"></canvas></div>
+      <div class="ca-tbl-wrap" id="ca-tbl-wrap" style="display:none">
+        <div style="padding:1.5rem;text-align:center;color:var(--txt3);font-size:12px">Loading…</div>
       </div>
-      <div class="ca-chart-card">
-        <div class="ca-chart-title">Rolling 6-Month Collections Average</div>
-        <div class="ca-chart-wrap"><canvas id="ca-chart-rolling"></canvas></div>
-      </div>
-    </div>
-    </div><!-- /ca-charts-section -->
+    </div><!-- /ca-sec-overall -->
 
-    <!-- AR & Collections table -->
-    <div class="ca-tbl-wrap" id="ca-tbl-wrap" style="display:none">
-      <div style="padding:1.5rem;text-align:center;color:var(--txt3);font-size:12px">Loading…</div>
-    </div>
+    <!-- ── Collector Level ───────────────────────────────── -->
+    <div id="ca-sec-collector" style="display:none">
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
+        <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <div style="display:flex">
+            <button id="cl-view-heatmap" class="ca-view-btn active" onclick="clSetView('heatmap')">Heatmap</button>
+            <button id="cl-view-chart"   class="ca-view-btn"        onclick="clSetView('chart')">Chart</button>
+            <button id="cl-view-table"   class="ca-view-btn"        onclick="clSetView('table')">Table</button>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span style="font-size:11px;color:var(--txt3)">Show last</span>
+            <select id="cl-months-sel" class="nret-sel" style="font-size:12px" onchange="renderCollectorLevel()">
+              <option value="6">6 months</option>
+              <option value="12" selected>12 months</option>
+              <option value="0">All</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- Heatmap -->
+      <div id="cl-heatmap-section">
+        <div class="ca-hm-section-title">MOM Collection %</div>
+        <div class="ca-hm-wrap" id="cl-hm-mom"><div style="padding:1.2rem;color:var(--txt3);font-size:12px">Loading…</div></div>
+        <div class="ca-hm-section-title">Rolling 3-Month Average</div>
+        <div class="ca-hm-wrap" id="cl-hm-roll"></div>
+      </div>
+      <!-- Chart -->
+      <div id="cl-chart-section" style="display:none">
+        <div class="ca-chart-card">
+          <div class="ca-chart-title">Rolling 3-Month Collection Average by Collector</div>
+          <div class="ca-chart-wrap" style="height:320px"><canvas id="cl-chart"></canvas></div>
+        </div>
+      </div>
+      <!-- Table -->
+      <div id="cl-table-section" style="display:none">
+        <div class="ca-tbl-wrap" id="cl-tbl-wrap"></div>
+      </div>
+    </div><!-- /ca-sec-collector -->
   </div>
 
   <!-- ── Settings Pane ──────────────────────────────────────── -->
@@ -3501,6 +3548,155 @@ function renderCollectionsTable(data) {
       ${_caActiveSegs.has('sme_bu') ? row('SME BU',  'rolling_avg_sme_bu', fPct) : ''}
     </tbody>
   </table>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COLLECTIONS ANALYSIS – COLLECTOR LEVEL
+   ══════════════════════════════════════════════════════════════ */
+
+function caSubTab(tab, btn) {
+  document.querySelectorAll('.ca-subtab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('ca-sec-overall').style.display   = tab === 'overall'   ? '' : 'none';
+  document.getElementById('ca-sec-collector').style.display = tab === 'collector' ? '' : 'none';
+  if (tab === 'collector' && !_clInited) { _clInited = true; loadCollectorLevel(); }
+  else if (tab === 'collector' && _clData.length) renderCollectorLevel();
+}
+
+let _clInited  = false;
+let _clData    = [];
+let _clView    = 'heatmap';
+let _clChart   = null;
+const CL_COLORS = ['#3B82F6','#EF4444','#F59E0B','#10B981','#8B5CF6','#EC4899','#06B6D4','#84CC16'];
+
+async function loadCollectorLevel() {
+  const hmMom  = document.getElementById('cl-hm-mom');
+  const hmRoll = document.getElementById('cl-hm-roll');
+  if (hmMom) hmMom.innerHTML = '<div style="padding:1.2rem;color:var(--txt3);font-size:12px">Loading…</div>';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/collector_performance?select=*&order=month_order.asc`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error(await r.text());
+    _clData = await r.json();
+    renderCollectorLevel();
+  } catch(e) {
+    if (hmMom) hmMom.innerHTML = `<div style="padding:1.2rem;color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function clVisibleData() {
+  const n = parseInt(document.getElementById('cl-months-sel')?.value || '12');
+  if (!n) return _clData;
+  const orders = [...new Set(_clData.map(d => d.month_order))].sort((a,b) => a-b);
+  const cutoff = orders.length > n ? orders[orders.length - n] : 0;
+  return _clData.filter(d => d.month_order >= cutoff);
+}
+
+function clSetView(v) {
+  _clView = v;
+  document.getElementById('cl-heatmap-section').style.display = v === 'heatmap' ? '' : 'none';
+  document.getElementById('cl-chart-section').style.display   = v === 'chart'   ? '' : 'none';
+  document.getElementById('cl-table-section').style.display   = v === 'table'   ? '' : 'none';
+  ['heatmap','chart','table'].forEach(x =>
+    document.getElementById(`cl-view-${x}`)?.classList.toggle('active', x === v)
+  );
+  if (_clData.length) renderCollectorLevel();
+}
+
+function renderCollectorLevel() {
+  const data = clVisibleData();
+  if (!data.length) return;
+  const monthOrder = {};
+  data.forEach(d => { monthOrder[d.month] = d.month_order; });
+  const months = [...new Set(data.map(d => d.month))].sort((a,b) => monthOrder[a] - monthOrder[b]);
+  const collectors = [...new Set(data.map(d => d.collector_name))].sort();
+  const lookup = {};
+  data.forEach(d => {
+    if (!lookup[d.collector_name]) lookup[d.collector_name] = {};
+    lookup[d.collector_name][d.month] = { mom_pct: d.mom_pct, rolling_3m_avg: d.rolling_3m_avg };
+  });
+  if (_clView === 'heatmap') clRenderHeatmap(lookup, collectors, months);
+  if (_clView === 'chart')   clRenderChart(lookup, collectors, months);
+  if (_clView === 'table')   clRenderTable(lookup, collectors, months);
+}
+
+function clHeatColor(v, lo, hi) {
+  if (v == null || hi === lo) return '';
+  const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+  const h = Math.round(t * 120);
+  return `hsl(${h},72%,${88 - t * 10}%)`;
+}
+
+function clRenderHeatmap(lookup, collectors, months) {
+  function makeTable(field, lo, hi) {
+    const ths = months.map(m => `<th>${escHtml(m)}</th>`).join('');
+    const rows = collectors.map(c => {
+      const cells = months.map(m => {
+        const v = lookup[c]?.[m]?.[field];
+        const bg = v != null ? `background:${clHeatColor(v, lo, hi)};color:#111` : '';
+        return `<td style="${bg}">${v != null ? v.toFixed(1) + '%' : '—'}</td>`;
+      }).join('');
+      return `<tr><td>${escHtml(c)}</td>${cells}</tr>`;
+    }).join('');
+    return `<table class="ca-hm-tbl"><thead><tr><th>Collector</th>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  const momVals  = collectors.flatMap(c => months.map(m => lookup[c]?.[m]?.mom_pct)).filter(v => v != null);
+  const rollVals = collectors.flatMap(c => months.map(m => lookup[c]?.[m]?.rolling_3m_avg)).filter(v => v != null);
+  const momLo = Math.min(...momVals),  momHi = Math.max(...momVals);
+  const rlLo  = Math.min(...rollVals), rlHi  = Math.max(...rollVals);
+  document.getElementById('cl-hm-mom').innerHTML  = makeTable('mom_pct',       momLo, momHi);
+  document.getElementById('cl-hm-roll').innerHTML = makeTable('rolling_3m_avg', rlLo,  rlHi);
+}
+
+function clRenderChart(lookup, collectors, months) {
+  if (_clChart) { _clChart.destroy(); _clChart = null; }
+  const ctx = document.getElementById('cl-chart');
+  if (!ctx) return;
+  const datasets = collectors.map((c, i) => ({
+    label: c,
+    data:  months.map(m => lookup[c]?.[m]?.rolling_3m_avg ?? null),
+    borderColor: CL_COLORS[i % CL_COLORS.length],
+    backgroundColor: CL_COLORS[i % CL_COLORS.length] + '22',
+    borderWidth: 2, pointRadius: 3, tension: 0.35, fill: false,
+  }));
+  const vals = datasets.flatMap(d => d.data).filter(v => v != null);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max((hi - lo) * 0.12, 2);
+  _clChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: months, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10, padding: 12 } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toFixed(1) + '%' : '—'}` } },
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+        y: { min: Math.max(0, Math.floor(lo - pad)), max: Math.ceil(hi + pad),
+             ticks: { font: { size: 10 }, callback: v => v + '%' }, grid: { color: '#e5e7eb' } },
+      },
+    },
+  });
+}
+
+function clRenderTable(lookup, collectors, months) {
+  const ths = months.map(m => `<th>${escHtml(m)}</th>`).join('');
+  function section(label, field) {
+    const rows = collectors.map(c => {
+      const cells = months.map(m => {
+        const v = lookup[c]?.[m]?.[field];
+        return `<td>${v != null ? v.toFixed(1) + '%' : '—'}</td>`;
+      }).join('');
+      return `<tr><td>${escHtml(c)}</td>${cells}</tr>`;
+    }).join('');
+    return `<tr class="ca-section-hdr"><td colspan="${months.length+1}">${label}</td></tr>${rows}`;
+  }
+  document.getElementById('cl-tbl-wrap').innerHTML =
+    `<table class="ca-tbl"><thead><tr><th style="min-width:160px">Collector</th>${ths}</tr></thead>
+     <tbody>${section('MOM Collection %','mom_pct')}${section('Rolling 3-Month Avg','rolling_3m_avg')}</tbody></table>`;
 }
 
 /* ══════════════════════════════════════════════════════════════
