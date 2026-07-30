@@ -1409,6 +1409,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <th style="text-align:left">BU</th>
           <th style="text-align:left">Collector</th>
           <th style="text-align:left">Invoice #</th>
+          <th style="text-align:right">Amount (₹)</th>
           <th style="text-align:left">Dispute Type</th>
           <th style="text-align:left">Description</th>
           <th style="text-align:center">Status</th>
@@ -2852,8 +2853,9 @@ async function savePermission(key, value) {
 }
 
 /* ─── DISPUTED INVOICES TAB ──────────────────────────────────── */
-let _diRows = [];
-let _diInited = false;
+let _diRows    = [];
+let _diAmounts = {}; // invoice_id → { balance_inr, total_inr, currency_code, balance }
+let _diInited  = false;
 
 function showDisputedInvoicesTab(btn) {
   showTab('disputed-invoices', btn);
@@ -2874,6 +2876,18 @@ async function loadDisputedInvoices() {
     );
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _diRows = await r.json();
+    // Fetch invoice amounts for all dispute invoice_ids
+    const invIds = [...new Set(_diRows.map(d => d.invoice_id).filter(Boolean))];
+    if (invIds.length) {
+      const ar = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${invIds.map(encodeURIComponent).join(',')})&select=invoice_id,balance_inr,total_inr,balance,currency_code`,
+        { headers: cmrrHdr() }
+      );
+      if (ar.ok) {
+        const arRows = await ar.json();
+        _diAmounts = Object.fromEntries(arRows.map(a => [a.invoice_id, a]));
+      }
+    }
     if (statusEl) statusEl.textContent = '';
     _populateDiFilterBu();
     renderDisputedInvoices();
@@ -3123,7 +3137,7 @@ function renderDisputedInvoices() {
   if (statusEl) statusEl.textContent = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="10" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
     return;
   }
 
@@ -3132,6 +3146,11 @@ function renderDisputedInvoices() {
     const collector  = arGetCollector(r.customer_name);
     const buBadge    = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--txt3)">—</span>';
     const invLabel   = escHtml(r.invoice_number || r.invoice_id || '—');
+    const amtData    = _diAmounts[r.invoice_id];
+    const amtVal     = amtData ? (amtData.balance_inr ?? amtData.balance ?? null) : null;
+    const amtCell    = amtVal != null
+      ? `<span style="font-size:12px;font-family:monospace;font-weight:500">₹${Math.round(amtVal).toLocaleString('en-IN')}</span>`
+      : '<span style="color:var(--txt3)">—</span>';
     const disputeLabel = getDiDisputeLabel(r.dispute_type);
     const isOpen     = r.status !== 'closed';
     const statusPill = isOpen
@@ -3155,6 +3174,7 @@ function renderDisputedInvoices() {
       <td>${buBadge}</td>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(collector || '—')}</td>
       <td style="font-size:12px;font-family:monospace">${invLabel}${openTimesNote}</td>
+      <td style="text-align:right">${amtCell}</td>
       <td style="font-size:12px"><span style="background:var(--red-bg);color:var(--red);padding:.1rem .4rem;border-radius:4px;font-weight:600">${escHtml(disputeLabel)}</span></td>
       <td>${descCell}</td>
       <td style="text-align:center">${statusPill}</td>
