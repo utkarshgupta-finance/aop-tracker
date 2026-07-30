@@ -2149,8 +2149,9 @@ function escHtml(s) {
 }
 
 /* ─── CONTACTS MASTER ────────────────────────────────────────── */
-let _ctcContacts       = [];
-let _ctcEditId         = null;
+let _ctcContacts         = [];
+let _ctcEditId           = null;
+let _ctcPendingDeleteId  = null;
 let _contactCategories = [];
 let _ctcatEditId       = null;
 
@@ -2257,7 +2258,9 @@ function renderContactsTable() {
       ? `<button data-ctc-id="${escHtml(c.id)}" onclick="openContactModal(this.dataset.ctcId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>`
       : '';
     const deleteBtn = (canDelete && canMutateContact(c))
-      ? `<button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem" title="Delete">×</button>`
+      ? (_ctcPendingDeleteId === c.id
+          ? `<span style="white-space:nowrap;font-size:11px">Delete?&nbsp;<button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="color:#fff;background:var(--red);border:none;border-radius:3px;cursor:pointer;padding:.1rem .4rem;font-size:11px">Yes</button>&nbsp;<button onclick="cancelDeleteContact()" style="color:var(--txt2);background:#f3f4f6;border:1px solid var(--brd);border-radius:3px;cursor:pointer;padding:.1rem .4rem;font-size:11px">No</button></span>`
+          : `<button data-ctc-id="${escHtml(c.id)}" onclick="initiateDeleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem" title="Delete contact">×</button>`)
       : '';
     const catLabel = c.category
       ? (_contactCategories.find(x => x.value === c.category)?.label || c.category.replace(/_/g, ' '))
@@ -2382,15 +2385,29 @@ async function saveContact() {
   closeContactModal();
 }
 
+function initiateDeleteContact(id) {
+  _ctcPendingDeleteId = id;
+  renderContactsTable();
+}
+
+function cancelDeleteContact() {
+  _ctcPendingDeleteId = null;
+  renderContactsTable();
+}
+
 async function deleteContact(id) {
-  if (!confirm('Delete this contact?')) return;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
     method: 'DELETE', headers: cmrrHdr()
   });
   if (r.ok) {
+    _ctcPendingDeleteId = null;
     _ctcContacts = _ctcContacts.filter(c => c.id !== id);
     _populateCtcCustomerFilter();
     renderContactsTable();
+  } else {
+    _ctcPendingDeleteId = null;
+    renderContactsTable();
+    alert('Delete failed. Please try again.');
   }
 }
 
@@ -5413,7 +5430,8 @@ let _ccInited    = false;
 let _ccState        = {};
 let _ccCustNames    = [];
 let _ccHistCust     = null;
-let _ccOpenDisputes = {}; // invoice_id → dispute row for current customer
+let _ccOpenDisputes    = {}; // invoice_id → dispute row for current customer
+let _ccPendingDeleteId = null;
 
 function ccMakeState() {
   return {
@@ -5697,7 +5715,9 @@ function ccRenderContactsMini() {
       ? `<span style="font-size:9.5px;font-weight:600;background:#d1fae5;color:#065f46;padding:.1rem .38rem;border-radius:20px;cursor:pointer" data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniToggleActive(this.dataset.ccCtcId, false)">Active</span>`
       : `<span style="font-size:9.5px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.1rem .38rem;border-radius:20px;cursor:pointer" data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniToggleActive(this.dataset.ccCtcId, true)">Inactive</span>`;
     const deleteBtn = canDelete
-      ? `<button data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniDeleteContact(this.dataset.ccCtcId)" style="font-size:10px;color:var(--red);background:none;border:none;cursor:pointer;padding:0 .2rem;margin-left:.3rem" title="Delete">×</button>`
+      ? (_ccPendingDeleteId === c.id
+          ? `<span style="white-space:nowrap;font-size:10px">Del?&nbsp;<button data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniDeleteContact(this.dataset.ccCtcId)" style="color:#fff;background:var(--red);border:none;border-radius:3px;cursor:pointer;padding:.05rem .35rem;font-size:10px">✓</button>&nbsp;<button onclick="ccCancelDeleteContact()" style="color:var(--txt2);background:#f3f4f6;border:1px solid var(--brd);border-radius:3px;cursor:pointer;padding:.05rem .35rem;font-size:10px">✗</button></span>`
+          : `<button data-cc-ctc-id="${escHtml(c.id)}" onclick="ccInitiateDeleteContact(this.dataset.ccCtcId)" style="font-size:10px;color:var(--red);background:none;border:none;cursor:pointer;padding:0 .2rem;margin-left:.3rem" title="Delete">×</button>`)
       : '';
     return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--brd);${active ? '' : 'opacity:.55'}">
       <div style="flex:1;min-width:0">
@@ -5726,15 +5746,27 @@ async function ccMiniToggleActive(id, newVal) {
   }
 }
 
+function ccInitiateDeleteContact(id) {
+  _ccPendingDeleteId = id;
+  ccRenderContactsMini();
+}
+
+function ccCancelDeleteContact() {
+  _ccPendingDeleteId = null;
+  ccRenderContactsMini();
+}
+
 async function ccMiniDeleteContact(id) {
-  if (!confirm('Delete this contact?')) return;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
     method: 'DELETE', headers: cmrrHdr()
   });
+  _ccPendingDeleteId = null;
   if (r.ok) {
     _ccState.contacts = _ccState.contacts.filter(c => c.id !== id);
     if (_ccState.contactId === id) { _ccState.contactId = null; document.getElementById('cc-contact-sel').value = ''; }
     ccRenderContactSelect();
+    ccRenderContactsMini();
+  } else {
     ccRenderContactsMini();
   }
 }
@@ -6102,11 +6134,12 @@ async function ccSubmit() {
             status:                 'open',
           };
         });
-        await fetch(`${SUPABASE_URL}/rest/v1/invoice_disputes`, {
+        const dr = await fetch(`${SUPABASE_URL}/rest/v1/invoice_disputes`, {
           method: 'POST',
           headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify(disputeRows),
         });
+        if (!dr.ok) throw new Error('Dispute records failed: ' + await dr.text());
       }
     }
     ccResetForm();
