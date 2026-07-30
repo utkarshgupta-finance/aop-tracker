@@ -1133,6 +1133,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="cc-invoices-wrap" style="display:none">
           <label class="cc-label">Select invoices to discuss <span class="cc-req">*</span></label>
           <div id="cc-invoice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:.25rem .15rem"></div>
+          <div id="cc-disputes-panel" style="display:none;margin-top:.6rem"></div>
         </div>
       </div>
 
@@ -1393,21 +1394,48 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
       <input type="text" id="di-search" placeholder="Search customer, invoice, description…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderDisputedInvoices()">
       <select id="di-filter-bu" class="nret-sel" style="font-size:12px;min-width:120px" onchange="renderDisputedInvoices()"><option value="">All BUs</option></select>
+      <select id="di-filter-status" class="nret-sel" style="font-size:12px;min-width:110px" onchange="renderDisputedInvoices()">
+        <option value="open">Open only</option>
+        <option value="closed">Closed only</option>
+        <option value="">All</option>
+      </select>
     </div>
     <div id="di-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.4rem"></div>
     <div style="overflow-x:auto">
-      <table class="ar-tbl" style="min-width:700px">
+      <table class="ar-tbl" style="min-width:820px">
         <thead><tr>
           <th style="text-align:left">Customer</th>
           <th style="text-align:left">BU</th>
-          <th style="text-align:left">Invoice(s)</th>
+          <th style="text-align:left">Invoice #</th>
           <th style="text-align:left">Dispute Type</th>
-          <th style="text-align:left">Description</th>
-          <th style="text-align:left">Logged By</th>
-          <th style="text-align:left">Date</th>
+          <th style="text-align:left;max-width:200px">Description</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:left">Opened</th>
+          <th style="text-align:left">Closed</th>
+          <th></th>
         </tr></thead>
         <tbody id="di-tbody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Close Dispute modal -->
+  <div id="di-close-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeDiCloseModal()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span style="font-size:14px;font-weight:600;color:var(--navy)">Close Dispute</span>
+        <button onclick="closeDiCloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div id="di-close-info" style="font-size:12.5px;color:var(--txt2);margin-bottom:.85rem;padding:.6rem .75rem;background:#f9fafb;border-radius:6px;border:1px solid var(--brd)"></div>
+      <div>
+        <label class="cc-label">Closing note (optional)</label>
+        <textarea id="di-close-note" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;resize:vertical" placeholder="Resolution summary, payment received, etc."></textarea>
+      </div>
+      <div id="di-close-err" style="font-size:11.5px;color:var(--red);margin-top:.5rem;min-height:1rem"></div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button onclick="closeDiCloseModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+        <button onclick="confirmCloseDispute()" class="modal-csv" id="di-close-confirm-btn" style="padding:.35rem .9rem;font-size:12.5px;background:#166534">Close Dispute</button>
+      </div>
     </div>
   </div>
 
@@ -2776,38 +2804,22 @@ function showDisputedInvoicesTab(btn) {
 }
 
 async function loadDisputedInvoices() {
-  const status = document.getElementById('di-status');
-  const tbody  = document.getElementById('di-tbody');
-  if (status) status.textContent = 'Loading…';
+  const statusEl = document.getElementById('di-status');
+  const tbody    = document.getElementById('di-tbody');
+  if (statusEl) statusEl.textContent = 'Loading…';
   if (tbody) tbody.innerHTML = '';
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/interactions?outcome=eq.dispute_raised&order=created_at.desc&select=id,customer_name,dispute_type,dispute_description,created_at,collector_id`,
+      `${SUPABASE_URL}/rest/v1/invoice_disputes?order=opened_at.desc&select=*`,
       { headers: cmrrHdr() }
     );
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const interactions = await r.json();
-    const ids = interactions.map(i => i.id);
-    let invMap = {};
-    if (ids.length) {
-      const jr = await fetch(
-        `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
-        { headers: cmrrHdr() }
-      );
-      if (jr.ok) {
-        (await jr.json()).forEach(j => {
-          if (!invMap[j.interaction_id]) invMap[j.interaction_id] = [];
-          invMap[j.interaction_id].push(j.invoice_id);
-        });
-      }
-    }
-    _diRows = interactions.map(i => ({ ...i, invoices: invMap[i.id] || [] }));
-    if (status) status.textContent = '';
-    document.getElementById('di-count').textContent = `${_diRows.length} dispute${_diRows.length === 1 ? '' : 's'}`;
+    _diRows = await r.json();
+    if (statusEl) statusEl.textContent = '';
     _populateDiFilterBu();
     renderDisputedInvoices();
   } catch(e) {
-    if (status) status.textContent = 'Error: ' + e.message;
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
   }
 }
 
@@ -2824,43 +2836,99 @@ function getDiDisputeLabel(val) {
   return found ? found.label : val.replace(/_/g, ' ');
 }
 
+let _diCloseId = null;
+function openDiCloseModal(id) {
+  _diCloseId = id;
+  const dispute = _diRows.find(r => r.id === id);
+  if (!dispute) return;
+  const info = document.getElementById('di-close-info');
+  info.innerHTML = `<strong>${escHtml(dispute.invoice_number || dispute.invoice_id)}</strong> · ${escHtml(dispute.customer_name)}`
+    + `<br><span style="color:var(--txt3)">${getDiDisputeLabel(dispute.dispute_type)}</span>`
+    + (dispute.dispute_description ? `<br><em style="color:var(--txt2)">${escHtml(dispute.dispute_description)}</em>` : '');
+  document.getElementById('di-close-note').value = '';
+  document.getElementById('di-close-err').textContent = '';
+  document.getElementById('di-close-confirm-btn').disabled = false;
+  document.getElementById('di-close-confirm-btn').textContent = 'Close Dispute';
+  document.getElementById('di-close-modal-ov').style.display = 'flex';
+}
+function closeDiCloseModal() {
+  document.getElementById('di-close-modal-ov').style.display = 'none';
+  _diCloseId = null;
+}
+async function confirmCloseDispute() {
+  if (!_diCloseId) return;
+  const note = document.getElementById('di-close-note').value.trim() || null;
+  const btn  = document.getElementById('di-close-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Closing…';
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_disputes?id=eq.${encodeURIComponent(_diCloseId)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ status: 'closed', closed_at: new Date().toISOString(), closed_by_collector_id: CURRENT_USER.id, closing_note: note }),
+  });
+  if (!r.ok) {
+    document.getElementById('di-close-err').textContent = 'Error closing dispute.';
+    btn.disabled = false; btn.textContent = 'Close Dispute';
+    return;
+  }
+  closeDiCloseModal();
+  await loadDisputedInvoices();
+}
+
 function renderDisputedInvoices() {
-  const tbody  = document.getElementById('di-tbody');
-  const status = document.getElementById('di-status');
+  const tbody    = document.getElementById('di-tbody');
+  const statusEl = document.getElementById('di-status');
   if (!tbody) return;
-  const q   = (document.getElementById('di-search')?.value || '').toLowerCase();
-  const buF = document.getElementById('di-filter-bu')?.value || '';
+  const q       = (document.getElementById('di-search')?.value || '').toLowerCase();
+  const buF     = document.getElementById('di-filter-bu')?.value || '';
+  const statusF = document.getElementById('di-filter-status')?.value;
 
   const filtered = _diRows.filter(r => {
+    if (statusF !== undefined && statusF !== '' && r.status !== statusF) return false;
     if (buF && arGetBu(r.customer_name) !== buF) return false;
     if (q) {
-      const hay = [r.customer_name, ...(r.invoices), r.dispute_type, r.dispute_description || ''].join(' ').toLowerCase();
+      const hay = [r.customer_name, r.invoice_number, r.invoice_id, r.dispute_type, r.dispute_description || '', r.closing_note || ''].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
+  const openCount   = filtered.filter(r => r.status !== 'closed').length;
+  const closedCount = filtered.filter(r => r.status === 'closed').length;
+  document.getElementById('di-count').textContent = `${filtered.length} dispute${filtered.length !== 1 ? 's' : ''} · ${openCount} open · ${closedCount} closed`;
+  if (statusEl) statusEl.textContent = '';
+
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(r => {
     const bu = arGetBu(r.customer_name);
     const buBadge = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '—';
-    const invChips = r.invoices.length
-      ? r.invoices.map(id => `<span style="font-size:10px;background:#f3f4f6;color:var(--txt2);padding:.1rem .35rem;border-radius:3px;border:1px solid var(--brd)">${escHtml(id)}</span>`).join(' ')
-      : '<span style="color:var(--txt3)">—</span>';
+    const invLabel = escHtml(r.invoice_number || r.invoice_id || '—');
     const disputeLabel = getDiDisputeLabel(r.dispute_type);
-    const dt = new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const isOpen = r.status !== 'closed';
+    const statusPill = isOpen
+      ? `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .5rem;border-radius:20px">Open</span>`
+      : `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .5rem;border-radius:20px">Closed</span>`;
+    const openedDt  = new Date(r.opened_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const closedDt  = r.closed_at ? new Date(r.closed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '<span style="color:var(--txt3)">—</span>';
+    const descCell  = r.dispute_description
+      ? `<span title="${escHtml(r.dispute_description)}" style="display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.dispute_description)}</span>`
+      : '<span style="color:var(--txt3)">—</span>';
+    const actionBtn = isOpen
+      ? `<button data-di-id="${escHtml(r.id)}" onclick="openDiCloseModal(this.dataset.diId)" style="font-size:11px;padding:.2rem .6rem;background:#fff;border:1px solid var(--brd2);border-radius:4px;cursor:pointer;color:var(--txt2);white-space:nowrap">Close</button>`
+      : (r.closing_note ? `<span title="${escHtml(r.closing_note)}" style="font-size:10.5px;color:var(--txt3);cursor:help;max-width:80px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.closing_note)}</span>` : '');
     return `<tr>
       <td style="font-size:12.5px;font-weight:500">${escHtml(r.customer_name || '')}</td>
       <td>${buBadge}</td>
-      <td style="font-size:11.5px">${invChips}</td>
-      <td style="font-size:12px;color:var(--red)"><span style="background:var(--red-bg);padding:.1rem .4rem;border-radius:4px;font-weight:600">${escHtml(disputeLabel)}</span></td>
-      <td style="font-size:12px;color:var(--txt2);max-width:220px">${r.dispute_description ? escHtml(r.dispute_description) : '<span style="color:var(--txt3)">—</span>'}</td>
-      <td style="font-size:11px;color:var(--txt3)">${escHtml(r.collector_id || '')}</td>
-      <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${dt}</td>
+      <td style="font-size:12px;font-family:monospace">${invLabel}</td>
+      <td style="font-size:12px"><span style="background:var(--red-bg);color:var(--red);padding:.1rem .4rem;border-radius:4px;font-weight:600">${escHtml(disputeLabel)}</span></td>
+      <td style="font-size:12px;color:var(--txt2)">${descCell}</td>
+      <td style="text-align:center">${statusPill}</td>
+      <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${openedDt}</td>
+      <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${closedDt}</td>
+      <td style="text-align:right;white-space:nowrap">${actionBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -5127,9 +5195,10 @@ const CC_CONNECTED_LABELS = {
 };
 
 let _ccInited    = false;
-let _ccState     = {};
-let _ccCustNames = [];
-let _ccHistCust  = null;
+let _ccState        = {};
+let _ccCustNames    = [];
+let _ccHistCust     = null;
+let _ccOpenDisputes = {}; // invoice_id → dispute row for current customer
 
 function ccMakeState() {
   return {
@@ -5180,9 +5249,11 @@ function ccResetForm() {
                 'cc-dispute-desc'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
+  _ccOpenDisputes = {};
   document.getElementById('cc-cust-summary').style.display    = 'none';
   document.getElementById('cc-invoices-wrap').style.display   = 'none';
   document.getElementById('cc-invoice-list').innerHTML        = '';
+  const dp = document.getElementById('cc-disputes-panel'); if (dp) { dp.style.display = 'none'; dp.innerHTML = ''; }
   document.getElementById('cc-sec2').style.display            = 'none';
   document.getElementById('cc-sec-noconn').style.display      = 'none';
   document.getElementById('cc-sec3').style.display            = 'none';
@@ -5299,6 +5370,16 @@ async function ccSelectCustomer(name) {
     document.getElementById('cc-sec2').style.display = '';
     ccUpdateConnectedBtnState();
     ccLoadContacts(name);
+    if (invoices.length) {
+      const invIds = invoices.map(i => i.invoice_id).filter(Boolean);
+      const dr = await fetch(
+        `${SUPABASE_URL}/rest/v1/invoice_disputes?invoice_id=in.(${invIds.map(encodeURIComponent).join(',')})&status=eq.open&select=id,invoice_id,invoice_number,dispute_type,dispute_description`,
+        { headers: cmrrHdr() }
+      );
+      _ccOpenDisputes = {};
+      if (dr.ok) { (await dr.json()).forEach(d => { _ccOpenDisputes[d.invoice_id] = d; }); }
+      _reRenderInvoiceListWithDisputes();
+    }
   } catch(e) {
     console.error('ccSelectCustomer error:', e);
     document.getElementById('cc-cust-summary').innerHTML = 'Error loading customer data: ' + escHtml(e.message);
@@ -5318,12 +5399,63 @@ function ccInvCheck(invId, checked) {
   if (checked) _ccState.selectedInvIds.add(invId);
   else _ccState.selectedInvIds.delete(invId);
   ccUpdateConnectedBtnState();
+  ccUpdateDisputesPanel();
 }
 function ccToggleInvoice(invId) { ccInvRowClick({target:{}}, invId); } // legacy compat
 
 function ccUpdateConnectedBtnState() {
   const disabled = _ccState.invoices.length > 0 && _ccState.selectedInvIds.size === 0;
   document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.disabled = disabled);
+}
+
+function _reRenderInvoiceListWithDisputes() {
+  const listEl = document.getElementById('cc-invoice-list');
+  if (!listEl || !_ccState.invoices) return;
+  listEl.innerHTML = _ccState.invoices.map(inv => {
+    const days = arOverdueDays(inv.due_date);
+    const tagStyle = days > 90 ? 'background:#fee2e2;color:#991b1b'
+      : days > 60 ? 'background:#fef2f2;color:#b91c1c'
+      : days > 0  ? 'background:#fef9c3;color:#854d0e'
+      : 'background:#dcfce7;color:#166534';
+    const tagText = days > 0 ? `${days}d overdue` : 'Current';
+    const amt   = inv.balance_inr || inv.balance || 0;
+    const invId = inv.invoice_id || '';
+    const cbId  = 'cc-inv-' + invId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const isChecked = _ccState.selectedInvIds?.has(invId);
+    const dispute = _ccOpenDisputes[invId];
+    const disputeBadge = dispute
+      ? `<span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:.1rem .35rem;border-radius:3px;font-weight:600;margin-left:.3rem">DISPUTE</span>`
+      : '';
+    return `<div class="cc-invoice-row" data-inv-id="${escHtml(invId)}" onclick="ccInvRowClick(event,this.dataset.invId)">
+      <input type="checkbox" id="${cbId}" value="${escHtml(invId)}" data-inv-id="${escHtml(invId)}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation()" onchange="ccInvCheck(this.dataset.invId,this.checked)">
+      <label style="flex:1;display:flex;align-items:center;gap:.6rem;cursor:pointer;min-width:0">
+        <span style="font-weight:600">${escHtml(inv.invoice_number || invId)}</span>
+        <span style="color:var(--txt3);font-size:11px">${inv.due_date || '—'}</span>
+        <span class="cc-inv-tag" style="${tagStyle}">${tagText}</span>
+        ${disputeBadge}
+        <span style="margin-left:auto;font-family:var(--mono);font-size:12px">₹${f(amt)}</span>
+      </label>
+    </div>`;
+  }).join('');
+}
+
+function ccUpdateDisputesPanel() {
+  const panel = document.getElementById('cc-disputes-panel');
+  if (!panel) return;
+  const selected = [...(_ccState.selectedInvIds || [])];
+  const openOnSelected = selected
+    .filter(id => _ccOpenDisputes[id])
+    .map(id => _ccOpenDisputes[id]);
+  if (!openOnSelected.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+  panel.style.display = '';
+  panel.innerHTML = openOnSelected.map(d => `
+    <div style="display:flex;gap:.5rem;align-items:flex-start;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:.5rem .7rem;margin-bottom:.35rem">
+      <span style="font-size:13px;flex-shrink:0">&#9888;</span>
+      <div style="font-size:12px;line-height:1.5">
+        <strong>Open dispute on ${escHtml(d.invoice_number || d.invoice_id)}</strong> · <span style="color:#b45309">${getDiDisputeLabel(d.dispute_type)}</span>
+        ${d.dispute_description ? `<br><span style="color:var(--txt2)">${escHtml(d.dispute_description)}</span>` : ''}
+      </div>
+    </div>`).join('');
 }
 
 async function ccLoadContacts(customerName) {
@@ -5742,6 +5874,25 @@ async function ccSubmit() {
         headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify(joinRows),
       });
+      if (payload.outcome === 'dispute_raised') {
+        const disputeRows = [...s.selectedInvIds].map(invId => {
+          const inv = s.invoices.find(i => i.invoice_id === invId);
+          return {
+            invoice_id:             invId,
+            invoice_number:         inv?.invoice_number || invId,
+            customer_name:          s.customerName,
+            opening_interaction_id: interaction.id,
+            dispute_type:           payload.dispute_type,
+            dispute_description:    payload.dispute_description,
+            status:                 'open',
+          };
+        });
+        await fetch(`${SUPABASE_URL}/rest/v1/invoice_disputes`, {
+          method: 'POST',
+          headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify(disputeRows),
+        });
+      }
     }
     ccResetForm();
     const toast = document.createElement('div');
@@ -5818,6 +5969,21 @@ async function ccLoadHistory() {
     const joinRows = jr.ok ? await jr.json() : [];
     const invMap   = {};
     joinRows.forEach(j => { if (!invMap[j.interaction_id]) invMap[j.interaction_id] = []; invMap[j.interaction_id].push(j.invoice_id); });
+
+    // Resolve invoice_id → invoice_number for display
+    const allInvIds = [...new Set(joinRows.map(j => j.invoice_id).filter(Boolean))];
+    const invNumMap = {};
+    if (allInvIds.length) {
+      const nr = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${allInvIds.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number`,
+        { headers: cmrrHdr() }
+      );
+      if (nr.ok) { (await nr.json()).forEach(r => { invNumMap[r.invoice_id] = r.invoice_number || r.invoice_id; }); }
+    }
+    // Replace stored invoice_ids with display invoice_numbers
+    Object.keys(invMap).forEach(intId => {
+      invMap[intId] = invMap[intId].map(id => invNumMap[id] || id);
+    });
 
     // Client-side keyword filter (invoice IDs, note, customer, contact)
     let filtered = rows;
