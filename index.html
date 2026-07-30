@@ -1236,7 +1236,6 @@ const ALL_TABS_CFG = [
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'collections-analysis',label: 'Collections Analysis', fn: 'showCollectionsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
-  { id: 'rate-calculator',     label: 'Rate Calculator',     fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            fn: 'showSettingsTab(this)',
     roles: ['admin-edit'] },
 ];
@@ -1346,11 +1345,12 @@ function renderNav() {
     .filter(t => !t.roles || t.roles.includes(role))
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
-  // Settings always goes to bottom-nav for admin-edit; other roles may have it in allowed_tabs
+  // Settings always goes to bottom-nav for admin-edit; Rate Calculator is a direct link (no login required)
   const canSettings = role === 'admin-edit' || (allowed.includes('settings') && (!ALL_TABS_CFG.find(t=>t.id==='settings')?.roles || ALL_TABS_CFG.find(t=>t.id==='settings').roles.includes(role)));
   const bn = document.getElementById('bottom-nav');
   if (bn) {
-    bn.innerHTML = canSettings ? '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)">⚙ Settings</button>' : '';
+    bn.innerHTML = '<a class="tbtn" href="rate-calculator.html" target="_blank" rel="noopener" style="text-decoration:none">Rate Calculator ↗</a>'
+                 + (canSettings ? '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)">⚙ Settings</button>' : '');
   }
   if (USER_ACCESS.is_admin) {
     const usersTabBtn = document.getElementById('st-tab-users');

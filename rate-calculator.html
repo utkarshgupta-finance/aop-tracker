@@ -2,20 +2,20 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-height:100vh;padding:2rem 1.5rem}
+body{font-family:Inter,sans-serif;background:#f5f4f1;color:#1a1916;min-height:100vh;padding:2rem 1.5rem}
 .page{max-width:980px;margin:0 auto}
-.num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+.num{font-family:'Geist Mono',monospace;font-variant-numeric:tabular-nums}
 
 /* Masthead */
 .masthead{margin-bottom:1.75rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}
 .masthead h1{font-size:21px;font-weight:500;color:#1a1916;letter-spacing:-.02em}
 .masthead p{font-size:13px;color:#8a8880;margin-top:4px}
 .masthead-right{display:flex;align-items:center;gap:8px}
-.excel-btn{display:flex;align-items:center;gap:8px;background:#fff;border:0.5px solid #e2e0db;border-radius:10px;padding:9px 16px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:border-color .15s,box-shadow .15s;flex-shrink:0;font-family:'DM Sans',sans-serif}
+.excel-btn{display:flex;align-items:center;gap:8px;background:#fff;border:0.5px solid #e2e0db;border-radius:10px;padding:9px 16px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:border-color .15s,box-shadow .15s;flex-shrink:0;font-family:Inter,sans-serif}
 .excel-btn:hover{border-color:#1d6f42;box-shadow:0 0 0 3px rgba(29,111,66,.08)}
 .excel-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
 .excel-icon{width:28px;height:28px;background:#1d6f42;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -28,7 +28,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .panel-sublabel{font-size:11px;color:#8a8880;margin-top:-1rem;margin-bottom:1.25rem;line-height:1.5}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:11px;color:#9a9890;letter-spacing:.02em}
-.field input,.field select{background:#fafaf8;border:0.5px solid #dedad4;border-radius:8px;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:14px;padding:9px 12px;outline:none;transition:border-color .15s}
+.field input,.field select{background:#fafaf8;border:0.5px solid #dedad4;border-radius:8px;color:#1a1916;font-family:Inter,sans-serif;font-size:14px;padding:9px 12px;outline:none;transition:border-color .15s}
 .field input:focus,.field select:focus{border-color:#5a4fcf}
 
 /* Global plan row */
@@ -40,7 +40,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .tag-to{background:#e6f4ec;color:#2d7a4a}
 .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .plan-mini-label{font-size:10px;color:#b0aea8;margin-bottom:4px}
-.plan-select{background:#fafaf8;border:0.5px solid #dedad4;border-radius:8px;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none;width:100%;transition:border-color .15s}
+.plan-select{background:#fafaf8;border:0.5px solid #dedad4;border-radius:8px;color:#1a1916;font-family:Inter,sans-serif;font-size:13px;padding:7px 10px;outline:none;width:100%;transition:border-color .15s}
 .plan-select:focus{border-color:#5a4fcf}
 .arrow-col{display:flex;align-items:center;justify-content:center;color:#c8c6c0}
 
@@ -55,10 +55,10 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .mod-table tbody tr.mod-row:hover{background:#f8f7f5}
 .mod-table tbody tr.override-row{border-bottom:.5px solid #e8e6ff}
 .mod-table td{padding:5px 6px;vertical-align:middle}
-.mod-table td input[type=text],.mod-table td input[type=number]{width:100%;background:#fafaf8;border:0.5px solid #dedad4;border-radius:6px;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 9px;outline:none;transition:border-color .15s,background .15s}
+.mod-table td input[type=text],.mod-table td input[type=number]{width:100%;background:#fafaf8;border:0.5px solid #dedad4;border-radius:6px;color:#1a1916;font-family:Inter,sans-serif;font-size:13px;padding:7px 9px;outline:none;transition:border-color .15s,background .15s}
 .mod-table td input:focus{border-color:#5a4fcf;background:#fff}
-.mod-table td input.r{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px}
-.mod-table td.computed{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6a6860;text-align:right;padding-right:10px;white-space:nowrap;background:#f8f7f5}
+.mod-table td input.r{text-align:right;font-family:'Geist Mono',monospace;font-size:12px}
+.mod-table td.computed{font-family:'Geist Mono',monospace;font-size:12px;color:#6a6860;text-align:right;padding-right:10px;white-space:nowrap;background:#f8f7f5}
 .mod-table td.computed.bold{font-weight:600;color:#1a1916;background:#f0eee8}
 .del-btn{width:26px;height:26px;border-radius:6px;border:none;background:transparent;color:#d0cec9;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;margin:0 auto;padding:0}
 .del-btn:hover{background:#fee2e2;color:#b91c1c}
@@ -81,16 +81,16 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .ov-tag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:10px;flex-shrink:0}
 .ov-tag-from{background:#eaedfa;color:#4a5abf}
 .ov-tag-to{background:#e6f4ec;color:#2d7a4a}
-.ov-select{background:#fff;border:0.5px solid #c8c6f0;border-radius:7px;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 8px;outline:none;transition:border-color .15s}
+.ov-select{background:#fff;border:0.5px solid #c8c6f0;border-radius:7px;color:#1a1916;font-family:Inter,sans-serif;font-size:12px;padding:5px 8px;outline:none;transition:border-color .15s}
 .ov-select:focus{border-color:#5a4fcf}
 .ov-arrow{color:#c8c6c0;font-size:14px;flex-shrink:0}
 .override-badge{display:inline-flex;align-items:center;gap:4px;background:#ece9ff;color:#5a4fcf;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;letter-spacing:.04em}
 
 /* Add & Calculate buttons */
-.add-mod-btn{display:flex;align-items:center;gap:6px;margin-top:.875rem;background:none;border:.5px dashed #d0cec9;border-radius:8px;padding:8px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;color:#8a8880;transition:all .15s;width:100%;justify-content:center}
+.add-mod-btn{display:flex;align-items:center;gap:6px;margin-top:.875rem;background:none;border:.5px dashed #d0cec9;border-radius:8px;padding:8px 14px;cursor:pointer;font-family:Inter,sans-serif;font-size:13px;color:#8a8880;transition:all .15s;width:100%;justify-content:center}
 .add-mod-btn:hover{border-color:#5a4fcf;color:#5a4fcf;background:#f5f4ff}
 
-.calc-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 20px;margin-bottom:1rem;background:#1a1916;color:#fff;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;letter-spacing:.01em}
+.calc-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 20px;margin-bottom:1rem;background:#1a1916;color:#fff;border:none;border-radius:12px;font-family:Inter,sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;letter-spacing:.01em}
 .calc-btn:hover{background:#2e2c28;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .calc-btn:active{transform:scale(.995)}
 .calc-btn.computing{background:#5a4fcf;pointer-events:none}
@@ -107,7 +107,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .amt-cell{flex:1;padding:1rem 1.25rem;display:flex;flex-direction:column;justify-content:center}
 .amt-cell+.amt-cell{border-left:.5px solid #e2e0db}
 .amt-cell-label{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9890;margin-bottom:6px}
-.amt-cell-val{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:500;color:#1a1916;line-height:1;letter-spacing:-.01em}
+.amt-cell-val{font-family:'Geist Mono',monospace;font-size:22px;font-weight:500;color:#1a1916;line-height:1;letter-spacing:-.01em}
 .amt-cell-sub{font-size:11px;color:#b0aea8;margin-top:5px}
 
 /* ── Results panel ── */
@@ -124,10 +124,10 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .bk-table tbody tr:last-child td{border-bottom:none}
 .bk-table tfoot td{border-top:.5px solid #e2e0db;padding-top:10px;font-weight:600}
 .bk-table td.name{font-weight:500;color:#1a1916}
-.bk-table td.old{color:#c8c6c0;text-decoration:line-through;font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px}
+.bk-table td.old{color:#c8c6c0;text-decoration:line-through;font-family:'Geist Mono',monospace;text-align:right;font-size:12px}
 .bk-table td.r{text-align:right}
 /* New Rate is THE prominent column for the NPV breakdown */
-.bk-table td.new-rate-prom{text-align:right;background:#fafaf8;padding:10px 12px;font-weight:600;color:#1a1916;font-family:'IBM Plex Mono',monospace;font-size:14px}
+.bk-table td.new-rate-prom{text-align:right;background:#fafaf8;padding:10px 12px;font-weight:600;color:#1a1916;font-family:'Geist Mono',monospace;font-size:14px}
 .plan-shift-tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#6b6860;white-space:nowrap}
 .plan-shift-tag .arr{color:#b0aea8}
 
@@ -135,7 +135,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .npv-strip{display:flex;align-items:center;gap:1.25rem;padding:.7rem 1.25rem;background:#fcfcfb;border-top:.5px solid #f0eee9;flex-wrap:wrap}
 .npv-strip-item{display:flex;flex-direction:column;gap:1px}
 .npv-strip-label{font-size:9px;color:#c8c6c0;text-transform:uppercase;letter-spacing:.07em}
-.npv-strip-val{font-size:11px;font-weight:400;font-family:'IBM Plex Mono',monospace;color:#a8a6a0}
+.npv-strip-val{font-size:11px;font-weight:400;font-family:'Geist Mono',monospace;color:#a8a6a0}
 .npv-divider{width:.5px;height:18px;background:#eeece8;flex-shrink:0}
 
 /* ── Plan total comparison (prominent, above markup) ── */
@@ -148,13 +148,13 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .ptp-new{background:#edf5f0;border:.5px solid #d4e7dc}
 .ptp-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9a9890}
 .ptp-new .ptp-label{color:#3d8a5c}
-.ptp-val{font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;letter-spacing:-.01em;line-height:1}
+.ptp-val{font-family:'Geist Mono',monospace;font-size:25px;font-weight:600;letter-spacing:-.01em;line-height:1}
 .ptp-old .ptp-val{color:#6a6860}
 .ptp-new .ptp-val{color:#1a1916}
 .ptp-foot{font-size:11px;color:#b0aea8}
 .ptp-arrow{display:flex;align-items:center;justify-content:center;color:#c8c6c0;flex:0 0 auto}
 .ptp-delta-cell{flex:1;min-width:150px;display:flex;flex-direction:column;gap:7px;padding:1rem 1.1rem;justify-content:center}
-.ptp-delta{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:600;line-height:1}
+.ptp-delta{font-family:'Geist Mono',monospace;font-size:21px;font-weight:600;line-height:1}
 .ptp-delta.pos{color:#16803c}
 .ptp-delta.neg{color:#b45309}
 .ptp-delta.flat{color:#8a8880}
@@ -166,7 +166,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .rate-bar{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.25rem;border-top:.5px solid #eeece8;flex-wrap:wrap}
 .rate-bar-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#c8c6c0;white-space:nowrap}
 .rate-bar-values{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
-.rate-val{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:500}
+.rate-val{font-family:'Geist Mono',monospace;font-size:16px;font-weight:500}
 .rate-val.neutral{color:#b0aea8}
 .rate-val.uplift{color:#b45309}
 .rate-val.discount{color:#16803c}
@@ -180,7 +180,7 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .insight-text strong{color:#3a3835;font-weight:500}
 
 /* Delta pills */
-.dp{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+.dp{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;font-family:'Geist Mono',monospace}
 .dp-pos{background:#dcfce7;color:#16803c}
 .dp-neg{background:#fff0e0;color:#92520a}
 .dp-flat{background:#f5f4f1;color:#8a8880;font-weight:400}
@@ -203,11 +203,11 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 .markup-table td{padding:10px 12px;vertical-align:middle}
 .markup-table td.name{font-weight:500;color:#1a1916}
 .markup-table td.r{text-align:right}
-.markup-table td.npv-new-rate{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6a6860;text-align:right}
-.markup-table td.final-rate{text-align:right;background:#fdf8ee;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:#1a1916}
-.markup-table td.amount-cell{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6a6860;text-align:right}
+.markup-table td.npv-new-rate{font-family:'Geist Mono',monospace;font-size:12px;color:#6a6860;text-align:right}
+.markup-table td.final-rate{text-align:right;background:#fdf8ee;font-family:'Geist Mono',monospace;font-size:14px;font-weight:600;color:#1a1916}
+.markup-table td.amount-cell{font-family:'Geist Mono',monospace;font-size:12px;color:#6a6860;text-align:right}
 .markup-input-wrap{display:inline-flex;align-items:center;gap:4px;justify-content:flex-end}
-.markup-input{width:80px;background:#fff;border:0.5px solid #dedad4;border-radius:6px;color:#b45309;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:6px 9px;outline:none;text-align:right;transition:border-color .15s}
+.markup-input{width:80px;background:#fff;border:0.5px solid #dedad4;border-radius:6px;color:#b45309;font-family:Inter,sans-serif;font-size:13px;font-weight:500;padding:6px 9px;outline:none;text-align:right;transition:border-color .15s}
 .markup-input:focus{border-color:#b45309;background:#fffbf2}
 .markup-input::-webkit-outer-spin-button,.markup-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .markup-input[type=number]{-moz-appearance:textfield}
@@ -217,16 +217,16 @@ body{font-family:'DM Sans',sans-serif;background:#f5f4f1;color:#1a1916;min-heigh
 
 .markup-bulk-row{display:flex;align-items:center;gap:12px;padding:.875rem 1.25rem;background:#fffaf0;border-top:.5px solid #f5e9d8;border-bottom:.5px solid #f5e9d8;flex-wrap:wrap}
 .markup-bulk-label{font-size:11px;color:#7c6a1a;font-weight:500;letter-spacing:.02em}
-.markup-bulk-input{width:90px;background:#fff;border:0.5px solid #e8d8b8;border-radius:6px;color:#b45309;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:6px 10px;outline:none;text-align:right;transition:border-color .15s}
+.markup-bulk-input{width:90px;background:#fff;border:0.5px solid #e8d8b8;border-radius:6px;color:#b45309;font-family:Inter,sans-serif;font-size:13px;font-weight:500;padding:6px 10px;outline:none;text-align:right;transition:border-color .15s}
 .markup-bulk-input:focus{border-color:#b45309}
-.markup-apply-btn{background:#b45309;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s;letter-spacing:.01em}
+.markup-apply-btn{background:#b45309;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-family:Inter,sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s;letter-spacing:.01em}
 .markup-apply-btn:hover{background:#92420a}
 
 .markup-summary-strip{display:flex;align-items:stretch;padding:0;background:#fdf8ee;border-top:.5px solid #f5e9d8}
 .mks-cell{flex:1;padding:.875rem 1.25rem;display:flex;flex-direction:column}
 .mks-cell+.mks-cell{border-left:.5px solid #f5e9d8}
 .mks-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#a08850;margin-bottom:4px}
-.mks-val{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#7c4d09;line-height:1.1}
+.mks-val{font-family:'Geist Mono',monospace;font-size:16px;font-weight:600;color:#7c4d09;line-height:1.1}
 .mks-sub{font-size:11px;color:#a08850;margin-top:3px}
 
 /* Cost of capital note */
