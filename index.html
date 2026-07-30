@@ -327,9 +327,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-aging-tbl td{padding:.5rem .9rem;font-size:12.5px;text-align:left}
 .ar-aging-tbl .r{text-align:right!important;font-family:var(--mono)}
 /* ── AR sub-tabs ─────────────────────────────────────────────── */
-.ar-subtabs{display:flex;gap:0;margin-bottom:1.1rem;border-bottom:1.5px solid var(--brd)}
-.ar-stbtn{padding:.55rem 1.15rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s}
-.ar-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.ar-subtabs{display:flex;gap:.4rem;margin-bottom:1.1rem;flex-wrap:wrap;align-items:center}
+.ar-stbtn{padding:.32rem .95rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:#fff;border:1.5px solid var(--brd2);border-radius:20px;cursor:pointer;transition:background .12s,color .12s,border-color .12s;white-space:nowrap}
+.ar-stbtn:hover{border-color:var(--navy3);color:var(--navy2)}
+.ar-stbtn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 .st-tabs{display:flex;gap:0;margin-bottom:1.25rem;border-bottom:1.5px solid var(--brd);flex-wrap:wrap}
 .st-stbtn{padding:.55rem 1.1rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s;white-space:nowrap}
 .st-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3);font-weight:600}
