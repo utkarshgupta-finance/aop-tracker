@@ -69,7 +69,7 @@ main{padding:1.5rem 2rem}
 .pane{display:none}.pane.active{display:block}
 .slabel{font-size:11px;font-weight:500;font-family:var(--mono);color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.75rem}
 .twrap{overflow-x:auto;border-radius:8px;border:1px solid var(--brd);background:var(--surf)}
-table{border-collapse:collapse;font-size:11px;font-family:var(--mono);min-width:100%}
+table{border-collapse:collapse;font-size:11px;font-family:var(--sans);min-width:100%}
 thead th{background:#fff;color:#000;font-size:9.5px;font-weight:600;letter-spacing:.05em;padding:.5rem .65rem;text-align:center;border-right:1px solid #ddd;border-bottom:1px solid #ccc;white-space:nowrap;vertical-align:middle}
 thead th.th-bu{text-align:left;position:sticky;left:0;z-index:4;min-width:120px;background:#f0f0f0;border-right:2px solid #bbb}
 thead th.th-mar{background:#e8e8e8;border-right:1px solid #ccc}
@@ -175,7 +175,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .modal-close{background:none;border:1px solid var(--brd2);color:var(--txt2);width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
 .modal-close:hover{background:#eee}
 .modal-body{overflow:auto;flex:1;min-height:0}
-.modal-table{border-collapse:collapse;font-size:11.5px;font-family:var(--mono);width:100%}
+.modal-table{border-collapse:collapse;font-size:11.5px;font-family:var(--sans);width:100%}
 .modal-table thead th{background:#ececec;color:#000;padding:.5rem .8rem;text-align:right;white-space:nowrap;border-bottom:2px solid #bbb;border-right:1px solid #ccc;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;user-select:none;position:sticky;top:0;z-index:2}
 .modal-table thead th:first-child{text-align:left}
 .modal-table thead th.sort-asc::after{content:' ▲';font-size:8px;opacity:.7}
@@ -791,6 +791,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-bu"        onclick="showSettingsSubTab('bu')">BU Master</button>
       <button class="st-stbtn"        id="st-tab-collector" onclick="showSettingsSubTab('collector')">Collector Master</button>
       <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
+      <button class="st-stbtn"        id="st-tab-contacts"  onclick="showSettingsSubTab('contacts')">Contacts</button>
+      <button class="st-stbtn"        id="st-tab-coc"       onclick="showSettingsSubTab('coc')">Cost of Capital</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')" style="display:none">Manage Users</button>
     </div>
 
@@ -904,6 +906,100 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
 
+    <!-- Contacts Master -->
+    <div id="st-pane-contacts" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Customer Contacts</span>
+          <button class="modal-csv" onclick="openContactModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add Contact</button>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center">
+          <input type="text" id="ctc-search" placeholder="Search name, email, phone…" class="cust-input" style="flex:1;min-width:180px;font-size:12px;padding:.3rem .65rem" oninput="renderContactsTable()">
+          <select id="ctc-filter-customer" class="nret-sel" style="font-size:12px;min-width:160px" onchange="renderContactsTable()"><option value="">All Customers</option></select>
+          <select id="ctc-filter-active" class="nret-sel" style="font-size:12px" onchange="renderContactsTable()">
+            <option value="">All</option><option value="active" selected>Active only</option><option value="inactive">Inactive only</option>
+          </select>
+        </div>
+        <div id="ctc-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.35rem"></div>
+        <div style="overflow-x:auto">
+          <table class="ar-tbl" style="min-width:640px">
+            <thead><tr>
+              <th style="text-align:left">Name</th>
+              <th style="text-align:left">Designation</th>
+              <th style="text-align:left">Customer</th>
+              <th style="text-align:left">Email</th>
+              <th style="text-align:left">Phone</th>
+              <th style="text-align:center">Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="ctc-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact edit modal -->
+    <div id="ctc-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)closeContactModal()">
+      <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+          <span id="ctc-modal-title" style="font-size:14px;font-weight:600;color:var(--navy)">Add Contact</span>
+          <button onclick="closeContactModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1;padding:.1rem .3rem">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.65rem">
+          <div>
+            <label class="cc-label">Customer <span class="cc-req">*</span></label>
+            <select id="ctc-modal-customer" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+            <div>
+              <label class="cc-label">Full Name <span class="cc-req">*</span></label>
+              <input type="text" id="ctc-modal-name" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="Full name">
+            </div>
+            <div>
+              <label class="cc-label">Designation</label>
+              <input type="text" id="ctc-modal-role" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance Manager">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+            <div>
+              <label class="cc-label">Email</label>
+              <input type="email" id="ctc-modal-email" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="email@example.com">
+            </div>
+            <div>
+              <label class="cc-label">Phone</label>
+              <input type="tel" id="ctc-modal-phone" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="+91 98765 43210">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;margin-top:.1rem">
+            <input type="checkbox" id="ctc-modal-active" checked style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)">
+            <label for="ctc-modal-active" style="font-size:12.5px;color:var(--ink-soft);cursor:pointer">Active</label>
+          </div>
+        </div>
+        <div id="ctc-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+          <button onclick="closeContactModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+          <button onclick="saveContact()" class="modal-csv" id="ctc-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cost of Capital -->
+    <div id="st-pane-coc" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:480px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.85rem">Cost of Capital</div>
+        <p style="font-size:12.5px;color:var(--txt2);margin-bottom:1.1rem;line-height:1.6">
+          This rate is used in the Rate Calculator to compute NPV and monthly discounting. It applies globally across all calculations.
+        </p>
+        <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <label style="font-size:12.5px;color:var(--ink-soft);min-width:160px">Annual cost of capital (%)</label>
+          <input type="number" id="coc-annual-input" min="0" max="100" step="0.1" style="width:110px;padding:.35rem .6rem;border:1px solid var(--brd2);border-radius:7px;font-size:13px;font-family:var(--mono)" placeholder="15" oninput="_updateCocMonthlyDisplay()">
+        </div>
+        <div id="coc-monthly-display" style="font-size:11.5px;color:var(--txt3);margin-bottom:1rem;font-family:var(--mono)"></div>
+        <div id="coc-save-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem;margin-bottom:.5rem"></div>
+        <button onclick="saveCocSettings()" class="modal-csv" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+      </div>
+    </div>
+
     <!-- Manage Users (admin only) -->
     <div id="st-pane-users" class="st-pane" style="display:none">
       <div id="settings-users-section" style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
@@ -984,11 +1080,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
               <option value="">— Select contact —</option>
             </select>
-            <div id="cc-new-contact-form" style="display:none;margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-              <input type="text" id="cc-new-contact-name" class="cc-input" placeholder="Full name" style="max-width:220px">
-              <input type="text" id="cc-new-contact-role" class="cc-input" placeholder="Role (optional)" style="max-width:180px">
-              <button type="button" class="cc-add-btn" onclick="ccSaveNewContact()">Save</button>
-              <button type="button" class="cc-cancel-btn" onclick="ccCancelNewContact()">Cancel</button>
+            <div id="cc-new-contact-form" style="display:none;margin-top:.65rem;border:1px solid var(--brd);border-radius:8px;padding:.75rem;background:var(--surf2)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.55rem">New Contact</div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem">
+                <input type="text"  id="cc-new-contact-name"  class="cc-input" placeholder="Full name *"        style="flex:1;min-width:160px">
+                <input type="text"  id="cc-new-contact-role"  class="cc-input" placeholder="Designation"        style="flex:1;min-width:140px">
+              </div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.55rem">
+                <input type="email" id="cc-new-contact-email" class="cc-input" placeholder="Email"               style="flex:1;min-width:180px">
+                <input type="tel"   id="cc-new-contact-phone" class="cc-input" placeholder="Phone"               style="flex:1;min-width:130px">
+              </div>
+              <div style="display:flex;gap:.5rem">
+                <button type="button" class="cc-add-btn"    onclick="ccSaveNewContact()">Save contact</button>
+                <button type="button" class="cc-cancel-btn" onclick="ccCancelNewContact()">Cancel</button>
+              </div>
             </div>
           </div>
           <div class="cc-field">
@@ -1508,10 +1613,12 @@ async function deleteUser(userId, name) {
 let _stActiveTab = 'fx';
 function showSettingsSubTab(tab) {
   _stActiveTab = tab;
-  for (const id of ['fx','excluded','tags','bu','collector','customers','users']) {
-    document.getElementById(`st-pane-${id}`).style.display  = id === tab ? '' : 'none';
+  for (const id of ['fx','excluded','tags','bu','collector','customers','contacts','coc','users']) {
+    document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
+  if (tab === 'contacts') loadContactsMaster();
+  if (tab === 'coc') renderCocSettings();
 }
 function showSettingsTab(btn) {
   showTab('settings', btn);
@@ -1734,6 +1841,234 @@ function updateCmStats() {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─── CONTACTS MASTER ────────────────────────────────────────── */
+let _ctcContacts = [];
+let _ctcEditId   = null;
+
+async function loadContactsMaster() {
+  const status = document.getElementById('ctc-status');
+  if (status) status.textContent = 'Loading…';
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/contacts?order=customer_name,name&select=id,customer_name,name,role,email,phone,is_active`,
+    { headers: cmrrHdr() }
+  );
+  _ctcContacts = r.ok ? await r.json() : [];
+  if (status) status.textContent = '';
+  _populateCtcCustomerFilter();
+  renderContactsTable();
+}
+
+function _populateCtcCustomerFilter() {
+  const sel = document.getElementById('ctc-filter-customer');
+  if (!sel) return;
+  const current = sel.value;
+  const customers = [...new Set(_ctcContacts.map(c => c.customer_name).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Customers</option>'
+    + customers.map(n => `<option value="${escHtml(n)}"${n === current ? ' selected' : ''}>${escHtml(n)}</option>`).join('');
+}
+
+function renderContactsTable() {
+  const tbody   = document.getElementById('ctc-tbody');
+  const status  = document.getElementById('ctc-status');
+  if (!tbody) return;
+  const q       = (document.getElementById('ctc-search')?.value || '').toLowerCase();
+  const custF   = document.getElementById('ctc-filter-customer')?.value || '';
+  const activeF = document.getElementById('ctc-filter-active')?.value || '';
+
+  const rows = _ctcContacts.filter(c => {
+    if (custF && c.customer_name !== custF) return false;
+    if (activeF === 'active'   && c.is_active === false) return false;
+    if (activeF === 'inactive' && c.is_active !== false) return false;
+    if (q) {
+      const hay = [c.name, c.email, c.phone, c.role, c.customer_name].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (status) status.textContent = `${rows.length} contact${rows.length === 1 ? '' : 's'}`;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No contacts found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(c => {
+    const active = c.is_active !== false;
+    const statusPill = active
+      ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" data-ctc-active="true" onclick="toggleContactActive(this.dataset.ctcId, false)">Active</span>`
+      : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" data-ctc-active="false" onclick="toggleContactActive(this.dataset.ctcId, true)">Inactive</span>`;
+    return `<tr>
+      <td style="font-size:12.5px">${escHtml(c.name || '')}</td>
+      <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
+      <td style="font-size:12px;color:var(--txt2)">${escHtml(c.customer_name || '')}</td>
+      <td style="font-size:12px">${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:var(--navy2);text-decoration:none">${escHtml(c.email)}</a>` : '<span style="color:var(--txt3)">—</span>'}</td>
+      <td style="font-size:12px">${escHtml(c.phone || '—')}</td>
+      <td style="text-align:center">${statusPill}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button data-ctc-id="${escHtml(c.id)}" onclick="openContactModal(this.dataset.ctcId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>
+        <button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openContactModal(id) {
+  _ctcEditId = id || null;
+  const modal = document.getElementById('ctc-modal-ov');
+  document.getElementById('ctc-modal-title').textContent = id ? 'Edit Contact' : 'Add Contact';
+  document.getElementById('ctc-modal-err').textContent = '';
+
+  // Populate customer dropdown
+  const custSel = document.getElementById('ctc-modal-customer');
+  const customers = [...new Set([
+    ..._ctcContacts.map(c => c.customer_name),
+    ..._cmData.map(c => c.customer_name)
+  ].filter(Boolean))].sort();
+  custSel.innerHTML = '<option value="">— Select customer —</option>'
+    + customers.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+
+  if (id) {
+    const c = _ctcContacts.find(x => x.id === id);
+    if (!c) return;
+    custSel.value = c.customer_name || '';
+    document.getElementById('ctc-modal-name').value  = c.name  || '';
+    document.getElementById('ctc-modal-role').value  = c.role  || '';
+    document.getElementById('ctc-modal-email').value = c.email || '';
+    document.getElementById('ctc-modal-phone').value = c.phone || '';
+    document.getElementById('ctc-modal-active').checked = c.is_active !== false;
+  } else {
+    custSel.value = '';
+    ['ctc-modal-name','ctc-modal-role','ctc-modal-email','ctc-modal-phone'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('ctc-modal-active').checked = true;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeContactModal() {
+  document.getElementById('ctc-modal-ov').style.display = 'none';
+  _ctcEditId = null;
+}
+
+async function saveContact() {
+  const customer_name = document.getElementById('ctc-modal-customer').value.trim();
+  const name          = document.getElementById('ctc-modal-name').value.trim();
+  const role          = document.getElementById('ctc-modal-role').value.trim() || null;
+  const email         = document.getElementById('ctc-modal-email').value.trim() || null;
+  const phone         = document.getElementById('ctc-modal-phone').value.trim() || null;
+  const is_active     = document.getElementById('ctc-modal-active').checked;
+  const errEl         = document.getElementById('ctc-modal-err');
+
+  if (!customer_name) { errEl.textContent = 'Please select a customer.'; return; }
+  if (!name)          { errEl.textContent = 'Full name is required.'; document.getElementById('ctc-modal-name').focus(); return; }
+  errEl.textContent = '';
+
+  const saveBtn = document.getElementById('ctc-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+
+  const payload = { customer_name, name, role, email, phone, is_active };
+  let r;
+  if (_ctcEditId) {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(_ctcEditId)}`, {
+      method: 'PATCH',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(payload),
+    });
+  } else {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save';
+
+  if (!r.ok) {
+    errEl.textContent = 'Error saving contact. Please try again.';
+    return;
+  }
+
+  const [saved] = await r.json();
+  if (_ctcEditId) {
+    const idx = _ctcContacts.findIndex(c => c.id === _ctcEditId);
+    if (idx >= 0) _ctcContacts[idx] = saved;
+  } else {
+    _ctcContacts.push(saved);
+  }
+  _populateCtcCustomerFilter();
+  renderContactsTable();
+  closeContactModal();
+}
+
+async function deleteContact(id) {
+  if (!confirm('Delete this contact?')) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: cmrrHdr()
+  });
+  if (r.ok) {
+    _ctcContacts = _ctcContacts.filter(c => c.id !== id);
+    _populateCtcCustomerFilter();
+    renderContactsTable();
+  }
+}
+
+async function toggleContactActive(id, newVal) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ is_active: newVal }),
+  });
+  if (r.ok) {
+    const idx = _ctcContacts.findIndex(c => c.id === id);
+    if (idx >= 0) _ctcContacts[idx].is_active = newVal;
+    renderContactsTable();
+  }
+}
+
+/* ─── COST OF CAPITAL SETTINGS ───────────────────────────────── */
+const COC_LS_KEY = 'bz_annual_coc';
+
+function getCocRate() {
+  const stored = localStorage.getItem(COC_LS_KEY);
+  return stored ? parseFloat(stored) : 15;
+}
+
+function renderCocSettings() {
+  const inp = document.getElementById('coc-annual-input');
+  if (inp) inp.value = getCocRate();
+  _updateCocMonthlyDisplay();
+}
+
+function _updateCocMonthlyDisplay() {
+  const inp = document.getElementById('coc-annual-input');
+  const disp = document.getElementById('coc-monthly-display');
+  if (!inp || !disp) return;
+  const annual = parseFloat(inp.value);
+  if (isNaN(annual) || annual < 0) { disp.textContent = ''; return; }
+  const monthly = (Math.pow(1 + annual / 100, 1/12) - 1) * 100;
+  disp.textContent = `Monthly rate: ${monthly.toFixed(4)}%  (formula: (1 + ${annual}%)^(1/12) − 1)`;
+}
+
+function saveCocSettings() {
+  const inp = document.getElementById('coc-annual-input');
+  const annual = parseFloat(inp?.value);
+  if (isNaN(annual) || annual < 0 || annual > 100) {
+    const s = document.getElementById('coc-save-status');
+    if (s) { s.style.color = 'var(--red)'; s.textContent = 'Enter a valid rate between 0 and 100.'; }
+    return;
+  }
+  localStorage.setItem(COC_LS_KEY, String(annual));
+  const s = document.getElementById('coc-save-status');
+  if (s) { s.style.color = 'var(--green)'; s.textContent = '✓ Saved. Rate Calculator will use this on next open.'; }
+  _updateCocMonthlyDisplay();
 }
 
 /* ─── UK AR FILE UPLOAD MODAL ────────────────────────────────── */
@@ -3112,18 +3447,20 @@ function renderARCustomerView(rows) {
     const ovdCnt    = invs.filter(r => arOverdueDays(r.due_date) > 0).length;
     const hasOverdue = ovdCnt > 0;
     const bu = arGetBu(name);
-    return { name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu };
+    const collector = arGetCollector(name);
+    return { name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu, collector };
   });
   // Sort by current sort state
   custs.sort((a, b) => {
     let va, vb;
     switch (_arCvSortCol) {
-      case 'name':     va = a.name;     vb = b.name;     break;
-      case 'bu':       va = a.bu||'';   vb = b.bu||'';   break;
-      case 'cnt':      va = a.invs.length; vb = b.invs.length; break;
-      case 'ovdBal':   va = a.ovdBal;   vb = b.ovdBal;   break;
-      case 'status':   va = a.hasOverdue?1:0; vb = b.hasOverdue?1:0; break;
-      default:         va = a.totalBal; vb = b.totalBal;
+      case 'name':      va = a.name;           vb = b.name;           break;
+      case 'bu':        va = a.bu||'';         vb = b.bu||'';         break;
+      case 'collector': va = a.collector||'';  vb = b.collector||'';  break;
+      case 'cnt':       va = a.invs.length;    vb = b.invs.length;    break;
+      case 'ovdBal':    va = a.ovdBal;         vb = b.ovdBal;         break;
+      case 'status':    va = a.hasOverdue?1:0; vb = b.hasOverdue?1:0; break;
+      default:          va = a.totalBal;       vb = b.totalBal;
     }
     if (typeof va === 'string') return _arCvSortDir * va.localeCompare(vb);
     return _arCvSortDir * (vb - va); // numeric: flip sign so desc = higher first
@@ -3132,11 +3469,10 @@ function renderARCustomerView(rows) {
   const cr = n => `₹${f(n)}`;
 
   let body = '';
-  custs.forEach(({ name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu }, idx) => {
+  custs.forEach(({ name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu, collector }, idx) => {
     const buBadge = bu
       ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const collector = arGetCollector(name);
     const collectorBadge = collector
       ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(collector)}</span>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
@@ -3159,7 +3495,8 @@ function renderARCustomerView(rows) {
     // Customer header row
     body += `<tr class="ar-cv-hdr" id="ar-cv-h${idx}" data-open="0" onclick="arToggleCust(${idx})">
       <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}</td>
-      <td style="white-space:nowrap"><div style="display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center">${buBadge}${collectorBadge}</div></td>
+      <td style="white-space:nowrap">${buBadge}</td>
+      <td style="white-space:nowrap">${collectorBadge}</td>
       <td style="text-align:center">${entBadges}</td>
       <td style="text-align:right;font-family:var(--mono)">${invs.length}</td>
       <td style="text-align:right;font-family:var(--mono);color:${hasOverdue?'var(--red)':'inherit'}">${cr(totalBal)}</td>
@@ -3212,7 +3549,8 @@ function renderARCustomerView(rows) {
     <thead>
       <tr>
         ${cvSortHdr('name',    'Customer',         '')}
-        ${cvSortHdr('bu',      'BU / Collector',   '')}
+        ${cvSortHdr('bu',        'BU',        '')}
+        ${cvSortHdr('collector', 'Collector', '')}
         <th style="text-align:center">Entity</th>
         ${cvSortHdr('cnt',     '# Inv',            'right')}
         ${cvSortHdr('totalBal','Outstanding (₹)',  'right')}
@@ -3311,7 +3649,8 @@ function renderARInvoiceList(rows) {
     else if (days === 0) sevCls = 'sev-low';
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
-      <td style="white-space:nowrap"><div style="display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center">${buCell}${collectorCell}</div></td>
+      <td style="white-space:nowrap">${buCell}</td>
+      <td style="white-space:nowrap">${collectorCell}</td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
@@ -3327,7 +3666,8 @@ function renderARInvoiceList(rows) {
   wrap.innerHTML = `<table class="ar-tbl">
     <thead><tr>
       ${th('Customer','customer')}
-      ${th('BU / Collector','bu')}
+      ${th('BU','bu')}
+      ${th('Collector','collector')}
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}
       ${th('Due Date','due_date')}
@@ -3403,6 +3743,10 @@ async function _runARSync(url, btnId, statusId, label) {
 }
 
 function syncARIndia() { _runARSync(AR_SYNC_IN_URL, 'ar-sync-btn-in', 'ar-status-in', '⟳ Sync India'); }
+
+// Set Inter as the default font for all Chart.js charts
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size   = 11;
 
 initAuth();
 initARCapsuleListeners();
@@ -4167,7 +4511,7 @@ function ccUpdateConnectedBtnState() {
 
 async function ccLoadContacts(customerName) {
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/contacts?customer_name=eq.${encodeURIComponent(customerName)}&order=name`,
+    `${SUPABASE_URL}/rest/v1/contacts?customer_name=eq.${encodeURIComponent(customerName)}&order=name&select=id,name,role,email,phone,is_active`,
     { headers: cmrrHdr() }
   );
   _ccState.contacts = r.ok ? await r.json() : [];
@@ -4176,10 +4520,12 @@ async function ccLoadContacts(customerName) {
 
 function ccRenderContactSelect() {
   const sel = document.getElementById('cc-contact-sel');
+  const active = _ccState.contacts.filter(c => c.is_active !== false);
   sel.innerHTML = '<option value="">— Select contact —</option>'
-    + _ccState.contacts.map(c =>
-        `<option value="${escHtml(c.id)}">${escHtml(c.name)}${c.role ? ' (' + escHtml(c.role) + ')' : ''}</option>`
-      ).join('')
+    + active.map(c => {
+        const label = c.name + (c.role ? ` · ${c.role}` : '') + (c.phone ? ` · ${c.phone}` : '');
+        return `<option value="${escHtml(c.id)}">${escHtml(label)}</option>`;
+      }).join('')
     + '<option value="__new__">+ Add new contact…</option>';
 }
 
@@ -4195,13 +4541,15 @@ function ccContactChanged() {
 }
 
 async function ccSaveNewContact() {
-  const name = document.getElementById('cc-new-contact-name').value.trim();
-  const role = document.getElementById('cc-new-contact-role').value.trim();
-  if (!name) return;
+  const name  = document.getElementById('cc-new-contact-name').value.trim();
+  const role  = document.getElementById('cc-new-contact-role').value.trim();
+  const email = document.getElementById('cc-new-contact-email').value.trim();
+  const phone = document.getElementById('cc-new-contact-phone').value.trim();
+  if (!name) { document.getElementById('cc-new-contact-name').focus(); return; }
   const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
     method: 'POST',
     headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ customer_name: _ccState.customerName, name, role: role || null }),
+    body: JSON.stringify({ customer_name: _ccState.customerName, name, role: role || null, email: email || null, phone: phone || null, is_active: true }),
   });
   if (r.ok) {
     const [contact] = await r.json();
@@ -4211,14 +4559,18 @@ async function ccSaveNewContact() {
     _ccState.contactId = contact.id;
   }
   document.getElementById('cc-new-contact-form').style.display = 'none';
-  document.getElementById('cc-new-contact-name').value = '';
-  document.getElementById('cc-new-contact-role').value = '';
+  ['cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
 }
 
 function ccCancelNewContact() {
   document.getElementById('cc-new-contact-form').style.display = 'none';
   document.getElementById('cc-contact-sel').value = '';
   _ccState.contactId = null;
+  ['cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
 }
 
 /* ── Connection status ───────────────────────────────────── */

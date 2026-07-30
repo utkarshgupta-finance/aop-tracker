@@ -493,8 +493,9 @@ body{font-family:Inter,sans-serif;background:#f5f4f1;color:#1a1916;min-height:10
 const MAX = 10;
 const FREQ_LABELS = {1:'Monthly',3:'Quarterly',6:'Half-yearly',12:'Yearly'};
 const TIMING_LABELS = {prepaid:'Prepaid',postpaid:'Postpaid'};
-const ANNUAL_COC = 0.15; // 15% per annum
-const MONTHLY_R = (Math.pow(1 + ANNUAL_COC, 1/12) - 1) * 100; // ≈1.17149%
+const _storedCOC = localStorage.getItem('bz_annual_coc');
+const ANNUAL_COC = _storedCOC ? parseFloat(_storedCOC) / 100 : 0.15;
+const MONTHLY_R = (Math.pow(1 + ANNUAL_COC, 1/12) - 1) * 100;
 
 let modules = [], nextId = 1;
 let lastModuleResults = [];
