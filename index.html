@@ -3159,8 +3159,7 @@ function renderARCustomerView(rows) {
     // Customer header row
     body += `<tr class="ar-cv-hdr" id="ar-cv-h${idx}" data-open="0" onclick="arToggleCust(${idx})">
       <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}</td>
-      <td>${buBadge}</td>
-      <td>${collectorBadge}</td>
+      <td style="white-space:nowrap"><div style="display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center">${buBadge}${collectorBadge}</div></td>
       <td style="text-align:center">${entBadges}</td>
       <td style="text-align:right;font-family:var(--mono)">${invs.length}</td>
       <td style="text-align:right;font-family:var(--mono);color:${hasOverdue?'var(--red)':'inherit'}">${cr(totalBal)}</td>
@@ -3213,8 +3212,7 @@ function renderARCustomerView(rows) {
     <thead>
       <tr>
         ${cvSortHdr('name',    'Customer',         '')}
-        ${cvSortHdr('bu',      'BU',               '')}
-        <th>Collector</th>
+        ${cvSortHdr('bu',      'BU / Collector',   '')}
         <th style="text-align:center">Entity</th>
         ${cvSortHdr('cnt',     '# Inv',            'right')}
         ${cvSortHdr('totalBal','Outstanding (₹)',  'right')}
@@ -3313,8 +3311,7 @@ function renderARInvoiceList(rows) {
     else if (days === 0) sevCls = 'sev-low';
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
-      <td>${buCell}</td>
-      <td style="white-space:nowrap">${collectorCell}</td>
+      <td style="white-space:nowrap"><div style="display:flex;gap:.35rem;flex-wrap:nowrap;align-items:center">${buCell}${collectorCell}</div></td>
       <td class="td-inv">${invLink}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
@@ -3330,8 +3327,7 @@ function renderARInvoiceList(rows) {
   wrap.innerHTML = `<table class="ar-tbl">
     <thead><tr>
       ${th('Customer','customer')}
-      ${th('BU','bu')}
-      ${th('Collector','collector')}
+      ${th('BU / Collector','bu')}
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}
       ${th('Due Date','due_date')}
@@ -3803,13 +3799,12 @@ function renderCollectorLevel() {
   const togglesEl = document.getElementById('cl-collector-toggles');
   if (togglesEl) {
     const label = '<span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap">Collectors</span>';
-    const caps = allCollectors.map((c, i) => {
+    const caps = allCollectors.map(c => {
       const vis = !hidden.has(c);
-      const col = CL_COLORS[i % CL_COLORS.length];
-      const bg  = vis ? col + '22' : 'transparent';
-      const bdr = vis ? col : 'var(--brd2)';
-      const txt = vis ? col : 'var(--ink-faint)';
-      return `<button onclick="clToggleCollector(${JSON.stringify(c)})" style="font-size:11px;font-weight:600;padding:.2rem .55rem;border-radius:20px;border:1.5px solid ${bdr};background:${bg};color:${txt};cursor:pointer;font-family:var(--sans);transition:all .15s">${escHtml(c)}</button>`;
+      const bg  = vis ? 'var(--navy)' : 'transparent';
+      const bdr = vis ? 'var(--navy)' : 'var(--brd2)';
+      const txt = vis ? '#fff'        : 'var(--ink-faint)';
+      return `<button data-cname="${escHtml(c)}" onclick="clToggleCollector(this.dataset.cname)" style="font-size:11px;font-weight:600;padding:.2rem .55rem;border-radius:20px;border:1.5px solid ${bdr};background:${bg};color:${txt};cursor:pointer;font-family:var(--sans);transition:all .15s">${escHtml(c)}</button>`;
     }).join('');
     togglesEl.innerHTML = label + caps;
   }
@@ -4128,8 +4123,8 @@ async function ccSelectCustomer(name) {
         const amt   = inv.balance_inr || inv.balance || 0;
         const invId = inv.invoice_id || '';
         const cbId  = 'cc-inv-' + invId.replace(/[^a-zA-Z0-9_-]/g, '_');
-        return `<div class="cc-invoice-row" onclick="ccInvRowClick(event,${JSON.stringify(invId)})">
-          <input type="checkbox" id="${cbId}" value="${escHtml(invId)}" onclick="event.stopPropagation()" onchange="ccInvCheck(${JSON.stringify(invId)},this.checked)">
+        return `<div class="cc-invoice-row" data-inv-id="${escHtml(invId)}" onclick="ccInvRowClick(event,this.dataset.invId)">
+          <input type="checkbox" id="${cbId}" value="${escHtml(invId)}" data-inv-id="${escHtml(invId)}" onclick="event.stopPropagation()" onchange="ccInvCheck(this.dataset.invId,this.checked)">
           <label style="flex:1;display:flex;align-items:center;gap:.6rem;cursor:pointer;min-width:0">
             <span style="font-weight:600">${escHtml(inv.invoice_number || invId)}</span>
             <span style="color:var(--txt3);font-size:11px">${inv.due_date || '—'}</span>
