@@ -330,7 +330,7 @@ body{font-family:Inter,sans-serif;background:#f5f4f1;color:#1a1916;min-height:10
 </button>
 
 <!-- Cost of capital note -->
-<div class="coc-note">Cost of capital: <strong>15% per annum</strong> (1.17% monthly)</div>
+<div class="coc-note" id="coc-note-display">Cost of capital: <strong>15% per annum</strong> (1.17% monthly)</div>
 
 <!-- ── Results (hidden until first calculate) ── -->
 <div class="results-area" id="resultsArea">
@@ -496,6 +496,15 @@ const TIMING_LABELS = {prepaid:'Prepaid',postpaid:'Postpaid'};
 const _storedCOC = localStorage.getItem('bz_annual_coc');
 const ANNUAL_COC = _storedCOC ? parseFloat(_storedCOC) / 100 : 0.15;
 const MONTHLY_R = (Math.pow(1 + ANNUAL_COC, 1/12) - 1) * 100;
+
+// Update COC note display dynamically from stored value
+(function() {
+  const annual = ANNUAL_COC * 100;
+  const annualStr = Number.isInteger(annual) ? String(annual) : annual.toFixed(1);
+  const monthlyStr = MONTHLY_R.toFixed(2);
+  const el = document.getElementById('coc-note-display');
+  if (el) el.innerHTML = `Cost of capital: <strong>${annualStr}% per annum</strong> (${monthlyStr}% monthly)`;
+})();
 
 let modules = [], nextId = 1;
 let lastModuleResults = [];
@@ -1073,8 +1082,8 @@ function exportNPVWorkings() {
     [`Generated: ${new Date().toLocaleString('en-IN')}`],
     [''],
     ['ASSUMPTIONS'],
-    ['Annual Cost of Capital', '15%'],
-    ['Monthly Discount Rate', parseFloat(r.toFixed(6)) + '%', '= (1 + 15%)^(1/12) − 1'],
+    ['Annual Cost of Capital', (ANNUAL_COC * 100).toFixed(1) + '%'],
+    ['Monthly Discount Rate', parseFloat(r.toFixed(6)) + '%', `= (1 + ${(ANNUAL_COC*100).toFixed(1)}%)^(1/12) − 1`],
     ['Global FROM Plan', planLabel(gf.freq, gf.timing)],
     ['Global TO Plan',   planLabel(gt.freq, gt.timing)],
     [''],
@@ -1132,8 +1141,8 @@ function exportNPVWorkings() {
     ['',
      'The rate adjustment ensures you receive the same NPV regardless of when payments arrive.'],
     [''],
-    ['Annual Cost of Capital:', '15%'],
-    ['Monthly Discount Rate:', parseFloat(r.toFixed(6)) + '%', '= (1 + 15%)^(1/12) − 1'],
+    ['Annual Cost of Capital:', (ANNUAL_COC * 100).toFixed(1) + '%'],
+    ['Monthly Discount Rate:', parseFloat(r.toFixed(6)) + '%', `= (1 + ${(ANNUAL_COC*100).toFixed(1)}%)^(1/12) − 1`],
     ['Multiplier formula:', 'NPV(FROM plan, ₹1/month) ÷ NPV(TO plan, ₹1/month)'],
     ['Discount formula:', 'Present Value = Payment ÷ (1 + monthly_rate)^month'],
     [''],
@@ -1223,8 +1232,8 @@ function exportNPVWorkings() {
     [''],
     ['WHAT IS THE DISCOUNT RATE?'],
     ['──────────────────────────────────────────────────────────'],
-    ['The annual cost of capital is 15%.'],
-    [`This converts to ${rPct}% per month using the formula: (1 + 15%)^(1/12) − 1`],
+    [`The annual cost of capital is ${(ANNUAL_COC*100).toFixed(1)}%.`],
+    [`This converts to ${rPct}% per month using the formula: (1 + ${(ANNUAL_COC*100).toFixed(1)}%)^(1/12) − 1`],
     ['A higher discount rate means earlier payment is more valuable.'],
     [''],
     ['HOW THE RATE ADJUSTMENT WORKS'],

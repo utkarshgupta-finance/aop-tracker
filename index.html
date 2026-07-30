@@ -793,6 +793,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
       <button class="st-stbtn"        id="st-tab-contacts"  onclick="showSettingsSubTab('contacts')">Contacts</button>
       <button class="st-stbtn"        id="st-tab-coc"       onclick="showSettingsSubTab('coc')">Cost of Capital</button>
+      <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')">Outcome Options</button>
+      <button class="st-stbtn"        id="st-tab-perms"     onclick="showSettingsSubTab('perms')">Permissions</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')" style="display:none">Manage Users</button>
     </div>
 
@@ -924,9 +926,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="overflow-x:auto">
           <table class="ar-tbl" style="min-width:640px">
             <thead><tr>
-              <th style="text-align:left">Name</th>
-              <th style="text-align:left">Designation</th>
               <th style="text-align:left">Customer</th>
+              <th style="text-align:left">POC Name</th>
+              <th style="text-align:left">Designation</th>
               <th style="text-align:left">Email</th>
               <th style="text-align:left">Phone</th>
               <th style="text-align:center">Status</th>
@@ -997,6 +999,76 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="coc-monthly-display" style="font-size:11.5px;color:var(--txt3);margin-bottom:1rem;font-family:var(--mono)"></div>
         <div id="coc-save-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem;margin-bottom:.5rem"></div>
         <button onclick="saveCocSettings()" class="modal-csv" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+      </div>
+    </div>
+
+    <!-- Outcome Options -->
+    <div id="st-pane-options" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Log Interaction — Outcome Options</span>
+          <button class="modal-csv" onclick="openOutcomeOptionModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add Option</button>
+        </div>
+        <p style="font-size:12px;color:var(--txt2);margin-bottom:.85rem">These options appear as buttons when a collector logs an interaction. Inactive options are hidden from the form but data already recorded is preserved.</p>
+        <div id="oo-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.35rem"></div>
+        <div style="overflow-x:auto">
+          <table class="ar-tbl" style="min-width:480px">
+            <thead><tr>
+              <th style="text-align:left">Label (display)</th>
+              <th style="text-align:left">Value (internal key)</th>
+              <th style="text-align:center">Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="oo-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outcome Option modal -->
+    <div id="oo-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeOutcomeOptionModal()">
+      <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <span id="oo-modal-title" style="font-size:14px;font-weight:600;color:var(--navy)">Add Outcome Option</span>
+          <button onclick="closeOutcomeOptionModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.65rem">
+          <div>
+            <label class="cc-label">Label (shown to collectors) <span class="cc-req">*</span></label>
+            <input type="text" id="oo-modal-label" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Payment Committed">
+          </div>
+          <div>
+            <label class="cc-label">Internal value key <span class="cc-req">*</span></label>
+            <input type="text" id="oo-modal-value" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;font-family:var(--mono)" placeholder="e.g. payment_committed">
+            <div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem">Lowercase letters and underscores only. Cannot change after creation.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;margin-top:.1rem">
+            <input type="checkbox" id="oo-modal-active" checked style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)">
+            <label for="oo-modal-active" style="font-size:12.5px;color:var(--ink-soft);cursor:pointer">Active</label>
+          </div>
+        </div>
+        <div id="oo-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+          <button onclick="closeOutcomeOptionModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+          <button onclick="saveOutcomeOption()" class="modal-csv" id="oo-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permissions -->
+    <div id="st-pane-perms" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:520px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.85rem">Collector Permissions</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem 0;border-bottom:1px solid var(--brd)">
+          <div>
+            <div style="font-size:13px;color:var(--ink)">Allow collectors to delete contacts</div>
+            <div style="font-size:11.5px;color:var(--txt3);margin-top:.15rem">By default only admins can delete contacts. Enable this to let collectors delete too.</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;flex-shrink:0;margin-left:1rem">
+            <input type="checkbox" id="perm-collector-delete-contacts" style="width:17px;height:17px;accent-color:var(--navy2);cursor:pointer" onchange="savePermission('collector_can_delete_contacts', this.checked)">
+          </label>
+        </div>
+        <div id="perms-save-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem;margin-top:.6rem"></div>
       </div>
     </div>
 
@@ -1080,20 +1152,35 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
               <option value="">— Select contact —</option>
             </select>
-            <div id="cc-new-contact-form" style="display:none;margin-top:.65rem;border:1px solid var(--brd);border-radius:8px;padding:.75rem;background:var(--surf2)">
-              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.55rem">New Contact</div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem">
-                <input type="text"  id="cc-new-contact-name"  class="cc-input" placeholder="Full name *"        style="flex:1;min-width:160px">
-                <input type="text"  id="cc-new-contact-role"  class="cc-input" placeholder="Designation"        style="flex:1;min-width:140px">
-              </div>
-              <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.55rem">
-                <input type="email" id="cc-new-contact-email" class="cc-input" placeholder="Email"               style="flex:1;min-width:180px">
-                <input type="tel"   id="cc-new-contact-phone" class="cc-input" placeholder="Phone"               style="flex:1;min-width:130px">
+            <div id="cc-new-contact-form" style="display:none;margin-top:.65rem;border:1px solid var(--brd);border-radius:8px;padding:.85rem 1rem;background:var(--surf2)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.7rem">New Contact</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .65rem;margin-bottom:.55rem">
+                <div>
+                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Full Name <span style="color:var(--red)">*</span></div>
+                  <input type="text"  id="cc-new-contact-name"  class="cc-input" placeholder="e.g. Priya Sharma">
+                </div>
+                <div>
+                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Designation</div>
+                  <input type="text"  id="cc-new-contact-role"  class="cc-input" placeholder="e.g. Finance Manager">
+                </div>
+                <div>
+                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Email</div>
+                  <input type="email" id="cc-new-contact-email" class="cc-input" placeholder="email@company.com">
+                </div>
+                <div>
+                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Phone</div>
+                  <input type="tel"   id="cc-new-contact-phone" class="cc-input" placeholder="+91 98765 43210">
+                </div>
               </div>
               <div style="display:flex;gap:.5rem">
                 <button type="button" class="cc-add-btn"    onclick="ccSaveNewContact()">Save contact</button>
                 <button type="button" class="cc-cancel-btn" onclick="ccCancelNewContact()">Cancel</button>
               </div>
+            </div>
+            <!-- Mini contacts list for current customer -->
+            <div id="cc-contacts-mini-wrap" style="display:none;margin-top:.75rem">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem">All Contacts for this Customer</div>
+              <div id="cc-contacts-mini-list"></div>
             </div>
           </div>
           <div class="cc-field">
@@ -1177,6 +1264,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             </div>
           </div>
           <div class="cc-field">
+            <label class="cc-label">Description / Details</label>
+            <textarea id="cc-dispute-desc" class="cc-input" rows="3" placeholder="Describe the issue or dispute…" style="resize:vertical;min-height:64px"></textarea>
+          </div>
+          <div class="cc-field">
             <label class="cc-check-label">
               <input type="checkbox" id="cc-needs-help" onchange="ccNeedsHelpChanged()">
               <span>Needs internal help to resolve (will auto-trigger escalation)</span>
@@ -1245,6 +1336,34 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div><!-- end #collector-console -->
+
+  <!-- ── Disputed Invoices Pane ── -->
+  <div id="disputed-invoices" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <h2 style="font-size:15px;font-weight:700;color:var(--navy)">Disputed Invoices</h2>
+      <span id="di-count" style="font-size:11.5px;color:var(--txt3)"></span>
+      <button onclick="loadDisputedInvoices()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+    </div>
+    <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
+      <input type="text" id="di-search" placeholder="Search customer, invoice, description…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderDisputedInvoices()">
+      <select id="di-filter-bu" class="nret-sel" style="font-size:12px;min-width:120px" onchange="renderDisputedInvoices()"><option value="">All BUs</option></select>
+    </div>
+    <div id="di-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.4rem"></div>
+    <div style="overflow-x:auto">
+      <table class="ar-tbl" style="min-width:700px">
+        <thead><tr>
+          <th style="text-align:left">Customer</th>
+          <th style="text-align:left">BU</th>
+          <th style="text-align:left">Invoice(s)</th>
+          <th style="text-align:left">Dispute Type</th>
+          <th style="text-align:left">Description</th>
+          <th style="text-align:left">Logged By</th>
+          <th style="text-align:left">Date</th>
+        </tr></thead>
+        <tbody id="di-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- ── Rate Calculator Pane ── -->
   <div id="rate-calculator" class="pane">
@@ -1340,6 +1459,8 @@ const ALL_TABS_CFG = [
   { id: 'collector-console',   label: 'Collector Console',   fn: 'showCollectorConsoleTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'collections-analysis',label: 'Collections Analysis', fn: 'showCollectionsTab(this)',
+    roles: ['admin-edit','admin-view','admin'] },
+  { id: 'disputed-invoices',   label: 'Disputed Invoices',   fn: 'showDisputedInvoicesTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            fn: 'showSettingsTab(this)',
@@ -1613,12 +1734,14 @@ async function deleteUser(userId, name) {
 let _stActiveTab = 'fx';
 function showSettingsSubTab(tab) {
   _stActiveTab = tab;
-  for (const id of ['fx','excluded','tags','bu','collector','customers','contacts','coc','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','contacts','coc','options','perms','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
   if (tab === 'contacts') loadContactsMaster();
-  if (tab === 'coc') renderCocSettings();
+  if (tab === 'coc')      renderCocSettings();
+  if (tab === 'options')  loadOutcomeOptionsMaster();
+  if (tab === 'perms')    renderPermsSettings();
 }
 function showSettingsTab(btn) {
   showTab('settings', btn);
@@ -1643,8 +1766,8 @@ async function loadSettingsPane() {
   renderArExcludedList();
   await loadTagMaster();
   renderTagMasterList();
-  // Load masters
-  await Promise.all([loadBuList(), loadCollectorList()]);
+  // Load masters + permissions
+  await Promise.all([loadBuList(), loadCollectorList(), loadAppPermissions()]);
   renderBuMasterList();
   renderCollectorMasterList();
   _cmData = [];
@@ -1895,21 +2018,25 @@ function renderContactsTable() {
     return;
   }
 
+  const canDelete = (USER_ACCESS?.is_admin) || _collectorCanDeleteContacts;
   tbody.innerHTML = rows.map(c => {
     const active = c.is_active !== false;
     const statusPill = active
-      ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" data-ctc-active="true" onclick="toggleContactActive(this.dataset.ctcId, false)">Active</span>`
-      : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" data-ctc-active="false" onclick="toggleContactActive(this.dataset.ctcId, true)">Inactive</span>`;
+      ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, false)" title="Click to deactivate">Active</span>`
+      : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, true)" title="Click to activate">Inactive</span>`;
+    const deleteBtn = canDelete
+      ? `<button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem" title="Delete">×</button>`
+      : '';
     return `<tr>
-      <td style="font-size:12.5px">${escHtml(c.name || '')}</td>
-      <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.customer_name || '')}</td>
+      <td style="font-size:12.5px;font-weight:500">${escHtml(c.name || '')}</td>
+      <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
       <td style="font-size:12px">${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:var(--navy2);text-decoration:none">${escHtml(c.email)}</a>` : '<span style="color:var(--txt3)">—</span>'}</td>
       <td style="font-size:12px">${escHtml(c.phone || '—')}</td>
       <td style="text-align:center">${statusPill}</td>
       <td style="text-align:right;white-space:nowrap">
         <button data-ctc-id="${escHtml(c.id)}" onclick="openContactModal(this.dataset.ctcId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>
-        <button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem">×</button>
+        ${deleteBtn}
       </td>
     </tr>`;
   }).join('');
@@ -2069,6 +2196,277 @@ function saveCocSettings() {
   const s = document.getElementById('coc-save-status');
   if (s) { s.style.color = 'var(--green)'; s.textContent = '✓ Saved. Rate Calculator will use this on next open.'; }
   _updateCocMonthlyDisplay();
+}
+
+/* ─── OUTCOME OPTIONS MASTER ─────────────────────────────────── */
+let _ccOutcomeOptions = [];
+let _ooEditId = null;
+
+async function loadOutcomeOptionsMaster() {
+  const status = document.getElementById('oo-status');
+  if (status) status.textContent = 'Loading…';
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/cc_outcome_options?order=sort_order,label&select=id,value,label,is_active,sort_order`,
+    { headers: cmrrHdr() }
+  );
+  _ccOutcomeOptions = r.ok ? await r.json() : [];
+  if (status) status.textContent = '';
+  renderOutcomeOptionsTable();
+  renderCCOutcomeButtons();
+}
+
+function renderOutcomeOptionsTable() {
+  const tbody = document.getElementById('oo-tbody');
+  if (!tbody) return;
+  if (!_ccOutcomeOptions.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No options defined.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _ccOutcomeOptions.map(o => {
+    const active = o.is_active !== false;
+    const pill = active
+      ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-oo-id="${escHtml(o.id)}" onclick="toggleOutcomeOption(this.dataset.ooId, false)" title="Click to deactivate">Active</span>`
+      : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-oo-id="${escHtml(o.id)}" onclick="toggleOutcomeOption(this.dataset.ooId, true)" title="Click to activate">Inactive</span>`;
+    return `<tr style="${active ? '' : 'opacity:.55'}">
+      <td style="font-size:12.5px;font-weight:500">${escHtml(o.label)}</td>
+      <td style="font-size:11.5px;color:var(--txt3);font-family:var(--mono)">${escHtml(o.value)}</td>
+      <td style="text-align:center">${pill}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button data-oo-id="${escHtml(o.id)}" onclick="openOutcomeOptionModal(this.dataset.ooId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openOutcomeOptionModal(id) {
+  _ooEditId = id || null;
+  document.getElementById('oo-modal-title').textContent = id ? 'Edit Option' : 'Add Option';
+  document.getElementById('oo-modal-err').textContent = '';
+  const valInput = document.getElementById('oo-modal-value');
+  if (id) {
+    const o = _ccOutcomeOptions.find(x => x.id === id);
+    if (!o) return;
+    document.getElementById('oo-modal-label').value = o.label;
+    valInput.value = o.value;
+    valInput.readOnly = true;
+    valInput.style.opacity = '.6';
+    document.getElementById('oo-modal-active').checked = o.is_active !== false;
+  } else {
+    document.getElementById('oo-modal-label').value = '';
+    valInput.value = '';
+    valInput.readOnly = false;
+    valInput.style.opacity = '';
+    document.getElementById('oo-modal-active').checked = true;
+  }
+  document.getElementById('oo-modal-ov').style.display = 'flex';
+}
+
+function closeOutcomeOptionModal() {
+  document.getElementById('oo-modal-ov').style.display = 'none';
+  _ooEditId = null;
+}
+
+async function saveOutcomeOption() {
+  const label     = document.getElementById('oo-modal-label').value.trim();
+  const value     = document.getElementById('oo-modal-value').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  const is_active = document.getElementById('oo-modal-active').checked;
+  const errEl     = document.getElementById('oo-modal-err');
+  if (!label) { errEl.textContent = 'Label is required.'; return; }
+  if (!value) { errEl.textContent = 'Value key is required.'; return; }
+  errEl.textContent = '';
+  const btn = document.getElementById('oo-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  let r;
+  if (_ooEditId) {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/cc_outcome_options?id=eq.${encodeURIComponent(_ooEditId)}`, {
+      method: 'PATCH',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ label, is_active }),
+    });
+  } else {
+    const maxOrder = _ccOutcomeOptions.reduce((m, o) => Math.max(m, o.sort_order || 0), 0);
+    r = await fetch(`${SUPABASE_URL}/rest/v1/cc_outcome_options`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ label, value, is_active, sort_order: maxOrder + 1 }),
+    });
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+  if (!r.ok) { errEl.textContent = 'Error saving. ' + (await r.text()); return; }
+  const [saved] = await r.json();
+  if (_ooEditId) {
+    const idx = _ccOutcomeOptions.findIndex(o => o.id === _ooEditId);
+    if (idx >= 0) _ccOutcomeOptions[idx] = { ..._ccOutcomeOptions[idx], ...saved };
+  } else {
+    _ccOutcomeOptions.push(saved);
+  }
+  renderOutcomeOptionsTable();
+  renderCCOutcomeButtons();
+  closeOutcomeOptionModal();
+}
+
+async function toggleOutcomeOption(id, newVal) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cc_outcome_options?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ is_active: newVal }),
+  });
+  if (r.ok) {
+    const idx = _ccOutcomeOptions.findIndex(o => o.id === id);
+    if (idx >= 0) _ccOutcomeOptions[idx].is_active = newVal;
+    renderOutcomeOptionsTable();
+    renderCCOutcomeButtons();
+  }
+}
+
+function renderCCOutcomeButtons() {
+  const wrap = document.getElementById('cc-outcome-btns');
+  if (!wrap || !_ccOutcomeOptions.length) return;
+  const active = _ccOutcomeOptions.filter(o => o.is_active !== false);
+  wrap.innerHTML = active.map(o =>
+    `<button type="button" class="cc-opt-btn" data-val="${escHtml(o.value)}" onclick="ccSetOutcome('${escHtml(o.value)}')">${escHtml(o.label)}</button>`
+  ).join('');
+}
+
+/* ─── APP PERMISSIONS ────────────────────────────────────────── */
+let _collectorCanDeleteContacts = false;
+let _appPermissionsLoaded = false;
+
+async function loadAppPermissions() {
+  if (_appPermissionsLoaded) return;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_permissions?select=key,value`, { headers: cmrrHdr() });
+    if (r.ok) {
+      const rows = await r.json();
+      for (const row of rows) {
+        if (row.key === 'collector_can_delete_contacts') _collectorCanDeleteContacts = row.value === true || row.value === 'true';
+      }
+    }
+  } catch(e) { console.warn('loadAppPermissions:', e); }
+  _appPermissionsLoaded = true;
+}
+
+function renderPermsSettings() {
+  const chk = document.getElementById('perm-collector-delete-contacts');
+  if (chk) chk.checked = _collectorCanDeleteContacts;
+  const s = document.getElementById('perms-save-status');
+  if (s) s.textContent = '';
+}
+
+async function savePermission(key, value) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/app_permissions?key=eq.${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ value: value }),
+  });
+  const s = document.getElementById('perms-save-status');
+  if (r.ok) {
+    if (key === 'collector_can_delete_contacts') _collectorCanDeleteContacts = value;
+    if (s) { s.style.color = 'var(--green)'; s.textContent = '✓ Permission saved.'; }
+  } else {
+    if (s) { s.style.color = 'var(--red)'; s.textContent = 'Error saving permission.'; }
+  }
+}
+
+/* ─── DISPUTED INVOICES TAB ──────────────────────────────────── */
+let _diRows = [];
+let _diInited = false;
+
+function showDisputedInvoicesTab(btn) {
+  showTab('disputed-invoices', btn);
+  if (!_diInited) { _diInited = true; loadDisputedInvoices(); }
+}
+
+async function loadDisputedInvoices() {
+  const status = document.getElementById('di-status');
+  const tbody  = document.getElementById('di-tbody');
+  if (status) status.textContent = 'Loading…';
+  if (tbody) tbody.innerHTML = '';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/interactions?outcome=eq.dispute_raised&order=created_at.desc&select=id,customer_name,dispute_type,dispute_description,created_at,collector_id`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const interactions = await r.json();
+    const ids = interactions.map(i => i.id);
+    let invMap = {};
+    if (ids.length) {
+      const jr = await fetch(
+        `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
+        { headers: cmrrHdr() }
+      );
+      if (jr.ok) {
+        (await jr.json()).forEach(j => {
+          if (!invMap[j.interaction_id]) invMap[j.interaction_id] = [];
+          invMap[j.interaction_id].push(j.invoice_id);
+        });
+      }
+    }
+    _diRows = interactions.map(i => ({ ...i, invoices: invMap[i.id] || [] }));
+    if (status) status.textContent = '';
+    document.getElementById('di-count').textContent = `${_diRows.length} dispute${_diRows.length === 1 ? '' : 's'}`;
+    _populateDiFilterBu();
+    renderDisputedInvoices();
+  } catch(e) {
+    if (status) status.textContent = 'Error: ' + e.message;
+  }
+}
+
+function _populateDiFilterBu() {
+  const sel = document.getElementById('di-filter-bu');
+  if (!sel) return;
+  const bus = [...new Set(_diRows.map(r => arGetBu(r.customer_name)).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All BUs</option>' + bus.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+}
+
+const DI_DISPUTE_LABELS = {
+  invoice_po_documentation: 'Invoice / PO Docs',
+  service_quality:          'Service Quality',
+  commercial:               'Commercial',
+  payment_reconciliation:   'Payment Reconciliation',
+  other:                    'Other',
+};
+
+function renderDisputedInvoices() {
+  const tbody  = document.getElementById('di-tbody');
+  const status = document.getElementById('di-status');
+  if (!tbody) return;
+  const q   = (document.getElementById('di-search')?.value || '').toLowerCase();
+  const buF = document.getElementById('di-filter-bu')?.value || '';
+
+  const filtered = _diRows.filter(r => {
+    if (buF && arGetBu(r.customer_name) !== buF) return false;
+    if (q) {
+      const hay = [r.customer_name, ...(r.invoices), r.dispute_type, r.dispute_description || ''].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    const bu = arGetBu(r.customer_name);
+    const buBadge = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '—';
+    const invChips = r.invoices.length
+      ? r.invoices.map(id => `<span style="font-size:10px;background:#f3f4f6;color:var(--txt2);padding:.1rem .35rem;border-radius:3px;border:1px solid var(--brd)">${escHtml(id)}</span>`).join(' ')
+      : '<span style="color:var(--txt3)">—</span>';
+    const disputeLabel = DI_DISPUTE_LABELS[r.dispute_type] || (r.dispute_type || '—').replace(/_/g, ' ');
+    const dt = new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `<tr>
+      <td style="font-size:12.5px;font-weight:500">${escHtml(r.customer_name || '')}</td>
+      <td>${buBadge}</td>
+      <td style="font-size:11.5px">${invChips}</td>
+      <td style="font-size:12px;color:var(--red)"><span style="background:var(--red-bg);padding:.1rem .4rem;border-radius:4px;font-weight:600">${escHtml(disputeLabel)}</span></td>
+      <td style="font-size:12px;color:var(--txt2);max-width:220px">${r.dispute_description ? escHtml(r.dispute_description) : '<span style="color:var(--txt3)">—</span>'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${escHtml(r.collector_id || '')}</td>
+      <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${dt}</td>
+    </tr>`;
+  }).join('');
 }
 
 /* ─── UK AR FILE UPLOAD MODAL ────────────────────────────────── */
@@ -4348,6 +4746,7 @@ async function ccInit() {
     }
   } catch(e) { console.warn('ccInit:', e); }
   if (!_collectorList.length) await loadCollectorList();
+  await Promise.all([loadAppPermissions(), loadOutcomeOptionsMaster()]);
   ccResetForm();
 }
 
@@ -4362,7 +4761,8 @@ function ccResetForm() {
   _ccState = ccMakeState();
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
                 'cc-promised-amount','cc-promised-date','cc-esc-who','cc-esc-what',
-                'cc-new-contact-name','cc-new-contact-role'];
+                'cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone',
+                'cc-dispute-desc'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
   document.getElementById('cc-cust-summary').style.display    = 'none';
@@ -4382,6 +4782,8 @@ function ccResetForm() {
   document.getElementById('cc-esc-fields').style.display      = 'none';
   document.getElementById('cc-esc-prompt').style.display      = '';
   document.getElementById('cc-new-contact-form').style.display = 'none';
+  const miniWrap = document.getElementById('cc-contacts-mini-wrap');
+  if (miniWrap) { miniWrap.style.display = 'none'; document.getElementById('cc-contacts-mini-list').innerHTML = ''; }
   document.getElementById('cc-fu-hint').textContent  = '';
   document.getElementById('cc-err').textContent      = '';
   document.getElementById('cc-err-nc').textContent   = '';
@@ -4516,6 +4918,89 @@ async function ccLoadContacts(customerName) {
   );
   _ccState.contacts = r.ok ? await r.json() : [];
   ccRenderContactSelect();
+  ccRenderContactsMini();
+}
+
+function ccRenderContactsMini() {
+  const wrap = document.getElementById('cc-contacts-mini-wrap');
+  const list = document.getElementById('cc-contacts-mini-list');
+  if (!wrap || !list) return;
+  const all = _ccState.contacts;
+  if (!all.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const canDelete = (USER_ACCESS?.is_admin) || _collectorCanDeleteContacts;
+  list.innerHTML = all.map(c => {
+    const active = c.is_active !== false;
+    const pill = active
+      ? `<span style="font-size:9.5px;font-weight:600;background:#d1fae5;color:#065f46;padding:.1rem .38rem;border-radius:20px;cursor:pointer" data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniToggleActive(this.dataset.ccCtcId, false)">Active</span>`
+      : `<span style="font-size:9.5px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.1rem .38rem;border-radius:20px;cursor:pointer" data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniToggleActive(this.dataset.ccCtcId, true)">Inactive</span>`;
+    const deleteBtn = canDelete
+      ? `<button data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniDeleteContact(this.dataset.ccCtcId)" style="font-size:10px;color:var(--red);background:none;border:none;cursor:pointer;padding:0 .2rem;margin-left:.3rem" title="Delete">×</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--brd);${active ? '' : 'opacity:.55'}">
+      <div style="flex:1;min-width:0">
+        <span style="font-size:12px;font-weight:500">${escHtml(c.name)}</span>
+        ${c.role ? `<span style="font-size:11px;color:var(--txt3)"> · ${escHtml(c.role)}</span>` : ''}
+        ${c.phone ? `<span style="font-size:11px;color:var(--txt3)"> · ${escHtml(c.phone)}</span>` : ''}
+      </div>
+      ${pill}
+      <button data-cc-ctc-id="${escHtml(c.id)}" onclick="ccMiniEditContact(this.dataset.ccCtcId)" style="font-size:10px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:0 .2rem" title="Edit">Edit</button>
+      ${deleteBtn}
+    </div>`;
+  }).join('');
+}
+
+async function ccMiniToggleActive(id, newVal) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ is_active: newVal }),
+  });
+  if (r.ok) {
+    const idx = _ccState.contacts.findIndex(c => c.id === id);
+    if (idx >= 0) _ccState.contacts[idx].is_active = newVal;
+    ccRenderContactSelect();
+    ccRenderContactsMini();
+  }
+}
+
+async function ccMiniDeleteContact(id) {
+  if (!confirm('Delete this contact?')) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: cmrrHdr()
+  });
+  if (r.ok) {
+    _ccState.contacts = _ccState.contacts.filter(c => c.id !== id);
+    if (_ccState.contactId === id) { _ccState.contactId = null; document.getElementById('cc-contact-sel').value = ''; }
+    ccRenderContactSelect();
+    ccRenderContactsMini();
+  }
+}
+
+function ccMiniEditContact(id) {
+  const c = _ccState.contacts.find(x => x.id === id);
+  if (!c) return;
+  const newName  = prompt('Full Name:', c.name || '');
+  if (newName === null) return;
+  const newRole  = prompt('Designation:', c.role || '');
+  if (newRole === null) return;
+  const newEmail = prompt('Email:', c.email || '');
+  if (newEmail === null) return;
+  const newPhone = prompt('Phone:', c.phone || '');
+  if (newPhone === null) return;
+  fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ name: newName.trim(), role: newRole.trim() || null, email: newEmail.trim() || null, phone: newPhone.trim() || null }),
+  }).then(async r => {
+    if (r.ok) {
+      const [saved] = await r.json();
+      const idx = _ccState.contacts.findIndex(c => c.id === id);
+      if (idx >= 0) _ccState.contacts[idx] = { ..._ccState.contacts[idx], ...saved };
+      ccRenderContactSelect();
+      ccRenderContactsMini();
+    }
+  });
 }
 
 function ccRenderContactSelect() {
@@ -4820,6 +5305,7 @@ async function ccSubmit() {
                              ? document.getElementById('cc-promised-date').value : null,
       ack_reason:          (isConn && s.outcome === 'payment_acknowledged_no_commitment') ? s.ackReason : null,
       dispute_type:        (isConn && s.outcome === 'dispute_raised') ? s.disputeType : null,
+      dispute_description: (isConn && s.outcome === 'dispute_raised') ? (document.getElementById('cc-dispute-desc')?.value.trim() || null) : null,
       needs_internal_help: (isConn && s.outcome === 'dispute_raised') ? s.needsHelp : null,
       escalation_needed:   isConn ? s.escalationNeeded : false,
       escalation_who:      (isConn && s.escalationNeeded) ? document.getElementById('cc-esc-who').value.trim() : null,
@@ -4869,7 +5355,7 @@ async function ccHistSelectCustomer(name) {
   const contentEl = document.getElementById('cc-hist-content');
   contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/interactions?customer_name=eq.${encodeURIComponent(name)}&order=created_at.desc&limit=50`,
+    `${SUPABASE_URL}/rest/v1/interactions?customer_name=eq.${encodeURIComponent(name)}&order=created_at.desc&limit=50&select=*`,
     { headers: cmrrHdr() }
   );
   if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
@@ -4921,7 +5407,7 @@ function ccRenderTLItem(i, invoiceIds, contactMap) {
   if (contact) lines.push(`Spoke with: <strong>${escHtml(contact.name)}${contact.role?' ('+escHtml(contact.role)+')':''}</strong>${ch?' · '+ch:''}`);
   if (i.promised_date) lines.push(`Promise: <strong>${i.promised_date}</strong>${i.promised_amount?' · ₹'+f(i.promised_amount):''}`);
   if (i.ack_reason) lines.push(`Reason: ${i.ack_reason.replace(/_/g,' ')}`);
-  if (i.dispute_type) lines.push(`Dispute type: ${i.dispute_type.replace(/_/g,' ')}`);
+  if (i.dispute_type) lines.push(`Dispute type: ${i.dispute_type.replace(/_/g,' ')}${i.dispute_description ? ` — <em>${escHtml(i.dispute_description)}</em>` : ''}`);
   if (i.escalation_needed && i.escalation_who) lines.push(`Escalation → <strong>${escHtml(i.escalation_who)}</strong>: ${escHtml(i.escalation_what||'')}`);
   if (i.note) lines.push(`<em>${escHtml(i.note)}</em>`);
   lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
