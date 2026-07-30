@@ -1394,6 +1394,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
       <input type="text" id="di-search" placeholder="Search customer, invoice, description…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderDisputedInvoices()">
       <select id="di-filter-bu" class="nret-sel" style="font-size:12px;min-width:120px" onchange="renderDisputedInvoices()"><option value="">All BUs</option></select>
+      <select id="di-filter-collector" class="nret-sel" style="font-size:12px;min-width:140px" onchange="renderDisputedInvoices()"><option value="">All Collectors</option></select>
       <select id="di-filter-status" class="nret-sel" style="font-size:12px;min-width:110px" onchange="renderDisputedInvoices()">
         <option value="open">Open only</option>
         <option value="closed">Closed only</option>
@@ -1462,6 +1463,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center">
         <input type="text" id="ctc-search" placeholder="Search name, email, phone…" class="cust-input" style="flex:1;min-width:180px;font-size:12px;padding:.3rem .65rem" oninput="renderContactsTable()">
+        <select id="ctc-filter-bu" class="nret-sel" style="font-size:12px;min-width:120px" onchange="renderContactsTable()"><option value="">All BUs</option></select>
+        <select id="ctc-filter-collector" class="nret-sel" style="font-size:12px;min-width:140px" onchange="renderContactsTable()"><option value="">All Collectors</option></select>
         <select id="ctc-filter-customer" class="nret-sel" style="font-size:12px;min-width:160px" onchange="renderContactsTable()"><option value="">All Customers</option></select>
         <select id="ctc-filter-category" class="nret-sel" style="font-size:12px;min-width:140px" onchange="renderContactsTable()"><option value="">All Categories</option></select>
         <select id="ctc-filter-active" class="nret-sel" style="font-size:12px" onchange="renderContactsTable()">
@@ -1470,9 +1473,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <div id="ctc-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.35rem"></div>
       <div style="overflow-x:auto">
-        <table class="ar-tbl" style="min-width:720px">
+        <table class="ar-tbl" style="min-width:900px">
           <thead><tr>
             <th style="text-align:left">Customer</th>
+            <th style="text-align:left">BU</th>
+            <th style="text-align:left">Collector</th>
             <th style="text-align:left">POC Name</th>
             <th style="text-align:left">Designation</th>
             <th style="text-align:left">Category</th>
@@ -1769,7 +1774,7 @@ function renderNav() {
     if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
-    if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; loadContactsMaster(); }
+    if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
     if (activeId === 'settings') loadSettingsPane();
   }
 }
@@ -2159,9 +2164,31 @@ async function loadContactsMaster() {
   _ctcContacts = cr.ok ? await cr.json() : [];
   if (catr.ok) _contactCategories = await catr.json();
   if (status) status.textContent = '';
+  // Ensure customer master is loaded for BU/collector lookups
+  if (!_cmData.length) await loadArCustMaster();
+  _populateCtcBuFilter();
+  _populateCtcCollectorFilter();
   _populateCtcCustomerFilter();
   _populateCtcCategoryFilter();
   renderContactsTable();
+}
+
+function _populateCtcBuFilter() {
+  const sel = document.getElementById('ctc-filter-bu');
+  if (!sel) return;
+  const current = sel.value;
+  const bus = [...new Set(_ctcContacts.map(c => arGetBu(c.customer_name)).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All BUs</option>'
+    + bus.map(b => `<option value="${escHtml(b)}"${b === current ? ' selected' : ''}>${escHtml(b)}</option>`).join('');
+}
+
+function _populateCtcCollectorFilter() {
+  const sel = document.getElementById('ctc-filter-collector');
+  if (!sel) return;
+  const current = sel.value;
+  const collectors = [...new Set(_ctcContacts.map(c => arGetCollector(c.customer_name)).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Collectors</option>'
+    + collectors.map(n => `<option value="${escHtml(n)}"${n === current ? ' selected' : ''}>${escHtml(n)}</option>`).join('');
 }
 
 function _populateCtcCustomerFilter() {
@@ -2186,18 +2213,23 @@ function renderContactsTable() {
   const tbody   = document.getElementById('ctc-tbody');
   const status  = document.getElementById('ctc-status');
   if (!tbody) return;
-  const q       = (document.getElementById('ctc-search')?.value || '').toLowerCase();
-  const custF   = document.getElementById('ctc-filter-customer')?.value || '';
-  const catF    = document.getElementById('ctc-filter-category')?.value || '';
-  const activeF = document.getElementById('ctc-filter-active')?.value || '';
+  const q         = (document.getElementById('ctc-search')?.value || '').toLowerCase();
+  const buF       = document.getElementById('ctc-filter-bu')?.value || '';
+  const collF     = document.getElementById('ctc-filter-collector')?.value || '';
+  const custF     = document.getElementById('ctc-filter-customer')?.value || '';
+  const catF      = document.getElementById('ctc-filter-category')?.value || '';
+  const activeF   = document.getElementById('ctc-filter-active')?.value || '';
 
   const rows = _ctcContacts.filter(c => {
-    if (custF   && c.customer_name !== custF) return false;
-    if (catF    && (c.category || '') !== catF) return false;
+    if (buF    && arGetBu(c.customer_name) !== buF) return false;
+    if (collF  && arGetCollector(c.customer_name) !== collF) return false;
+    if (custF  && c.customer_name !== custF) return false;
+    if (catF   && (c.category || '') !== catF) return false;
     if (activeF === 'active'   && c.is_active === false) return false;
     if (activeF === 'inactive' && c.is_active !== false) return false;
     if (q) {
-      const hay = [c.name, c.email, c.phone, c.role, c.customer_name, c.category].join(' ').toLowerCase();
+      const hay = [c.name, c.email, c.phone, c.role, c.customer_name, c.category,
+                   arGetBu(c.customer_name), arGetCollector(c.customer_name)].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -2206,7 +2238,7 @@ function renderContactsTable() {
   if (status) status.textContent = `${rows.length} contact${rows.length === 1 ? '' : 's'}`;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No contacts found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No contacts found.</td></tr>`;
     return;
   }
 
@@ -2214,6 +2246,9 @@ function renderContactsTable() {
   const canMutateContact = (c) => !isCollectorRole || _ccCustNames.includes(c.customer_name);
   const canDelete = (USER_ACCESS?.is_admin) || _collectorCanDeleteContacts;
   tbody.innerHTML = rows.map(c => {
+    const bu        = arGetBu(c.customer_name);
+    const collector = arGetCollector(c.customer_name);
+    const buBadge   = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .38rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--txt3)">—</span>';
     const active = c.is_active !== false;
     const statusPill = active
       ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, false)" title="Click to deactivate">Active</span>`
@@ -2229,6 +2264,8 @@ function renderContactsTable() {
       : '<span style="color:var(--txt3)">—</span>';
     return `<tr>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.customer_name || '')}</td>
+      <td>${buBadge}</td>
+      <td style="font-size:12px;color:var(--txt2)">${escHtml(collector || '—')}</td>
       <td style="font-size:12.5px;font-weight:500">${escHtml(c.name || '')}</td>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
       <td style="font-size:12px;color:var(--txt2)">${c.category ? escHtml(catLabel) : catLabel}</td>
@@ -2829,10 +2866,16 @@ async function loadDisputedInvoices() {
 }
 
 function _populateDiFilterBu() {
-  const sel = document.getElementById('di-filter-bu');
-  if (!sel) return;
-  const bus = [...new Set(_diRows.map(r => arGetBu(r.customer_name)).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All BUs</option>' + bus.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+  const buSel = document.getElementById('di-filter-bu');
+  if (buSel) {
+    const bus = [...new Set(_diRows.map(r => arGetBu(r.customer_name)).filter(Boolean))].sort();
+    buSel.innerHTML = '<option value="">All BUs</option>' + bus.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+  }
+  const collSel = document.getElementById('di-filter-collector');
+  if (collSel) {
+    const collectors = [...new Set(_diRows.map(r => arGetCollector(r.customer_name)).filter(Boolean))].sort();
+    collSel.innerHTML = '<option value="">All Collectors</option>' + collectors.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  }
 }
 
 function getDiDisputeLabel(val) {
@@ -3042,13 +3085,16 @@ function renderDisputedInvoices() {
   if (!tbody) return;
   const q       = (document.getElementById('di-search')?.value || '').toLowerCase();
   const buF     = document.getElementById('di-filter-bu')?.value || '';
+  const collF   = document.getElementById('di-filter-collector')?.value || '';
   const statusF = document.getElementById('di-filter-status')?.value;
 
   const filtered = _diRows.filter(r => {
     if (statusF !== undefined && statusF !== '' && r.status !== statusF) return false;
-    if (buF && arGetBu(r.customer_name) !== buF) return false;
+    if (buF    && arGetBu(r.customer_name) !== buF) return false;
+    if (collF  && arGetCollector(r.customer_name) !== collF) return false;
     if (q) {
-      const hay = [r.customer_name, r.invoice_number, r.invoice_id, r.dispute_type, r.dispute_description || '', arGetCollector(r.customer_name)].join(' ').toLowerCase();
+      const hay = [r.customer_name, r.invoice_number, r.invoice_id, r.dispute_type, r.dispute_description || '',
+                   arGetBu(r.customer_name), arGetCollector(r.customer_name)].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
