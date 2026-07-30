@@ -507,6 +507,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div class="sb-title">Bizom AR</div>
   </div>
   <nav id="main-nav"></nav>
+  <div id="bottom-nav" style="border-top:1px solid rgba(255,255,255,.1);padding:.3rem 0"></div>
   <div class="sb-foot" id="logout-area" style="display:none">
     <span id="logout-name" class="sb-username"></span>
     <button class="sb-signout-btn" onclick="doLogout()">Sign out</button>
@@ -1297,8 +1298,11 @@ function renderNav() {
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
   if (role === 'admin-edit') {
-    nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
-    nav.innerHTML += '<button class="tbtn" data-tab="rate-calculator" onclick="showRateCalcTab(this)">Rate Calculator</button>';
+    const bn = document.getElementById('bottom-nav');
+    if (bn) {
+      bn.innerHTML = '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)">⚙ Settings</button>'
+                   + '<button class="tbtn" data-tab="rate-calculator" onclick="showRateCalcTab(this)">Rate Calculator</button>';
+    }
   }
   if (USER_ACCESS.is_admin) {
     document.getElementById('settings-users-section').style.display = '';
@@ -1313,6 +1317,7 @@ function renderNav() {
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
+    document.getElementById('bottom-nav')?.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
@@ -3927,13 +3932,13 @@ async function ccSelectCustomer(name) {
         const amt   = inv.balance_inr || inv.balance || 0;
         const invId = inv.invoice_id || '';
         const cbId  = 'cc-inv-' + invId.replace(/[^a-zA-Z0-9_-]/g, '_');
-        return `<div class="cc-invoice-row" onclick="ccToggleInvoice(${JSON.stringify(invId)})">
-          <input type="checkbox" id="${cbId}" value="${escHtml(invId)}">
-          <label for="${cbId}">
+        return `<div class="cc-invoice-row" onclick="ccInvRowClick(event,${JSON.stringify(invId)})">
+          <input type="checkbox" id="${cbId}" value="${escHtml(invId)}" onclick="event.stopPropagation()" onchange="ccInvCheck(${JSON.stringify(invId)},this.checked)">
+          <label style="flex:1;display:flex;align-items:center;gap:.6rem;cursor:pointer;min-width:0">
             <span style="font-weight:600">${escHtml(inv.invoice_number || invId)}</span>
-            <span style="color:var(--txt3)">${inv.due_date || '—'}</span>
+            <span style="color:var(--txt3);font-size:11px">${inv.due_date || '—'}</span>
             <span class="cc-inv-tag" style="${tagStyle}">${tagText}</span>
-            <span style="margin-left:auto">₹${f(amt)}</span>
+            <span style="margin-left:auto;font-family:var(--mono);font-size:12px">₹${f(amt)}</span>
           </label>
         </div>`;
       }).join('');
@@ -3949,15 +3954,20 @@ async function ccSelectCustomer(name) {
   }
 }
 
-function ccToggleInvoice(invId) {
+function ccInvRowClick(e, invId) {
+  if (e.target.tagName === 'INPUT') return; // checkbox handled by its own onchange
   const cbId = `cc-inv-${invId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-  const cb   = document.getElementById(cbId);
+  const cb = document.getElementById(cbId);
   if (!cb) return;
   cb.checked = !cb.checked;
-  if (cb.checked) _ccState.selectedInvIds.add(invId);
-  else            _ccState.selectedInvIds.delete(invId);
+  ccInvCheck(invId, cb.checked);
+}
+function ccInvCheck(invId, checked) {
+  if (checked) _ccState.selectedInvIds.add(invId);
+  else _ccState.selectedInvIds.delete(invId);
   ccUpdateConnectedBtnState();
 }
+function ccToggleInvoice(invId) { ccInvRowClick({target:{}}, invId); } // legacy compat
 
 function ccUpdateConnectedBtnState() {
   const disabled = _ccState.invoices.length > 0 && _ccState.selectedInvIds.size === 0;
