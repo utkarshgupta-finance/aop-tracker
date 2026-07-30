@@ -52,7 +52,7 @@ header{display:none}
 .sb-eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.15em;color:rgba(255,255,255,.35);text-transform:uppercase}
 .sb-title{font-size:17px;font-weight:500;color:#fff;margin-top:3px}
 .sidebar nav{flex:1;padding:.4rem 0;overflow-y:auto}
-.app-content{flex:1;min-width:0;overflow-y:auto;min-height:100vh}
+.app-content{flex:1;min-width:0;overflow-x:hidden;overflow-y:auto;min-height:100vh}
 .sb-foot{padding:.75rem 1.1rem;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:.35rem}
 .sb-username{font-size:11px;color:rgba(255,255,255,.55);word-break:break-all}
 .sb-signout-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:.3rem .75rem;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--sans);text-align:left;transition:background .15s}
@@ -1298,13 +1298,14 @@ function renderNav() {
     .join('');
   if (role === 'admin-edit') {
     nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
+    nav.innerHTML += '<button class="tbtn" data-tab="rate-calculator" onclick="showRateCalcTab(this)">Rate Calculator</button>';
   }
   if (USER_ACCESS.is_admin) {
     document.getElementById('settings-users-section').style.display = '';
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
-  const extraIds = [...(role === 'admin-edit' ? ['settings'] : [])];
+  const extraIds = [...(role === 'admin-edit' ? ['settings', 'rate-calculator'] : [])];
   const allIds  = [...allowed, ...extraIds];
   const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
   if (activeId) {
