@@ -330,6 +330,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-subtabs{display:flex;gap:0;margin-bottom:1.1rem;border-bottom:1.5px solid var(--brd)}
 .ar-stbtn{padding:.55rem 1.15rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s}
 .ar-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+.st-tabs{display:flex;gap:0;margin-bottom:1.25rem;border-bottom:1.5px solid var(--brd);flex-wrap:wrap}
+.st-stbtn{padding:.55rem 1.1rem;font-size:12px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color .15s;white-space:nowrap}
+.st-stbtn.active{color:var(--navy2);border-bottom-color:var(--navy3);font-weight:600}
+.st-stbtn:hover:not(.active){color:var(--txt)}
+.st-pane{}
 /* ── AR invoice view toggle ───────────────────────────────────── */
 .ar-view-tog{display:flex;gap:.35rem;margin-bottom:.85rem}
 .ar-vtbtn{padding:.26rem .7rem;font-size:11.5px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--txt2);transition:background .12s,color .12s}
@@ -538,7 +543,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div class="ar-card c-current" id="ar-card-current"></div>
       <div class="ar-card c-total"   id="ar-card-total"></div>
     </div>
-    <div class="ar-aging-bar-wrap" id="ar-aging-bar-wrap"></div>
+    <div class="ar-aging-bar-wrap" id="ar-aging-bar-wrap" style="display:none"></div>
     <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
       <select class="nret-sel" id="ar-f-entity" onchange="renderAR()" style="font-size:12px">
         <option value="">All Entities</option>
@@ -559,22 +564,23 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <input type="text" class="cust-input" id="ar-search" placeholder="Search anything…"
         style="font-size:12px;max-width:220px;padding:.35rem .75rem" oninput="renderAR()">
     </div>
-    <!-- BU capsule filter -->
-    <div style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem">
-      <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px">BU</span>
-      <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
+    <!-- BU + Collector capsule filters — same row -->
+    <div style="display:flex;align-items:flex-start;gap:1.25rem;flex-wrap:wrap;margin-bottom:.85rem">
+      <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px;flex-wrap:wrap">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:22px">BU</span>
+        <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
+      </div>
+      <div id="ar-collector-filter-wrap" style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px;flex-wrap:wrap">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px">Collector</span>
+        <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
+      </div>
     </div>
-    <!-- Collector capsule filter -->
-    <div id="ar-collector-filter-wrap" style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem">
-      <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px">Collector</span>
-      <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
-    </div>
-    <!-- AR sub-tabs -->
+    <!-- AR sub-tabs (multi-select) -->
     <div class="ar-subtabs">
-      <button class="ar-stbtn active" id="ar-st-invoices" onclick="showARSubTab('invoices')">Open Invoices</button>
-      <button class="ar-stbtn" id="ar-st-aging" onclick="showARSubTab('aging')">AR Aging</button>
-      <button class="ar-stbtn" id="ar-st-daily" onclick="showARSubTab('daily')">Daily Snapshots</button>
-      <button class="ar-stbtn" id="ar-st-summary" onclick="showARSubTab('summary')">AR Summary</button>
+      <button class="ar-stbtn active" id="ar-st-invoices" onclick="toggleARSubTab('invoices')">Open Invoices</button>
+      <button class="ar-stbtn" id="ar-st-aging" onclick="toggleARSubTab('aging')">AR Aging</button>
+      <button class="ar-stbtn" id="ar-st-daily" onclick="toggleARSubTab('daily')">Daily Snapshots</button>
+      <button class="ar-stbtn" id="ar-st-summary" onclick="toggleARSubTab('summary')">AR Summary</button>
     </div>
     <!-- Open Invoices pane (default) -->
     <div id="ar-pane-invoices">
@@ -734,7 +740,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
     <!-- ── Collector Level ───────────────────────────────── -->
     <div id="ca-sec-collector" style="display:none">
-      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;flex-wrap:wrap">
         <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
           <div style="display:flex">
             <button id="cl-view-heatmap" class="ca-view-btn active" onclick="clSetView('heatmap')">Heatmap</button>
@@ -750,6 +756,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             </select>
           </div>
         </div>
+      </div>
+      <!-- Collector visibility toggles -->
+      <div id="cl-collector-toggles" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap">Collectors</span>
       </div>
       <!-- Heatmap -->
       <div id="cl-heatmap-section">
@@ -774,101 +784,135 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
   <!-- ── Settings Pane ──────────────────────────────────────── -->
   <div id="settings" class="pane">
-    <!-- GBP/INR Rate -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">GBP / INR Exchange Rate</div>
-      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">Used for all UK AR conversions. Enter the current rate and save.</div>
-      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP  e.g. 107.5" min="1" step="0.01" style="font-size:12px;padding:.3rem .6rem;border:1px solid var(--brd);border-radius:5px;width:190px;background:#fff">
-        <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.28rem .75rem;font-size:12px">Save</button>
-        <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
-      </div>
+    <div class="st-tabs">
+      <button class="st-stbtn active" id="st-tab-fx"       onclick="showSettingsSubTab('fx')">GBP/INR Rates</button>
+      <button class="st-stbtn"        id="st-tab-excluded"  onclick="showSettingsSubTab('excluded')">Excluded Customers</button>
+      <button class="st-stbtn"        id="st-tab-tags"      onclick="showSettingsSubTab('tags')">Tags</button>
+      <button class="st-stbtn"        id="st-tab-bu"        onclick="showSettingsSubTab('bu')">BU Master</button>
+      <button class="st-stbtn"        id="st-tab-collector" onclick="showSettingsSubTab('collector')">Collector Master</button>
+      <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
+      <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')" style="display:none">Manage Users</button>
     </div>
-    <!-- Excluded Customers -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">Excluded Customers</div>
-      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
-      <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
-      <div style="display:flex;gap:.5rem;align-items:center">
-        <select id="ar-excl-input" class="nret-sel" style="font-size:12px;flex:1;max-width:360px"><option value="">— Select customer —</option></select>
-        <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Exclude</button>
-      </div>
-    </div>
-    <!-- Tag Master -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.75rem">Tag Master</div>
-      <div id="tag-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px;margin-bottom:.65rem"></div>
-      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input type="text" id="tag-add-name" placeholder="Tag name…" class="cust-input" style="font-size:12px;max-width:160px;padding:.3rem .65rem">
-        <input type="color" id="tag-add-color" value="#6366f1" title="Tag colour" style="width:32px;height:32px;padding:2px;border:1px solid var(--brd);border-radius:4px;cursor:pointer;background:#fff">
-        <button class="modal-csv" onclick="addTagMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add Tag</button>
-        <span id="tag-master-status" style="font-size:11px;color:var(--txt3)"></span>
-      </div>
-    </div>
-    <!-- BU Master -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
-      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">BU Master</span>
-      </div>
-      <div id="bu-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
-      <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
-        <input type="text" id="bu-add-input" placeholder="Add BU name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
-        <button class="modal-csv" onclick="addBuMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
-        <span id="bu-master-status" style="font-size:11px;color:var(--txt3)"></span>
-      </div>
-    </div>
-    <!-- Collector Master -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;background:var(--surf)">
-      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Collector Master</span>
-      </div>
-      <div id="collector-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
-      <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
-        <input type="text" id="collector-add-input" placeholder="Add collector name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
-        <button class="modal-csv" onclick="addCollectorMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
-        <span id="collector-master-status" style="font-size:11px;color:var(--txt3)"></span>
-      </div>
-    </div>
-    <!-- Customer Master -->
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
-      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Customer Master</span>
-        <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
-          <button class="rbtn" onclick="downloadCustMaster()" style="font-size:12px">⬇ Export</button>
-          <label class="modal-csv" style="font-size:12px;cursor:pointer;padding:.32rem .75rem;display:inline-flex;align-items:center">
-            ⬆ Upload CSV/XLSX
-            <input type="file" id="cust-master-upload" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadCustMaster(this.files[0]);this.value=''">
-          </label>
+
+    <!-- GBP/INR Monthly Rates -->
+    <div id="st-pane-fx" class="st-pane">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">GBP / INR Monthly Rates</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.75rem">Per-month rates used for all UK AR conversions.</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;padding:.65rem .75rem;background:var(--surf2);border-radius:7px;border:1px solid var(--brd);margin-bottom:.85rem">
+          <span style="font-size:11px;color:var(--txt2);font-weight:600;white-space:nowrap">Add / Update</span>
+          <input type="month" id="ar-settings-fx-month" style="font-size:12px;padding:.22rem .45rem;border:1px solid var(--brd);border-radius:5px;background:#fff">
+          <input type="number" id="ar-settings-fx-rate" placeholder="₹ per GBP" min="1" step="0.01" style="font-size:12px;padding:.22rem .45rem;border:1px solid var(--brd);border-radius:5px;width:115px;background:#fff">
+          <button class="modal-csv" onclick="saveArSettingsFxRate()" style="padding:.25rem .7rem;font-size:12px">Save</button>
+          <span id="ar-settings-fx-status" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="ar-tbl" style="min-width:320px">
+            <thead><tr><th style="text-align:left">Month</th><th style="text-align:right">Rate (₹/GBP)</th><th></th></tr></thead>
+            <tbody id="st-fx-tbody"></tbody>
+          </table>
         </div>
       </div>
-      <div id="cm-stats" style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;font-size:12.5px"></div>
-      <div style="display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center">
-        <input type="text" id="cm-search" placeholder="Search customer…" class="cust-input" style="flex:1;min-width:160px;font-size:12px;padding:.3rem .65rem" oninput="renderCustMasterTable()">
-        <select id="cm-filter-bu" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()"><option value="">All BUs</option></select>
-        <select id="cm-filter-mapped" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()">
-          <option value="">All</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option>
-        </select>
-      </div>
-      <div id="cm-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.4rem"></div>
-      <div style="overflow-x:auto">
-        <table class="ar-tbl" style="min-width:560px">
-          <thead><tr>
-            <th style="text-align:left">Customer</th>
-            <th style="text-align:left;width:175px">BU</th>
-            <th style="text-align:left;width:175px">Collector</th>
-            <th style="width:65px"></th>
-          </tr></thead>
-          <tbody id="cm-tbody"></tbody>
-        </table>
+    </div>
+
+    <!-- Excluded Customers -->
+    <div id="st-pane-excluded" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">Excluded Customers</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">These customers are hidden from all AR views and totals.</div>
+        <div id="ar-excl-list" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.65rem"></div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <select id="ar-excl-input" class="nret-sel" style="font-size:12px;flex:1;max-width:360px"><option value="">— Select customer —</option></select>
+          <button class="modal-csv" onclick="arExclAdd()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Exclude</button>
+        </div>
       </div>
     </div>
-    <!-- Manage Users (admin only, injected by renderNav) -->
-    <div id="settings-users-section" style="display:none;border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-top:1.25rem;background:var(--surf)">
-      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Manage Users</span>
-        <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add User</button>
+
+    <!-- Tags -->
+    <div id="st-pane-tags" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.75rem">Tag Master</div>
+        <div id="tag-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px;margin-bottom:.65rem"></div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <input type="text" id="tag-add-name" placeholder="Tag name…" class="cust-input" style="font-size:12px;max-width:160px;padding:.3rem .65rem">
+          <input type="color" id="tag-add-color" value="#6366f1" title="Tag colour" style="width:32px;height:32px;padding:2px;border:1px solid var(--brd);border-radius:4px;cursor:pointer;background:#fff">
+          <button class="modal-csv" onclick="addTagMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add Tag</button>
+          <span id="tag-master-status" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
       </div>
-      <div id="users-list"></div>
+    </div>
+
+    <!-- BU Master -->
+    <div id="st-pane-bu" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.75rem">BU Master</div>
+        <div id="bu-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
+        <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
+          <input type="text" id="bu-add-input" placeholder="Add BU name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
+          <button class="modal-csv" onclick="addBuMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+          <span id="bu-master-status" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collector Master -->
+    <div id="st-pane-collector" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.75rem">Collector Master</div>
+        <div id="collector-master-list" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:28px"></div>
+        <div style="display:flex;gap:.5rem;align-items:center;margin-top:.65rem">
+          <input type="text" id="collector-add-input" placeholder="Add collector name…" class="cust-input" style="font-size:12px;max-width:240px;padding:.3rem .65rem">
+          <button class="modal-csv" onclick="addCollectorMaster()" style="padding:.28rem .75rem;font-size:12px;white-space:nowrap">+ Add</button>
+          <span id="collector-master-status" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customer Master -->
+    <div id="st-pane-customers" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Customer Master</span>
+          <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap">
+            <button class="rbtn" onclick="downloadCustMaster()" style="font-size:12px">⬇ Export</button>
+            <label class="modal-csv" style="font-size:12px;cursor:pointer;padding:.32rem .75rem;display:inline-flex;align-items:center">
+              ⬆ Upload CSV/XLSX
+              <input type="file" id="cust-master-upload" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadCustMaster(this.files[0]);this.value=''">
+            </label>
+          </div>
+        </div>
+        <div id="cm-stats" style="display:flex;gap:1.25rem;margin-bottom:.85rem;flex-wrap:wrap;font-size:12.5px"></div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap;align-items:center">
+          <input type="text" id="cm-search" placeholder="Search customer…" class="cust-input" style="flex:1;min-width:160px;font-size:12px;padding:.3rem .65rem" oninput="renderCustMasterTable()">
+          <select id="cm-filter-bu" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()"><option value="">All BUs</option></select>
+          <select id="cm-filter-mapped" class="nret-sel" style="font-size:12px" onchange="renderCustMasterTable()">
+            <option value="">All</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option>
+          </select>
+        </div>
+        <div id="cm-status" style="font-size:12px;color:var(--txt3);min-height:1.1rem;margin-bottom:.4rem"></div>
+        <div style="overflow-x:auto">
+          <table class="ar-tbl" style="min-width:560px">
+            <thead><tr>
+              <th style="text-align:left">Customer</th>
+              <th style="text-align:left;width:175px">BU</th>
+              <th style="text-align:left;width:175px">Collector</th>
+              <th style="width:65px"></th>
+            </tr></thead>
+            <tbody id="cm-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manage Users (admin only) -->
+    <div id="st-pane-users" class="st-pane" style="display:none">
+      <div id="settings-users-section" style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Manage Users</span>
+          <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add User</button>
+        </div>
+        <div id="users-list"></div>
+      </div>
     </div>
   </div>
   <!-- ── Collector Console Pane ───────────────────────────── -->
@@ -1193,6 +1237,8 @@ const ALL_TABS_CFG = [
   { id: 'collections-analysis',label: 'Collections Analysis', fn: 'showCollectionsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     fn: 'showRateCalcTab(this)' },
+  { id: 'settings',            label: 'Settings',            fn: 'showSettingsTab(this)',
+    roles: ['admin-edit'] },
 ];
 
 
@@ -1291,27 +1337,30 @@ function renderNav() {
     ? ALL_TABS_CFG.map(t => t.id)
     : USER_ACCESS.allowed_tabs;
   const role = USER_ACCESS.role || 'admin-edit';
+  // Main nav excludes Settings (goes to bottom-nav)
+  const mainTabIds = ALL_TABS_CFG.filter(t => t.id !== 'settings').map(t => t.id);
   const nav = document.getElementById('main-nav');
   nav.innerHTML = ALL_TABS_CFG
-    .filter(t => allowed.includes(t.id))
+    .filter(t => t.id !== 'settings')
+    .filter(t => allowed.includes(t.id) || (USER_ACCESS.allowed_tabs.length === 0))
     .filter(t => !t.roles || t.roles.includes(role))
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
-  if (role === 'admin-edit') {
-    const bn = document.getElementById('bottom-nav');
-    if (bn) {
-      bn.innerHTML = '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)">⚙ Settings</button>'
-                   + '<button class="tbtn" data-tab="rate-calculator" onclick="showRateCalcTab(this)">Rate Calculator</button>';
-    }
+  // Settings always goes to bottom-nav for admin-edit; other roles may have it in allowed_tabs
+  const canSettings = role === 'admin-edit' || (allowed.includes('settings') && (!ALL_TABS_CFG.find(t=>t.id==='settings')?.roles || ALL_TABS_CFG.find(t=>t.id==='settings').roles.includes(role)));
+  const bn = document.getElementById('bottom-nav');
+  if (bn) {
+    bn.innerHTML = canSettings ? '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)">⚙ Settings</button>' : '';
   }
   if (USER_ACCESS.is_admin) {
-    document.getElementById('settings-users-section').style.display = '';
+    const usersTabBtn = document.getElementById('st-tab-users');
+    if (usersTabBtn) usersTabBtn.style.display = '';
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
-  const extraIds = [...(role === 'admin-edit' ? ['settings', 'rate-calculator'] : [])];
-  const allIds  = [...allowed, ...extraIds];
-  const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
+  const allNavIds = [...ALL_TABS_CFG.filter(t => !t.roles || t.roles.includes(role)).map(t => t.id)];
+  const firstMain = ALL_TABS_CFG.filter(t => t.id !== 'settings').find(t => !t.roles || t.roles.includes(role))?.id || 'ar';
+  const activeId = (saved && allNavIds.includes(saved)) ? saved : firstMain;
   if (activeId) {
     const paneId = activeId;
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
@@ -1321,6 +1370,7 @@ function renderNav() {
     if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
+    if (activeId === 'settings') loadSettingsPane();
   }
 }
 
@@ -1455,10 +1505,20 @@ async function deleteUser(userId, name) {
 
 
 /* ─── SETTINGS / CUSTOMER MASTER ─────────────────────────────── */
+let _stActiveTab = 'fx';
+function showSettingsSubTab(tab) {
+  _stActiveTab = tab;
+  for (const id of ['fx','excluded','tags','bu','collector','customers','users']) {
+    document.getElementById(`st-pane-${id}`).style.display  = id === tab ? '' : 'none';
+    document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
+  }
+}
 function showSettingsTab(btn) {
   showTab('settings', btn);
   loadSettingsPane();
   if (USER_ACCESS && USER_ACCESS.is_admin) {
+    const usersBtn = document.getElementById('st-tab-users');
+    if (usersBtn) usersBtn.style.display = '';
     Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
   }
 }
@@ -1467,6 +1527,11 @@ async function loadSettingsPane() {
   // Pre-populate GBP rate input with current value
   const ri = document.getElementById('ar-settings-fx-rate');
   if (ri && _arCurrentRate) ri.value = _arCurrentRate;
+  // Set current month in the month input if empty
+  const mi = document.getElementById('ar-settings-fx-month');
+  if (mi && !mi.value) mi.value = new Date().toISOString().slice(0, 7);
+  await loadFxRates();
+  renderSettingsFxTable();
   await loadARExcluded();
   renderArExcludedList();
   await loadTagMaster();
@@ -1483,6 +1548,32 @@ async function loadSettingsPane() {
   if (USER_ACCESS && USER_ACCESS.is_admin) {
     loadUsersPanel();
   }
+}
+
+function renderSettingsFxTable() {
+  const tbody = document.getElementById('st-fx-tbody');
+  if (!tbody) return;
+  const sorted = Object.entries(_arFxRates).sort((a,b) => b[0].localeCompare(a[0]));
+  if (!sorted.length) { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--txt3);padding:.5rem">No rates saved yet.</td></tr>'; return; }
+  tbody.innerHTML = sorted.map(([month, rate]) =>
+    `<tr>
+      <td>${escHtml(month)}</td>
+      <td style="text-align:right;font-family:var(--mono)">₹${Number(rate).toFixed(2)}</td>
+      <td style="text-align:right"><button onclick="delSettingsFxRate(${JSON.stringify(month)})" style="font-size:10px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .3rem">×</button></td>
+    </tr>`
+  ).join('');
+}
+
+async function delSettingsFxRate(month) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates?year_month=eq.${encodeURIComponent(month)}&currency=eq.GBP`, {
+      method: 'DELETE', headers: cmrrHdr()
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    delete _arFxRates[month];
+    renderSettingsFxTable();
+    renderAR();
+  } catch(e) { alert('Delete failed: ' + e.message); }
 }
 
 async function renderCustMasterTable() {
@@ -1848,7 +1939,7 @@ let _tagMasterList = []; // sorted array of tag names
 let _arInvTags = {}; // { 'invoice_number||entity': [tag_name,...] }
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
-let _arSubTab   = 'invoices';
+let _arSubTab   = 'invoices'; // legacy — use _arActivePanes instead
 let _arLastRows = []; // last filtered set for re-sort
 let _arCvSortCol = 'totalBal'; // customer view sort column
 let _arCvSortDir = -1; // -1=desc, 1=asc
@@ -1895,17 +1986,27 @@ function showRateCalcTab(btn) {
   showTab('rate-calculator', btn);
 }
 
-function showARSubTab(tab) {
-  _arSubTab = tab;
-  document.getElementById('ar-pane-invoices').style.display = tab === 'invoices' ? '' : 'none';
-  document.getElementById('ar-pane-aging').style.display    = tab === 'aging'    ? '' : 'none';
-  document.getElementById('ar-pane-daily').style.display    = tab === 'daily'    ? '' : 'none';
-  document.getElementById('ar-pane-summary').style.display  = tab === 'summary'  ? '' : 'none';
-  document.getElementById('ar-st-invoices').classList.toggle('active', tab === 'invoices');
-  document.getElementById('ar-st-aging').classList.toggle('active', tab === 'aging');
-  document.getElementById('ar-st-daily').classList.toggle('active', tab === 'daily');
-  document.getElementById('ar-st-summary').classList.toggle('active', tab === 'summary');
+let _arActivePanes = new Set(['invoices']);
+function toggleARSubTab(tab) {
+  if (_arActivePanes.has(tab)) {
+    if (_arActivePanes.size === 1) return; // keep at least one
+    _arActivePanes.delete(tab);
+  } else {
+    _arActivePanes.add(tab);
+  }
+  _applyARSubTabs();
+  if (_arActivePanes.has('daily')) loadARSnapshots();
+}
+function showARSubTab(tab) { // legacy compat
+  _arActivePanes = new Set([tab]);
+  _applyARSubTabs();
   if (tab === 'daily') loadARSnapshots();
+}
+function _applyARSubTabs() {
+  for (const id of ['invoices','aging','daily','summary']) {
+    document.getElementById(`ar-pane-${id}`).style.display = _arActivePanes.has(id) ? '' : 'none';
+    document.getElementById(`ar-st-${id}`).classList.toggle('active', _arActivePanes.has(id));
+  }
 }
 
 async function loadArCustMaster() {
@@ -2065,10 +2166,11 @@ function showFxRatesModal() {
 }
 
 async function saveArSettingsFxRate() {
+  const month  = document.getElementById('ar-settings-fx-month')?.value || new Date().toISOString().slice(0, 7);
   const rate   = parseFloat(document.getElementById('ar-settings-fx-rate').value);
   const status = document.getElementById('ar-settings-fx-status');
+  if (!month) { status.textContent = 'Select a month'; status.style.color='#b91c1c'; return; }
   if (!rate || rate < 1) { status.textContent = 'Enter a valid rate (e.g. 107.5)'; status.style.color='#b91c1c'; return; }
-  const month = new Date().toISOString().slice(0, 7);
   status.textContent = 'Saving…'; status.style.color = '';
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates`, {
@@ -2078,10 +2180,9 @@ async function saveArSettingsFxRate() {
     if (!r.ok) throw new Error(await r.text());
     _arFxRates[month] = rate;
     _arCurrentRate = rate;
-    // sync legacy inline inputs if present
-    const hm = document.getElementById('ar-fx-month'); if (hm) hm.value = month;
-    const hr = document.getElementById('ar-fx-rate');  if (hr) hr.value = rate;
-    status.textContent = `Saved ₹${rate} / GBP`; status.style.color='#15803d';
+    document.getElementById('ar-settings-fx-rate').value = '';
+    status.textContent = `Saved ${month}: ₹${rate}/GBP`; status.style.color='#15803d';
+    renderSettingsFxTable();
     renderAR();
   } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color='#b91c1c'; }
 }
@@ -2463,7 +2564,7 @@ function initARCapsuleListeners() {
       else if (_arBuSelected.has(bu)) { _arBuSelected.delete(bu); }
       else { _arBuSelected.add(bu); }
       renderAR();
-      if (_arSubTab === 'daily' && _arSnapLoaded) loadARSnapshots();
+      if (_arActivePanes.has('daily') && _arSnapLoaded) loadARSnapshots();
     });
   });
   _arCollectorRowIds.forEach(id => {
@@ -3033,12 +3134,12 @@ function renderARCustomerView(rows) {
   let body = '';
   custs.forEach(({ name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu }, idx) => {
     const buBadge = bu
-      ? `<span style="font-size:10px;background:#EEF2FF;color:#3730a3;padding:.1rem .38rem;border-radius:4px">${escHtml(bu)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
+      ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>`
+      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const collector = arGetCollector(name);
     const collectorBadge = collector
-      ? `<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:.1rem .38rem;border-radius:4px">${escHtml(collector)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
+      ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(collector)}</span>`
+      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const entities = [...new Set(invs.map(r => r.entity).filter(Boolean))];
     const entBadges = entities.map(e => e === 'UK'
       ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:.1rem .35rem;border-radius:3px;font-weight:700">UK</span>`
@@ -3190,12 +3291,12 @@ function renderARInvoiceList(rows) {
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
     const bu = arGetBu(r.customer_name);
-    const buCell = bu ? `<span style="font-size:10px;background:#EEF2FF;color:#3730a3;padding:.12rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
+    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const collectorName = arGetCollector(r.customer_name);
     const collectorCell = collectorName
-      ? `<span style="font-size:10px;background:var(--green-bg);color:var(--green);padding:.12rem .4rem;border-radius:4px">${escHtml(collectorName)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:10px">—</span>';
+      ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(collectorName)}</span>`
+      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const invKey = `${r.invoice_number}||${r.entity}`;
     const tagCapsules = (_arInvTags[invKey] || []).map(t => {
       const tm = _tagMaster[t] || {};
@@ -3449,20 +3550,41 @@ const CA_DATALABELS_PLUGIN = {
   afterDatasetsDraw(chart) {
     if (!chart.options.showDataLabels) return;
     const ctx = chart.ctx;
-    chart.data.datasets.forEach((ds, i) => {
-      const meta = chart.getDatasetMeta(i);
-      if (meta.hidden) return;
-      meta.data.forEach((pt, j) => {
-        const val = ds.data[j];
-        if (val == null) return;
+    const numPts = chart.data.labels.length;
+    // For each x-index, collect candidates, spread them vertically to avoid overlap
+    for (let xi = 0; xi < numPts; xi++) {
+      const candidates = [];
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        const pt = meta.data[xi];
+        const val = ds.data[xi];
+        if (val == null || pt == null) return;
+        candidates.push({ pt, val, color: ds.borderColor });
+      });
+      if (!candidates.length) continue;
+      // Sort top-to-bottom by screen y (ascending y = higher on screen = higher value)
+      candidates.sort((a, b) => a.pt.y - b.pt.y);
+      // Initial y positions above each point
+      const yPos = candidates.map(c => c.pt.y - 10);
+      // Push apart: pass forward
+      const minGap = 13;
+      for (let i = 1; i < yPos.length; i++) {
+        if (yPos[i] - yPos[i-1] < minGap) yPos[i] = yPos[i-1] + minGap;
+      }
+      // Push apart: pass backward to re-center stack
+      for (let i = yPos.length - 2; i >= 0; i--) {
+        if (yPos[i+1] - yPos[i] < minGap) yPos[i] = yPos[i+1] - minGap;
+      }
+      candidates.forEach((c, i) => {
         ctx.save();
         ctx.font = 'bold 9.5px sans-serif';
-        ctx.fillStyle = ds.borderColor;
+        ctx.fillStyle = c.color;
         ctx.textAlign = 'center';
-        ctx.fillText(val.toFixed(1) + '%', pt.x, pt.y - 9);
+        ctx.fillText(c.val.toFixed(1) + '%', c.pt.x, yPos[i]);
         ctx.restore();
       });
-    });
+    }
   }
 };
 
@@ -3603,7 +3725,21 @@ let _clInited  = false;
 let _clData    = [];
 let _clView    = 'heatmap';
 let _clChart   = null;
-const CL_COLORS = ['#3B82F6','#EF4444','#F59E0B','#10B981','#8B5CF6','#EC4899','#06B6D4','#84CC16'];
+const CL_COLORS = ['#3B82F6','#EF4444','#F59E0B','#10B981','#8B5CF6','#EC4899','#06B6D4','#F97316'];
+
+function clGetHidden() {
+  try { return new Set(JSON.parse(localStorage.getItem('cl_hidden_collectors') || '[]')); }
+  catch { return new Set(); }
+}
+function clSetHidden(set) {
+  localStorage.setItem('cl_hidden_collectors', JSON.stringify([...set]));
+}
+function clToggleCollector(name) {
+  const hidden = clGetHidden();
+  if (hidden.has(name)) hidden.delete(name); else hidden.add(name);
+  clSetHidden(hidden);
+  renderCollectorLevel();
+}
 
 async function loadCollectorLevel() {
   const hmMom  = document.getElementById('cl-hm-mom');
@@ -3652,7 +3788,9 @@ function renderCollectorLevel() {
   const monthOrder = {};
   data.forEach(d => { monthOrder[d.month] = d.month_order; });
   const months = [...new Set(data.map(d => d.month))].sort((a,b) => monthOrder[a] - monthOrder[b]);
-  const collectors = [...new Set(data.map(d => d.collector_name))].sort();
+  const allCollectors = [...new Set(data.map(d => d.collector_name))].sort();
+  const hidden = clGetHidden();
+  const collectors = allCollectors.filter(c => !hidden.has(c));
   const lookup = {};
   data.forEach(d => {
     if (!lookup[d.collector_name]) lookup[d.collector_name] = {};
@@ -3661,6 +3799,20 @@ function renderCollectorLevel() {
       rolling_3m_avg: d.rolling_3m_avg != null ? parseFloat(d.rolling_3m_avg) : null
     };
   });
+  // Render collector toggle capsules
+  const togglesEl = document.getElementById('cl-collector-toggles');
+  if (togglesEl) {
+    const label = '<span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap">Collectors</span>';
+    const caps = allCollectors.map((c, i) => {
+      const vis = !hidden.has(c);
+      const col = CL_COLORS[i % CL_COLORS.length];
+      const bg  = vis ? col + '22' : 'transparent';
+      const bdr = vis ? col : 'var(--brd2)';
+      const txt = vis ? col : 'var(--ink-faint)';
+      return `<button onclick="clToggleCollector(${JSON.stringify(c)})" style="font-size:11px;font-weight:600;padding:.2rem .55rem;border-radius:20px;border:1.5px solid ${bdr};background:${bg};color:${txt};cursor:pointer;font-family:var(--sans);transition:all .15s">${escHtml(c)}</button>`;
+    }).join('');
+    togglesEl.innerHTML = label + caps;
+  }
   if (_clView === 'heatmap') clRenderHeatmap(lookup, collectors, months);
   if (_clView === 'chart')   clRenderChart(lookup, collectors, months);
   if (_clView === 'table')   clRenderTable(lookup, collectors, months);
@@ -3706,25 +3858,68 @@ function clRenderHeatmap(lookup, collectors, months) {
   document.getElementById('cl-hm-roll').innerHTML = makeTable('rolling_3m_avg', rlLo,  rlHi);
 }
 
+const CL_DATALABELS_PLUGIN = {
+  id: 'clDataLabels',
+  afterDatasetsDraw(chart) {
+    const ctx = chart.ctx;
+    const numPts = chart.data.labels.length;
+    for (let xi = 0; xi < numPts; xi++) {
+      const candidates = [];
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        const pt = meta.data[xi];
+        const val = ds.data[xi];
+        if (val == null || pt == null) return;
+        candidates.push({ pt, val, color: ds.borderColor });
+      });
+      if (!candidates.length) continue;
+      candidates.sort((a, b) => a.pt.y - b.pt.y);
+      const yPos = candidates.map(c => c.pt.y - 10);
+      const minGap = 13;
+      for (let i = 1; i < yPos.length; i++) {
+        if (yPos[i] - yPos[i-1] < minGap) yPos[i] = yPos[i-1] + minGap;
+      }
+      for (let i = yPos.length - 2; i >= 0; i--) {
+        if (yPos[i+1] - yPos[i] < minGap) yPos[i] = yPos[i+1] - minGap;
+      }
+      candidates.forEach((c, i) => {
+        ctx.save();
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillStyle = c.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(c.val.toFixed(1) + '%', c.pt.x, yPos[i]);
+        ctx.restore();
+      });
+    }
+  }
+};
+
 function clRenderChart(lookup, collectors, months) {
   if (_clChart) { _clChart.destroy(); _clChart = null; }
   const ctx = document.getElementById('cl-chart');
   if (!ctx) return;
-  const datasets = collectors.map((c, i) => ({
-    label: c,
-    data:  months.map(m => lookup[c]?.[m]?.rolling_3m_avg ?? null),
-    borderColor: CL_COLORS[i % CL_COLORS.length],
-    backgroundColor: CL_COLORS[i % CL_COLORS.length] + '22',
-    borderWidth: 2, pointRadius: 3, tension: 0.35, fill: false,
-  }));
+  const allCollectors = [...new Set(_clData.map(d => d.collector_name))].sort();
+  const datasets = collectors.map(c => {
+    const i = allCollectors.indexOf(c);
+    return {
+      label: c,
+      data:  months.map(m => lookup[c]?.[m]?.rolling_3m_avg ?? null),
+      borderColor: CL_COLORS[i % CL_COLORS.length],
+      backgroundColor: CL_COLORS[i % CL_COLORS.length] + '22',
+      borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0.35, fill: false,
+    };
+  });
   const vals = datasets.flatMap(d => d.data).filter(v => v != null);
+  if (!vals.length) return;
   const lo = Math.min(...vals), hi = Math.max(...vals);
-  const pad = Math.max((hi - lo) * 0.12, 2);
+  const pad = Math.max((hi - lo) * 0.15, 5);
   _clChart = new Chart(ctx, {
     type: 'line',
     data: { labels: months, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
       plugins: {
         legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 10, padding: 12 } },
         tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toFixed(1) + '%' : '—'}` } },
@@ -3735,6 +3930,7 @@ function clRenderChart(lookup, collectors, months) {
              ticks: { font: { size: 10 }, callback: v => v + '%' }, grid: { color: '#e5e7eb' } },
       },
     },
+    plugins: [CL_DATALABELS_PLUGIN],
   });
 }
 
