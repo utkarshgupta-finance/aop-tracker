@@ -947,6 +947,27 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
 
+    <!-- Dispute Types section -->
+    <div id="st-pane-dispute-types" style="display:none;margin-top:1rem;border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.65rem;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Dispute Types</span>
+        <button class="modal-csv" onclick="openSubOptModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add Type</button>
+      </div>
+      <p style="font-size:12px;color:var(--txt2);margin-bottom:.75rem">Configure the dispute type options shown when a collector logs a dispute.</p>
+      <div id="dsopt-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.35rem"></div>
+      <div style="overflow-x:auto">
+        <table class="ar-tbl" style="min-width:380px">
+          <thead><tr>
+            <th style="text-align:left">Label</th>
+            <th style="text-align:left">Value key</th>
+            <th style="text-align:center">Status</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="dsopt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Outcome Option modal -->
     <div id="oo-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeOutcomeOptionModal()">
       <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
@@ -973,6 +994,36 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
           <button onclick="closeOutcomeOptionModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
           <button onclick="saveOutcomeOption()" class="modal-csv" id="oo-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dispute Type sub-option modal -->
+    <div id="dsopt-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeSubOptModal()">
+      <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+          <span id="dsopt-modal-title" style="font-size:14px;font-weight:600;color:var(--navy)">Add Dispute Type</span>
+          <button onclick="closeSubOptModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.65rem">
+          <div>
+            <label class="cc-label">Label (shown to collectors) <span class="cc-req">*</span></label>
+            <input type="text" id="dsopt-modal-label" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Pricing Dispute">
+          </div>
+          <div>
+            <label class="cc-label">Value key <span class="cc-req">*</span></label>
+            <input type="text" id="dsopt-modal-value" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;font-family:var(--mono)" placeholder="e.g. pricing_dispute">
+            <div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem">Lowercase and underscores only. Cannot change after creation.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;margin-top:.1rem">
+            <input type="checkbox" id="dsopt-modal-active" checked style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)">
+            <label for="dsopt-modal-active" style="font-size:12.5px;color:var(--ink-soft);cursor:pointer">Active</label>
+          </div>
+        </div>
+        <div id="dsopt-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+          <button onclick="closeSubOptModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+          <button onclick="saveSubOpt()" class="modal-csv" id="dsopt-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
         </div>
       </div>
     </div>
@@ -1174,11 +1225,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <div class="cc-field">
             <label class="cc-label">Dispute Type <span class="cc-req">*</span></label>
             <div class="cc-btn-group" id="cc-dispute-btns">
-              <button type="button" class="cc-opt-btn" data-val="invoice_po_documentation" onclick="ccSetDisputeType('invoice_po_documentation')">Invoice / PO Documentation</button>
-              <button type="button" class="cc-opt-btn" data-val="service_quality"          onclick="ccSetDisputeType('service_quality')">Service Quality</button>
-              <button type="button" class="cc-opt-btn" data-val="commercial"               onclick="ccSetDisputeType('commercial')">Commercial</button>
-              <button type="button" class="cc-opt-btn" data-val="payment_reconciliation"   onclick="ccSetDisputeType('payment_reconciliation')">Payment Reconciliation</button>
-              <button type="button" class="cc-opt-btn" data-val="other"                    onclick="ccSetDisputeType('other')">Other</button>
+              <!-- populated dynamically by renderDisputeTypeButtons() -->
             </div>
           </div>
           <div class="cc-field">
@@ -1239,18 +1286,48 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
     <!-- ── INTERACTION HISTORY ───────────────────────────── -->
     <div id="cc-pane-history" style="display:none">
-      <div class="cc-section">
-        <div class="cc-sec-title">Search Customer</div>
-        <div class="cc-field" style="margin:0">
-          <div class="cc-cust-wrap" style="max-width:440px">
-            <input type="text" id="cc-hist-cust-input" class="cc-input" placeholder="Type customer name…"
-              oninput="ccHistFilter()" onfocus="ccHistFilter()" autocomplete="off">
-            <div id="cc-hist-cust-dd" class="cc-cust-dd" style="display:none"></div>
+      <div style="background:var(--surf);border:1px solid var(--brd);border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">Filters</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+          <div style="position:relative;flex:0 0 190px;min-width:150px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">Customer</label>
+            <div class="cc-cust-wrap">
+              <input type="text" id="cc-hist-cust-input" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box" placeholder="All customers" oninput="ccHistCustFilter()" onfocus="ccHistCustFilter()" autocomplete="off">
+              <div id="cc-hist-cust-dd" class="cc-cust-dd" style="display:none"></div>
+            </div>
+          </div>
+          <div style="flex:0 0 175px;min-width:140px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">Outcome</label>
+            <select id="cc-hist-outcome" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box">
+              <option value="">All outcomes</option>
+              <option value="payment_commitment">Payment Commitment</option>
+              <option value="dispute_raised">Dispute Raised</option>
+              <option value="payment_acknowledged_no_commitment">Acknowledged, No Commitment</option>
+              <option value="wrong_number">Wrong Number</option>
+              <option value="not_reachable">Not Reachable</option>
+              <option value="gatekeeper_blocked">Gatekeeper Blocked</option>
+            </select>
+          </div>
+          <div style="flex:0 0 130px;min-width:110px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">From</label>
+            <input type="date" id="cc-hist-from" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box">
+          </div>
+          <div style="flex:0 0 130px;min-width:110px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">To</label>
+            <input type="date" id="cc-hist-to" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box">
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">Invoice / POC / Note</label>
+            <input type="text" id="cc-hist-kw" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box" placeholder="Invoice #, contact name, note…">
+          </div>
+          <div style="display:flex;gap:.4rem;padding-bottom:.05rem">
+            <button type="button" onclick="ccLoadHistory()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Load</button>
+            <button type="button" onclick="ccClearHistFilters()" style="font-size:12px;padding:.32rem .7rem;background:none;border:1px solid var(--brd2);border-radius:5px;cursor:pointer;color:var(--txt2)">Clear</button>
           </div>
         </div>
       </div>
       <div id="cc-hist-content">
-        <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Select a customer above to view their interaction history.</div>
+        <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Use filters above and click <strong>Load</strong> to view interaction history.</div>
       </div>
     </div>
   </div><!-- end #collector-console -->
@@ -1573,7 +1650,7 @@ function renderNav() {
   nav.innerHTML = ALL_TABS_CFG
     .filter(t => t.id !== 'settings')
     .filter(t => allowed.includes(t.id) || (USER_ACCESS.allowed_tabs.length === 0))
-    .filter(t => !t.roles || t.roles.includes(role))
+    .filter(t => !t.roles || t.roles.includes(role) || (USER_ACCESS.allowed_tabs.length > 0 && USER_ACCESS.allowed_tabs.includes(t.id)))
     .map(t => `<button class="tbtn" data-tab="${t.id}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
   // Settings always goes to bottom-nav for admin-edit; Rate Calculator is a direct link (no login required)
@@ -1744,7 +1821,7 @@ function showSettingsSubTab(tab) {
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
   if (tab === 'coc')     renderCocSettings();
-  if (tab === 'options') loadOutcomeOptionsMaster();
+  if (tab === 'options') { loadOutcomeOptionsMaster(); loadSubOptMaster(); const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = ''; }
   if (tab === 'users')   renderPermsSettings();
 }
 function showSettingsTab(btn) {
@@ -2022,13 +2099,18 @@ function renderContactsTable() {
     return;
   }
 
+  const isCollectorRole = (USER_ACCESS?.role || '') === 'collector';
+  const canMutateContact = (c) => !isCollectorRole || _ccCustNames.includes(c.customer_name);
   const canDelete = (USER_ACCESS?.is_admin) || _collectorCanDeleteContacts;
   tbody.innerHTML = rows.map(c => {
     const active = c.is_active !== false;
     const statusPill = active
       ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, false)" title="Click to deactivate">Active</span>`
       : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, true)" title="Click to activate">Inactive</span>`;
-    const deleteBtn = canDelete
+    const editBtn = canMutateContact(c)
+      ? `<button data-ctc-id="${escHtml(c.id)}" onclick="openContactModal(this.dataset.ctcId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>`
+      : '';
+    const deleteBtn = (canDelete && canMutateContact(c))
       ? `<button data-ctc-id="${escHtml(c.id)}" onclick="deleteContact(this.dataset.ctcId)" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem" title="Delete">×</button>`
       : '';
     return `<tr>
@@ -2039,7 +2121,7 @@ function renderContactsTable() {
       <td style="font-size:12px">${escHtml(c.phone || '—')}</td>
       <td style="text-align:center">${statusPill}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button data-ctc-id="${escHtml(c.id)}" onclick="openContactModal(this.dataset.ctcId)" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>
+        ${editBtn}
         ${deleteBtn}
       </td>
     </tr>`;
@@ -2205,6 +2287,8 @@ function saveCocSettings() {
 /* ─── OUTCOME OPTIONS MASTER ─────────────────────────────────── */
 let _ccOutcomeOptions = [];
 let _ooEditId = null;
+let _disputeTypes = [];
+let _dsOptEditId = null;
 
 async function loadOutcomeOptionsMaster() {
   const status = document.getElementById('oo-status');
@@ -2332,6 +2416,124 @@ function renderCCOutcomeButtons() {
   ).join('');
 }
 
+/* ─── DISPUTE TYPE SUB-OPTIONS ───────────────────────────────── */
+async function loadDisputeTypes() {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options?outcome_key=eq.dispute_raised&order=sort_order,label&select=id,value,label,is_active,sort_order`, { headers: cmrrHdr() });
+  if (r.ok) {
+    _disputeTypes = await r.json();
+    renderDisputeTypeButtons();
+  }
+}
+
+function renderDisputeTypeButtons() {
+  const wrap = document.getElementById('cc-dispute-btns');
+  if (!wrap) return;
+  const active = (_disputeTypes || []).filter(d => d.is_active !== false);
+  if (!active.length) return;
+  wrap.innerHTML = active.map(d =>
+    `<button type="button" class="cc-opt-btn" data-val="${escHtml(d.value)}" onclick="ccSetDisputeType('${escHtml(d.value)}')">${escHtml(d.label)}</button>`
+  ).join('');
+}
+
+async function loadSubOptMaster() {
+  const status = document.getElementById('dsopt-status');
+  if (status) status.textContent = 'Loading…';
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options?outcome_key=eq.dispute_raised&order=sort_order,label&select=id,value,label,is_active,sort_order`, { headers: cmrrHdr() });
+  _disputeTypes = r.ok ? await r.json() : [];
+  if (status) status.textContent = `${_disputeTypes.length} type${_disputeTypes.length !== 1 ? 's' : ''}`;
+  renderSubOptTable();
+  renderDisputeTypeButtons();
+}
+
+function renderSubOptTable() {
+  const tbody = document.getElementById('dsopt-tbody');
+  if (!tbody) return;
+  if (!_disputeTypes.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--txt3);font-size:12px;text-align:center;padding:.75rem">No dispute types configured.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _disputeTypes.map(d => {
+    const pill = d.is_active !== false
+      ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" onclick="toggleSubOpt('${escHtml(d.id)}',false)">Active</span>`
+      : `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .45rem;border-radius:20px;cursor:pointer" onclick="toggleSubOpt('${escHtml(d.id)}',true)">Inactive</span>`;
+    return `<tr>
+      <td style="font-size:12.5px;font-weight:500">${escHtml(d.label)}</td>
+      <td style="font-size:12px;font-family:monospace;color:var(--txt2)">${escHtml(d.value)}</td>
+      <td style="text-align:center">${pill}</td>
+      <td style="text-align:right">
+        <button onclick="openSubOptModal('${escHtml(d.id)}')" style="font-size:11px;color:var(--navy2);background:none;border:none;cursor:pointer;padding:.1rem .4rem">Edit</button>
+        <button onclick="deleteSubOpt('${escHtml(d.id)}')" style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:.1rem .4rem">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openSubOptModal(id) {
+  _dsOptEditId = id || null;
+  const existing = id ? _disputeTypes.find(d => d.id === id) : null;
+  document.getElementById('dsopt-modal-title').textContent = id ? 'Edit Dispute Type' : 'Add Dispute Type';
+  document.getElementById('dsopt-modal-label').value  = existing?.label || '';
+  document.getElementById('dsopt-modal-value').value  = existing?.value || '';
+  document.getElementById('dsopt-modal-value').disabled = !!id;
+  document.getElementById('dsopt-modal-active').checked = existing ? existing.is_active !== false : true;
+  document.getElementById('dsopt-modal-err').textContent = '';
+  const mo = document.getElementById('dsopt-modal-ov');
+  mo.style.display = 'flex';
+}
+
+function closeSubOptModal() {
+  document.getElementById('dsopt-modal-ov').style.display = 'none';
+}
+
+async function saveSubOpt() {
+  const label  = document.getElementById('dsopt-modal-label').value.trim();
+  const value  = document.getElementById('dsopt-modal-value').value.trim();
+  const active = document.getElementById('dsopt-modal-active').checked;
+  const errEl  = document.getElementById('dsopt-modal-err');
+  const btn    = document.getElementById('dsopt-save-btn');
+  errEl.textContent = '';
+  if (!label) { errEl.textContent = 'Label is required.'; return; }
+  if (!_dsOptEditId && !value) { errEl.textContent = 'Value key is required.'; return; }
+  if (!_dsOptEditId && !/^[a-z_]+$/.test(value)) { errEl.textContent = 'Value key must be lowercase letters and underscores only.'; return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  let r;
+  if (_dsOptEditId) {
+    r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options?id=eq.${encodeURIComponent(_dsOptEditId)}`, {
+      method: 'PATCH',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ label, is_active: active }),
+    });
+  } else {
+    const maxOrder = _disputeTypes.reduce((m, d) => Math.max(m, d.sort_order || 0), 0);
+    r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ outcome_key: 'dispute_raised', value, label, is_active: active, sort_order: maxOrder + 1 }),
+    });
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+  if (!r.ok) { const t = await r.text(); errEl.textContent = 'Error: ' + t.slice(0,120); return; }
+  closeSubOptModal();
+  await loadSubOptMaster();
+}
+
+async function toggleSubOpt(id, newVal) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ is_active: newVal }),
+  });
+  if (r.ok) await loadSubOptMaster();
+}
+
+async function deleteSubOpt(id) {
+  if (!confirm('Delete this dispute type?')) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/outcome_sub_options?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' },
+  });
+  if (r.ok) await loadSubOptMaster();
+}
+
 /* ─── APP PERMISSIONS ────────────────────────────────────────── */
 let _collectorCanDeleteContacts = false;
 let _appPermissionsLoaded = false;
@@ -2424,13 +2626,11 @@ function _populateDiFilterBu() {
   sel.innerHTML = '<option value="">All BUs</option>' + bus.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
 }
 
-const DI_DISPUTE_LABELS = {
-  invoice_po_documentation: 'Invoice / PO Docs',
-  service_quality:          'Service Quality',
-  commercial:               'Commercial',
-  payment_reconciliation:   'Payment Reconciliation',
-  other:                    'Other',
-};
+function getDiDisputeLabel(val) {
+  if (!val) return '—';
+  const found = (_disputeTypes || []).find(d => d.value === val);
+  return found ? found.label : val.replace(/_/g, ' ');
+}
 
 function renderDisputedInvoices() {
   const tbody  = document.getElementById('di-tbody');
@@ -2459,7 +2659,7 @@ function renderDisputedInvoices() {
     const invChips = r.invoices.length
       ? r.invoices.map(id => `<span style="font-size:10px;background:#f3f4f6;color:var(--txt2);padding:.1rem .35rem;border-radius:3px;border:1px solid var(--brd)">${escHtml(id)}</span>`).join(' ')
       : '<span style="color:var(--txt3)">—</span>';
-    const disputeLabel = DI_DISPUTE_LABELS[r.dispute_type] || (r.dispute_type || '—').replace(/_/g, ' ');
+    const disputeLabel = getDiDisputeLabel(r.dispute_type);
     const dt = new Date(r.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     return `<tr>
       <td style="font-size:12.5px;font-weight:500">${escHtml(r.customer_name || '')}</td>
@@ -4768,7 +4968,7 @@ async function ccInit() {
     }
   } catch(e) { console.warn('ccInit:', e); }
   if (!_collectorList.length) await loadCollectorList();
-  await Promise.all([loadAppPermissions(), loadOutcomeOptionsMaster()]);
+  await Promise.all([loadAppPermissions(), loadOutcomeOptionsMaster(), loadDisputeTypes()]);
   ccResetForm();
 }
 
@@ -4777,6 +4977,7 @@ function ccShowSubTab(tab) {
   document.getElementById('cc-pane-history').style.display = tab === 'history' ? '' : 'none';
   document.getElementById('cc-st-log').classList.toggle('active',     tab === 'log');
   document.getElementById('cc-st-history').classList.toggle('active', tab === 'history');
+  if (tab === 'history') ccLoadHistory();
 }
 
 function ccResetForm() {
@@ -5363,80 +5564,146 @@ async function ccSubmit() {
 }
 
 /* ── History sub-tab ─────────────────────────────────────── */
-function ccHistFilter() {
+function ccHistCustFilter() {
   const q = (document.getElementById('cc-hist-cust-input').value || '').toLowerCase().trim();
   if (!q) { document.getElementById('cc-hist-cust-dd').style.display = 'none'; return; }
   const matches = _ccCustNames.filter(n => n.toLowerCase().includes(q)).slice(0, 25);
-  ccOpenDD('cc-hist-cust-dd', 'cc-hist-cust-input', matches, 'ccHistSelectCustomer');
+  ccOpenDD('cc-hist-cust-dd', 'cc-hist-cust-input', matches, 'ccHistSelectCust');
 }
 
-async function ccHistSelectCustomer(name) {
+function ccHistSelectCust(name) {
   _ccHistCust = name;
   document.getElementById('cc-hist-cust-input').value      = name;
   document.getElementById('cc-hist-cust-dd').style.display = 'none';
-  const contentEl = document.getElementById('cc-hist-content');
-  contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
-  const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/interactions?customer_name=eq.${encodeURIComponent(name)}&order=created_at.desc&limit=50&select=*`,
-    { headers: cmrrHdr() }
-  );
-  if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
-  const interactions = await r.json();
-  if (!interactions.length) {
-    contentEl.innerHTML = `<div class="cc-section" style="font-size:12.5px;color:var(--txt3)">No interactions logged for <strong>${escHtml(name)}</strong> yet.</div>`;
-    return;
-  }
-  const ids = interactions.map(i => i.id);
-  const jr  = await fetch(
-    `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
-    { headers: cmrrHdr() }
-  );
-  const joinRows = jr.ok ? await jr.json() : [];
-  const invMap   = {};
-  joinRows.forEach(j => { if (!invMap[j.interaction_id]) invMap[j.interaction_id] = []; invMap[j.interaction_id].push(j.invoice_id); });
-  const contactIds = [...new Set(interactions.filter(i => i.contact_id).map(i => i.contact_id))];
-  let contactMap = {};
-  if (contactIds.length) {
-    const cr = await fetch(
-      `${SUPABASE_URL}/rest/v1/contacts?id=in.(${contactIds.map(encodeURIComponent).join(',')})&select=id,name,role`,
-      { headers: cmrrHdr() }
-    );
-    if (cr.ok) { (await cr.json()).forEach(c => contactMap[c.id] = c); }
-  }
-  contentEl.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
-      <span class="slabel" style="margin:0;font-size:13px">${escHtml(name)}</span>
-      <span style="font-size:11.5px;color:var(--txt3)">${interactions.length} interaction${interactions.length !== 1 ? 's' : ''}</span>
-    </div>
-    <div class="cc-timeline">
-      ${interactions.map(i => ccRenderTLItem(i, invMap[i.id] || [], contactMap)).join('')}
-    </div>`;
 }
 
-function ccRenderTLItem(i, invoiceIds, contactMap) {
+function ccClearHistFilters() {
+  _ccHistCust = '';
+  ['cc-hist-cust-input','cc-hist-kw'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cc-hist-outcome','cc-hist-from','cc-hist-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const contentEl = document.getElementById('cc-hist-content');
+  if (contentEl) contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Use filters above and click <strong>Load</strong> to view interaction history.</div>';
+}
+
+async function ccLoadHistory() {
+  const custName = _ccHistCust || (document.getElementById('cc-hist-cust-input')?.value.trim() || '');
+  const outcome  = document.getElementById('cc-hist-outcome')?.value || '';
+  const from     = document.getElementById('cc-hist-from')?.value || '';
+  const to       = document.getElementById('cc-hist-to')?.value || '';
+  const kw       = (document.getElementById('cc-hist-kw')?.value || '').toLowerCase().trim();
+  const contentEl = document.getElementById('cc-hist-content');
+  if (!contentEl) return;
+  contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+
+  let url = `${SUPABASE_URL}/rest/v1/interactions?order=created_at.desc&limit=200&select=*`;
+  if (custName) url += `&customer_name=eq.${encodeURIComponent(custName)}`;
+  if (outcome)  url += `&outcome=eq.${encodeURIComponent(outcome)}`;
+  if (from)     url += `&created_at=gte.${encodeURIComponent(from)}`;
+  if (to)       url += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
+
+  try {
+    const r = await fetch(url, { headers: cmrrHdr() });
+    if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
+    let rows = await r.json();
+
+    // Collectors only see their assigned customers
+    const isCollectorRole = (USER_ACCESS?.role || '') === 'collector';
+    if (isCollectorRole && !custName) {
+      rows = rows.filter(i => _ccCustNames.includes(i.customer_name));
+    }
+
+    if (!rows.length) {
+      contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No interactions found for the selected filters.</div>';
+      return;
+    }
+
+    // Fetch invoice IDs for all interactions
+    const ids = rows.map(i => i.id);
+    const jr  = await fetch(
+      `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
+      { headers: cmrrHdr() }
+    );
+    const joinRows = jr.ok ? await jr.json() : [];
+    const invMap   = {};
+    joinRows.forEach(j => { if (!invMap[j.interaction_id]) invMap[j.interaction_id] = []; invMap[j.interaction_id].push(j.invoice_id); });
+
+    // Client-side keyword filter (invoice IDs, note, customer, contact)
+    let filtered = rows;
+    if (kw) {
+      const invKwMap = {};
+      joinRows.forEach(j => { invKwMap[j.interaction_id] = (invKwMap[j.interaction_id] || '') + ' ' + (j.invoice_id || '').toLowerCase(); });
+      filtered = rows.filter(i => {
+        const hay = [i.customer_name, i.note, i.dispute_description, i.escalation_who, i.escalation_what, invKwMap[i.id] || ''].join(' ').toLowerCase();
+        return hay.includes(kw);
+      });
+    }
+
+    // Fetch contact details
+    const contactIds = [...new Set(filtered.filter(i => i.contact_id).map(i => i.contact_id))];
+    let contactMap = {};
+    if (contactIds.length) {
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/contacts?id=in.(${contactIds.map(encodeURIComponent).join(',')})&select=id,name,role`,
+        { headers: cmrrHdr() }
+      );
+      if (cr.ok) { (await cr.json()).forEach(c => { contactMap[c.id] = c; }); }
+    }
+
+    // Build collector display name map
+    const collectorMap = {};
+    (_collectorList || []).forEach(c => { collectorMap[c.user_id] = c.display_name || c.email || ''; });
+
+    const heading = custName
+      ? `<span class="slabel" style="margin:0;font-size:13px">${escHtml(custName)}</span>`
+      : '<span class="slabel" style="margin:0;font-size:13px">All Customers</span>';
+    contentEl.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+        ${heading}
+        <span style="font-size:11.5px;color:var(--txt3)">${filtered.length} interaction${filtered.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="cc-timeline">
+        ${filtered.map(i => ccRenderTLItem(i, invMap[i.id] || [], contactMap, collectorMap)).join('')}
+      </div>`;
+  } catch(e) {
+    contentEl.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message || 'failed')}</div>`;
+  }
+}
+
+function ccRenderTLItem(i, invoiceIds, contactMap, collectorMap) {
+  collectorMap = collectorMap || {};
   const oc      = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
-  const opill   = i.outcome
+  const opill   = oc
     ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
   const dotCol  = i.connected === 'yes' ? '#166534' : '#9ca3af';
-  const connLbl = CC_CONNECTED_LABELS[i.connected] || i.connected;
+  const connLbl = CC_CONNECTED_LABELS[i.connected] || i.connected || '';
   const connCol = i.connected === 'yes' ? '#166534' : '#6b7280';
-  const ch      = i.channel ? ({call:'Call',whatsapp:'WhatsApp',email:'Email'})[i.channel] : '';
+  const ch      = i.channel ? ({call:'Call',whatsapp:'WhatsApp',email:'Email'})[i.channel] || i.channel : '';
   const contact = i.contact_id ? contactMap[i.contact_id] : null;
   const dt      = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const chips   = invoiceIds.length
     ? `<div class="cc-inv-list">${invoiceIds.map(id=>`<span class="cc-inv-chip">${escHtml(id)}</span>`).join('')}</div>` : '';
+  const refBadge = i.ref_no
+    ? `<span style="font-size:10.5px;font-family:monospace;background:#f0f4ff;color:#3b5cb8;border:1px solid #c7d4f7;padding:.1rem .4rem;border-radius:4px;margin-right:.45rem">#${String(i.ref_no).padStart(4,'0')}</span>`
+    : '';
+  const collectorLabel = i.collector_id ? (collectorMap[i.collector_id] || '') : '';
+  const dtLabel = (_disputeTypes || []).find(d => d.value === i.dispute_type)?.label || (i.dispute_type || '').replace(/_/g,' ');
+
   const lines = [];
+  if (i.customer_name) lines.push(`Customer: <strong>${escHtml(i.customer_name)}</strong>${collectorLabel ? ` · <span style="color:var(--txt3)">${escHtml(collectorLabel)}</span>` : ''}`);
   if (contact) lines.push(`Spoke with: <strong>${escHtml(contact.name)}${contact.role?' ('+escHtml(contact.role)+')':''}</strong>${ch?' · '+ch:''}`);
-  if (i.promised_date) lines.push(`Promise: <strong>${i.promised_date}</strong>${i.promised_amount?' · ₹'+f(i.promised_amount):''}`);
-  if (i.ack_reason) lines.push(`Reason: ${i.ack_reason.replace(/_/g,' ')}`);
-  if (i.dispute_type) lines.push(`Dispute type: ${i.dispute_type.replace(/_/g,' ')}${i.dispute_description ? ` — <em>${escHtml(i.dispute_description)}</em>` : ''}`);
-  if (i.escalation_needed && i.escalation_who) lines.push(`Escalation → <strong>${escHtml(i.escalation_who)}</strong>: ${escHtml(i.escalation_what||'')}`);
-  if (i.note) lines.push(`<em>${escHtml(i.note)}</em>`);
-  lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
+  if (i.promised_date) lines.push(`Promise date: <strong>${i.promised_date}</strong>${i.promised_amount?' · ₹'+f(i.promised_amount):''}`);
+  if (i.payment_type)  lines.push(`Payment type: ${(i.payment_type||'').replace(/_/g,' ')}`);
+  if (i.ack_reason)    lines.push(`Reason: ${(i.ack_reason||'').replace(/_/g,' ')}`);
+  if (i.dispute_type)  lines.push(`Dispute type: <strong>${escHtml(dtLabel)}</strong>${i.dispute_description ? ` — <em>${escHtml(i.dispute_description)}</em>` : ''}`);
+  if (i.needs_internal_help) lines.push(`<span style="color:#b45309;font-weight:600">&#9888; Needs internal help</span>`);
+  if (i.escalation_needed && i.escalation_who) lines.push(`Escalation → <strong>${escHtml(i.escalation_who)}</strong>${i.escalation_what?': '+escHtml(i.escalation_what):''}`);
+  if (i.note)          lines.push(`Note: <em>${escHtml(i.note)}</em>`);
+  if (i.follow_up_date) lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
+
   return `<div class="cc-tl-item">
     <div class="cc-tl-dot-col"><div class="cc-tl-dot" style="background:${dotCol}"></div><div class="cc-tl-line"></div></div>
     <div class="cc-tl-body">
-      <div class="cc-tl-date">${dt}</div>
+      <div class="cc-tl-date">${refBadge}${dt}</div>
       <div style="margin:.2rem 0"><span style="font-size:12px;font-weight:600;color:${connCol}">${connLbl}</span> ${opill}</div>
       ${chips}
       <div style="font-size:12px;color:var(--ink-soft);margin-top:.3rem;line-height:1.7">${lines.map(l=>`<div>${l}</div>`).join('')}</div>
