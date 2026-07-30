@@ -30,8 +30,8 @@
   --green-bg:#E9F4EE;--amber-bg:#FBF1E1;
   --mono:'Geist Mono','Geist Mono Fallback',monospace;--sans:'Inter',sans-serif;
 }
-body{font-family:var(--sans);background:var(--page-bg);color:var(--ink);min-height:100vh}
-header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px solid var(--navy3)}
+body{font-family:var(--sans);background:var(--page-bg);color:var(--ink);min-height:100vh;display:flex}
+header{display:none}
 .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:.4rem}
 .htitle{font-size:20px;font-weight:500;color:#fff}
 .hsub{font-size:12px;color:rgba(255,255,255,.35);margin-top:.3rem;font-family:var(--mono)}
@@ -45,9 +45,21 @@ header{background:var(--navy);padding:1.5rem 2rem 1.25rem;border-bottom:3px soli
 .btext li{margin:.15rem 0}
 .bdismiss{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:.3rem .8rem;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;align-self:flex-start}
 .bdismiss:hover{background:rgba(255,255,255,.2)}
-nav{background:var(--surf);border-bottom:1px solid var(--brd);display:flex;padding:0 2rem;align-items:center}
-.tbtn{padding:.85rem 1.4rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:var(--txt2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
-.tbtn:hover{color:var(--navy2)}.tbtn.active{color:var(--navy2);border-bottom-color:var(--navy3)}
+/* ── App shell layout ── */
+.app-layout{display:flex;flex:1;min-height:100vh}
+.sidebar{width:210px;min-width:210px;background:var(--navy);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sb-brand{padding:.9rem 1.1rem .75rem;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb-eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.15em;color:rgba(255,255,255,.35);text-transform:uppercase}
+.sb-title{font-size:17px;font-weight:500;color:#fff;margin-top:3px}
+.sidebar nav{flex:1;padding:.4rem 0;overflow-y:auto}
+.app-content{flex:1;min-width:0;overflow-y:auto;min-height:100vh}
+.sb-foot{padding:.75rem 1.1rem;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:.35rem}
+.sb-username{font-size:11px;color:rgba(255,255,255,.55);word-break:break-all}
+.sb-signout-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:.3rem .75rem;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--sans);text-align:left;transition:background .15s}
+.sb-signout-btn:hover{background:rgba(255,255,255,.2)}
+nav{}
+.tbtn{display:block;width:100%;text-align:left;padding:.65rem 1.1rem .65rem 1.25rem;font-size:12.5px;font-weight:500;font-family:var(--sans);color:rgba(255,255,255,.65);background:none;border:none;border-left:3px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s;letter-spacing:.01em}
+.tbtn:hover{color:#fff;background:rgba(255,255,255,.06)}.tbtn.active{color:#fff;border-left-color:#5b9bd5;background:rgba(255,255,255,.12)}
 .rbtn{margin-left:auto;background:none;border:1px solid var(--brd2);color:var(--txt2);padding:.32rem .85rem;border-radius:4px;cursor:pointer;font-size:12px;font-family:var(--sans);display:flex;align-items:center;gap:5px}
 .rbtn:hover{background:var(--surf3)}
 .dot{width:7px;height:7px;border-radius:50%;background:#ccc;display:inline-block;flex-shrink:0}
@@ -488,17 +500,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div id="login-err" style="color:#a32d2d;font-size:12px;margin-top:.55rem;text-align:center;min-height:1rem"></div>
   </div>
 </div>
-<header style="position:relative">
-  <div class="eyebrow">Accounts Receivable</div>
-  <div class="htitle">Bizom AR</div>
-  <div class="hsub" id="sub"></div>
-  <div id="logout-area" style="display:none;position:absolute;right:1.25rem;top:50%;transform:translateY(-50%);align-items:center;gap:.65rem">
-    <span id="logout-name" style="font-size:11px;color:rgba(255,255,255,.65)"></span>
-    <button class="rbtn" onclick="doLogout()" style="font-size:11px;padding:.28rem .75rem;background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.25)">Sign out</button>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sb-brand">
+    <div class="sb-eyebrow">Accounts Receivable</div>
+    <div class="sb-title">Bizom AR</div>
   </div>
-</header>
-
-<nav id="main-nav"></nav>
+  <nav id="main-nav"></nav>
+  <div class="sb-foot" id="logout-area" style="display:none">
+    <span id="logout-name" class="sb-username"></span>
+    <button class="sb-signout-btn" onclick="doLogout()">Sign out</button>
+  </div>
+</aside>
+<div class="app-content">
 <main>
   <!-- ── AR Tab ──────────────────────────────────────────────── -->
   <div id="ar" class="pane active">
@@ -847,6 +861,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </table>
       </div>
     </div>
+    <!-- Manage Users (admin only, injected by renderNav) -->
+    <div id="settings-users-section" style="display:none;border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;margin-top:1.25rem;background:var(--surf)">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Manage Users</span>
+        <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add User</button>
+      </div>
+      <div id="users-list"></div>
+    </div>
   </div>
   <!-- ── Collector Console Pane ───────────────────────────── -->
   <div id="collector-console" class="pane">
@@ -887,7 +909,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="cc-btn-group" id="cc-connected-btns">
           <button type="button" class="cc-opt-btn" data-val="yes"          onclick="ccSetConnected('yes')">Yes — Connected</button>
           <button type="button" class="cc-opt-btn" data-val="no_answer"    onclick="ccSetConnected('no_answer')">No Answer</button>
-          <button type="button" class="cc-opt-btn" data-val="voicemail"    onclick="ccSetConnected('voicemail')">Voicemail</button>
           <button type="button" class="cc-opt-btn" data-val="wrong_number" onclick="ccSetConnected('wrong_number')">Wrong Number</button>
         </div>
       </div>
@@ -1075,14 +1096,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div><!-- end #collector-console -->
 
-  <div id="manage-users" class="pane">
-    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-      <span class="slabel" style="margin:0">Manage Users</span>
-      <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto">+ Add User</button>
-    </div>
-    <div id="users-list"></div>
+  <!-- ── Rate Calculator Pane ── -->
+  <div id="rate-calculator" class="pane">
+    <iframe src="rate-calculator.html" style="width:100%;height:calc(100vh - 40px);border:none;display:block"></iframe>
   </div>
 </main>
+</div><!-- app-content -->
+</div><!-- app-layout -->
 <div class="modal-overlay hidden" id="drill-overlay" onclick="if(event.target===this)closeDrill()">
   <div class="modal">
     <div class="modal-hdr">
@@ -1171,6 +1191,7 @@ const ALL_TABS_CFG = [
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'collections-analysis',label: 'Collections Analysis', fn: 'showCollectionsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
+  { id: 'rate-calculator',     label: 'Rate Calculator',     fn: 'showRateCalcTab(this)' },
 ];
 
 
@@ -1238,7 +1259,7 @@ async function onSignIn(session) {
   }
   document.getElementById('login-screen').style.display = 'none';
   renderNav();
-  document.getElementById('logout-area').style.display = 'flex';
+  document.getElementById('logout-area').style.display = '';
   document.getElementById('logout-name').textContent = USER_ACCESS.display_name || CURRENT_USER.email;
 }
 
@@ -1279,11 +1300,11 @@ function renderNav() {
     nav.innerHTML += '<button class="tbtn" data-tab="settings" onclick="showSettingsTab(this)" style="opacity:.85">⚙ Settings</button>';
   }
   if (USER_ACCESS.is_admin) {
-    nav.innerHTML += '<button class="tbtn" data-tab="manage-users" onclick="showManageUsersTab(this)" style="margin-left:auto">👥 Users</button>';
+    document.getElementById('settings-users-section').style.display = '';
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
-  const extraIds = [...(role === 'admin-edit' ? ['settings'] : []), ...(USER_ACCESS.is_admin ? ['manage-users'] : [])];
+  const extraIds = [...(role === 'admin-edit' ? ['settings'] : [])];
   const allIds  = [...allowed, ...extraIds];
   const activeId = (saved && allIds.includes(saved)) ? saved : allowed[0];
   if (activeId) {
@@ -1299,8 +1320,8 @@ function renderNav() {
 
 /* ─── MANAGE USERS ───────────────────────────────────────────── */
 function showManageUsersTab(btn) {
-  showTab('manage-users', btn);
-  Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
+  showTab('settings', btn);
+  loadSettingsPane();
 }
 
 async function userAdminCall(operation, payload) {
@@ -1431,6 +1452,9 @@ async function deleteUser(userId, name) {
 function showSettingsTab(btn) {
   showTab('settings', btn);
   loadSettingsPane();
+  if (USER_ACCESS && USER_ACCESS.is_admin) {
+    Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
+  }
 }
 
 async function loadSettingsPane() {
@@ -1450,6 +1474,9 @@ async function loadSettingsPane() {
   _arCustMasterLoading = false;
   await loadArCustMaster();
   await renderCustMasterTable();
+  if (USER_ACCESS && USER_ACCESS.is_admin) {
+    loadUsersPanel();
+  }
 }
 
 async function renderCustMasterTable() {
@@ -1858,6 +1885,9 @@ function showCollectionsTab(btn) {
   if (!_caInited) { _caInited = true; loadCollectionsData(); }
 }
 
+function showRateCalcTab(btn) {
+  showTab('rate-calculator', btn);
+}
 
 function showARSubTab(tab) {
   _arSubTab = tab;
@@ -3740,7 +3770,7 @@ const CC_OUTCOME_LABELS = {
   no_clear_answer:                    'No Clear Answer',
 };
 const CC_CONNECTED_LABELS = {
-  yes:'Connected', no_answer:'No Answer', voicemail:'Voicemail', wrong_number:'Wrong Number',
+  yes:'Connected', no_answer:'No Answer', wrong_number:'Wrong Number',
 };
 
 let _ccInited    = false;
@@ -3919,7 +3949,7 @@ async function ccSelectCustomer(name) {
 }
 
 function ccToggleInvoice(invId) {
-  const cbId = `cc-inv-${CSS.escape(invId)}`;
+  const cbId = `cc-inv-${invId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   const cb   = document.getElementById(cbId);
   if (!cb) return;
   cb.checked = !cb.checked;
