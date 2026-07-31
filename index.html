@@ -53,7 +53,9 @@ header{display:none}
 .sb-brand-logo{flex-shrink:0;width:28px;height:28px;object-fit:contain}
 .sb-brand-text{flex:1;min-width:0;transition:opacity .15s}
 .sidebar.collapsed .sb-brand-text{opacity:0;pointer-events:none;width:0;overflow:hidden}
-.sb-brand-toggle{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.55);font-size:16px;padding:.1rem .2rem;line-height:1;flex-shrink:0;transition:color .15s}
+.sidebar.collapsed .sb-brand-logo{display:none}
+.sidebar.collapsed .sb-brand{padding:.75rem 0;justify-content:center}
+.sb-brand-toggle{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.55);font-size:18px;padding:.1rem .35rem;line-height:1;flex-shrink:0;transition:color .15s}
 .sb-brand-toggle:hover{color:#fff}
 .sb-eyebrow{font-family:var(--mono);font-size:9px;letter-spacing:.15em;color:rgba(255,255,255,.35);text-transform:uppercase}
 .sb-title{font-size:17px;font-weight:500;color:#fff;margin-top:3px}
@@ -4247,7 +4249,6 @@ function renderARSummary(rows) {
   if (oCrd) {
     oCrd.innerHTML = `
       <div class="ar-card-tip">Overdue: ${crFull(overdueBal)}</div>
-      <span class="ar-card-icon">🔴</span>
       <div class="ar-card-lbl">Overdue</div>
       <div class="ar-card-val" style="color:var(--red)">${cr(overdueBal)}</div>
       <div class="ar-card-sub">${overdueRatio} invoices</div>`;
@@ -4260,7 +4261,6 @@ function renderARSummary(rows) {
   if (nCrd) {
     nCrd.innerHTML = `
       <div class="ar-card-tip">90+ days overdue: ${crFull(ninetyPlusBal)}</div>
-      <span class="ar-card-icon">⚠️</span>
       <div class="ar-card-lbl">90+ Days Overdue</div>
       <div class="ar-card-val" style="color:#7c2d12">${cr(ninetyPlusBal)}</div>
       <div class="ar-card-sub">${ninetyRatio} invoices</div>`;
@@ -4273,7 +4273,6 @@ function renderARSummary(rows) {
   if (cCrd) {
     cCrd.innerHTML = `
       <div class="ar-card-tip">Current (due date not passed): ${crFull(currentBal)}</div>
-      <span class="ar-card-icon">✅</span>
       <div class="ar-card-lbl">Current</div>
       <div class="ar-card-val" style="color:var(--green)">${cr(currentBal)}</div>
       <div class="ar-card-sub">${currentRatio} invoices</div>`;
@@ -4285,7 +4284,6 @@ function renderARSummary(rows) {
   if (tCrd) {
     tCrd.innerHTML = `
       <div class="ar-card-tip">Total outstanding: ${crFull(totalBal)}</div>
-      <span class="ar-card-icon">📊</span>
       <div class="ar-card-lbl">Total Outstanding</div>
       <div class="ar-card-val">${cr(totalBal)}</div>
       <div class="ar-card-sub">${rows.length} invoices</div>`;
@@ -5601,12 +5599,12 @@ async function ccLoadDaySummary() {
     let collNameMap = {};
     if (collectorIds.length) {
       const ur = await fetch(
-        `${SUPABASE_URL}/rest/v1/app_users?id=in.(${collectorIds.map(encodeURIComponent).join(',')})&select=id,display_name`,
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
         { headers: cmrrHdr() }
       );
       if (ur.ok) {
         const urows = await ur.json();
-        urows.forEach(u => { collNameMap[u.id] = u.display_name || u.id; });
+        urows.forEach(u => { collNameMap[u.user_id] = u.display_name || u.user_id; });
       }
     }
     // Store name map for render
