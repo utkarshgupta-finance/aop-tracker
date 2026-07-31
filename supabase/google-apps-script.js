@@ -40,14 +40,14 @@ function pushToSupabase() {
 
   // Row indices are 0-based (sheet row = index + 1)
   // Rows 21-24 (sheet) = indices 20-23 : 6-month rolling average
-  // Row 25  (sheet)    = index  24     : section header (skipped)
-  // Rows 26-29 (sheet) = indices 25-28 : 3-month rolling average
+  // Rows 25-28 (sheet) = indices 24-27 : 3-month rolling average  ← add these rows to the sheet
+  // Row 29     (sheet) = index  28     : GBP to INR (unrelated — not read)
   const ROW = {
     ar_total: 1, ar_other: 2, ar_bat: 3, ar_sme_bu: 4,
     collections_total: 7, collections_other: 8, collections_bat: 9, collections_sme_bu: 10,
     pct_total: 14, pct_other: 15, pct_bat: 16, pct_sme_bu: 17,
     rolling_total: 20, rolling_other: 21, rolling_bat: 22, rolling_sme_bu: 23,
-    rolling_3m_total: 25, rolling_3m_other: 26, rolling_3m_bat: 27, rolling_3m_sme_bu: 28,
+    rolling_3m_total: 24, rolling_3m_other: 25, rolling_3m_bat: 26, rolling_3m_sme_bu: 27,
   };
 
   function numVal(ri, ci) {
