@@ -752,7 +752,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <div class="ca-chart-wrap"><canvas id="ca-chart-pct"></canvas></div>
           </div>
           <div class="ca-chart-card">
-            <div class="ca-chart-title">Rolling 6-Month Collections Average</div>
+            <div class="ca-chart-title" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+              <span id="ca-rolling-title">Rolling 6-Month Collections Average</span>
+              <div style="display:flex;flex-shrink:0">
+                <button id="ca-roll-3m"   class="ca-view-btn"        onclick="caSetRollingMode('3m')">3M</button>
+                <button id="ca-roll-6m"   class="ca-view-btn active" onclick="caSetRollingMode('6m')">6M</button>
+                <button id="ca-roll-both" class="ca-view-btn"        onclick="caSetRollingMode('both')">Both</button>
+              </div>
+            </div>
             <div class="ca-chart-wrap"><canvas id="ca-chart-rolling"></canvas></div>
           </div>
         </div>
@@ -5064,6 +5071,7 @@ function caVisibleData() {
 let _caActiveSegs  = new Set(['total', 'bat', 'sme_bu', 'other']);
 let _caShowLabels  = false;
 let _caView        = 'chart'; // 'chart' | 'table'
+let _caRollingMode = '6m';   // '3m' | '6m' | 'both'
 
 function caSetView(v) {
   _caView = v;
@@ -5091,6 +5099,18 @@ function caToggleSeg(key) {
   document.querySelectorAll('.ca-seg-btn').forEach(btn => {
     btn.classList.toggle('active', _caActiveSegs.has(btn.dataset.seg));
   });
+  renderCollectionsCharts();
+}
+
+function caSetRollingMode(mode) {
+  _caRollingMode = mode;
+  ['3m','6m','both'].forEach(m => {
+    const btn = document.getElementById('ca-roll-' + m);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+  const titleMap = { '3m': 'Rolling 3-Month Collections Average', '6m': 'Rolling 6-Month Collections Average', 'both': 'Rolling Collections Average (3M & 6M)' };
+  const titleEl = document.getElementById('ca-rolling-title');
+  if (titleEl) titleEl.textContent = titleMap[mode];
   renderCollectionsCharts();
 }
 
@@ -5203,10 +5223,20 @@ function renderCollectionsCharts() {
 
   const ctxRol = document.getElementById('ca-chart-rolling');
   if (ctxRol) {
-    const ds = makeDatasets('rolling_avg');
-    const opts = chartOpts(ds);
+    let rolDs = [];
+    if (_caRollingMode === '6m' || _caRollingMode === 'both') {
+      const ds6 = makeDatasets('rolling_avg');
+      if (_caRollingMode === 'both') ds6.forEach(d => { d.label += ' (6M)'; });
+      rolDs = rolDs.concat(ds6);
+    }
+    if (_caRollingMode === '3m' || _caRollingMode === 'both') {
+      const ds3 = makeDatasets('rolling_3m_avg');
+      if (_caRollingMode === 'both') ds3.forEach(d => { d.label += ' (3M)'; d.borderDash = [4,3]; d.borderWidth = 1.5; });
+      rolDs = rolDs.concat(ds3);
+    }
+    const opts = chartOpts(rolDs);
     opts.showDataLabels = _caShowLabels;
-    _caChartRolling = new Chart(ctxRol, { type: 'line', data: { labels, datasets: ds }, options: opts, plugins: [CA_DATALABELS_PLUGIN] });
+    _caChartRolling = new Chart(ctxRol, { type: 'line', data: { labels, datasets: rolDs }, options: opts, plugins: [CA_DATALABELS_PLUGIN] });
   }
 
   if (_caView === 'table') renderCollectionsTable(data);
@@ -5253,6 +5283,11 @@ function renderCollectionsTable(data) {
       ${_caActiveSegs.has('other')  ? row('Others',  'rolling_avg_other',  fPct) : ''}
       ${_caActiveSegs.has('bat')    ? row('BAT',     'rolling_avg_bat',    fPct) : ''}
       ${_caActiveSegs.has('sme_bu') ? row('SME BU',  'rolling_avg_sme_bu', fPct) : ''}
+      ${sectionHdr('Rolling 3-Month Collections Average')}
+      ${_caActiveSegs.has('total')  ? row('Overall', 'rolling_3m_avg_total',  fPct) : ''}
+      ${_caActiveSegs.has('other')  ? row('Others',  'rolling_3m_avg_other',  fPct) : ''}
+      ${_caActiveSegs.has('bat')    ? row('BAT',     'rolling_3m_avg_bat',    fPct) : ''}
+      ${_caActiveSegs.has('sme_bu') ? row('SME BU',  'rolling_3m_avg_sme_bu', fPct) : ''}
     </tbody>
   </table>`;
 }

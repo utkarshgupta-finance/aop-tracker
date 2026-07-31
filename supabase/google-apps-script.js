@@ -1,70 +1,141 @@
-/**
- * AOP Tracker — Google Apps Script
- *
- * Setup:
- * 1. Open your Google Sheet → Extensions → Apps Script
- * 2. Paste this entire file and set PUSH_SECRET below
- * 3. Run pushAOPData() once manually to test (check Logs for response)
- * 4. Add a trigger: Triggers → Add Trigger → pushAOPData → On change
- *
- * Cell layout assumed (Sheet9) — structure must stay fixed, numbers can change freely:
- *
- *   Row 1 : "Exit MRR Projection as per AOP Targets"
- *   Row 2 : Headers  (BU | Mar-2026 | Apr-2026 | … | Mar-2027 | Total)
- *   Row 3 : BAT BU        ← MRR values in B3:N3
- *   Row 4 : India ENT BU  ← MRR values in B4:N4
- *   Row 5 : India MM BU   ← MRR values in B5:N5
- *   Row 6 : KAM BU        ← MRR values in B6:N6
- *   Row 7 : MEA BU        ← MRR values in B7:N7
- *   Row 8 : SEA BU        ← MRR values in B8:N8
- *   Row 9 : SME BU        ← MRR values in B9:N9
- *
- *   Row 13: "NRR Projection as per AOP Targets"
- *   Row 14: Headers
- *   Row 15: BAT BU        ← NRR values in B15:N15
- *   Row 16: India ENT BU  ← NRR values in B16:N16
- *   Row 17: India MM BU   ← NRR values in B17:N17
- *   Row 18: KAM BU        ← NRR values in B18:N18
- *   Row 19: MEA BU        ← NRR values in B19:N19
- *   Row 20: SEA BU        ← NRR values in B20:N20
- *   Row 21: SME BU        ← NRR values in B21:N21
- *
- *   Columns B–N = Mar-2026 through Mar-2027 (13 months)
- */
+function formatMonthLabel(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return MONTHS[v.getMonth()] + '-' + v.getFullYear();
+  }
+  return String(v).trim();
+}
 
-const PUSH_SECRET = 'YOUR_AOP_PUSH_SECRET'; // ← must match AOP_PUSH_SECRET in Supabase Edge Function secrets
-const ENDPOINT    = 'https://vntqszeaokcbrzuppmew.supabase.co/functions/v1/push-aop-data';
+function parseMonthOrder(label) {
+  if (!label) return 0;
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = label.match(/^([A-Za-z]{3})-(\d{4})$/);
+  if (!m) return 0;
+  const mi = MONTHS.findIndex(x => x.toLowerCase() === m[1].toLowerCase());
+  if (mi < 0) return 0;
+  return parseInt(m[2]) * 12 + mi;
+}
 
-// BU names in the order they appear in rows 3–9 and 15–21
-const BUS = ['BAT BU', 'India ENT BU', 'India MM BU', 'KAM BU', 'MEA BU', 'SEA BU', 'SME BU'];
+function pushToSupabase() {
+  const SUPABASE_URL = 'https://vntqszeaokcbrzuppmew.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHFzemVhb2tjYnJ6dXBwbWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzE1NzcsImV4cCI6MjA5MjQwNzU3N30.NIllrkxrhwrNDxWTCgRxxyvk2VbRTBaC7F8_VFWfZDY';
 
-// Fixed cell ranges — columns B:N = 13 months (Mar-2026 → Mar-2027)
-const MRR_RANGE = 'B3:N9';   // 7 BU rows × 13 month columns
-const NRR_RANGE = 'B15:N21'; // 7 BU rows × 13 month columns
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Summary - BAT & NonBAT Breakup');
 
-function pushAOPData() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sheet9');
-  if (!sheet) { Logger.log('ERROR: Sheet9 not found'); return; }
-
-  // Read both ranges in two API calls (faster than cell-by-cell)
-  const mrrValues = sheet.getRange(MRR_RANGE).getValues(); // 7×13 array
-  const nrrValues = sheet.getRange(NRR_RANGE).getValues(); // 7×13 array
-
-  const mrr_data = {}, nrr_data = {};
-
-  for (let i = 0; i < BUS.length; i++) {
-    const bu = BUS[i];
-    mrr_data[bu] = mrrValues[i].map(Number);
-    nrr_data[bu] = nrrValues[i].map(Number);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Sheet "Summary - BAT & NonBAT Breakup" not found.');
+    return;
   }
 
-  const response = UrlFetchApp.fetch(ENDPOINT, {
-    method:           'post',
-    contentType:      'application/json',
-    payload:          JSON.stringify({ mrr_data, nrr_data, secret: PUSH_SECRET }),
-    muteHttpExceptions: true,
-  });
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) {
+    SpreadsheetApp.getUi().alert('Error: Sheet has insufficient data.');
+    return;
+  }
 
-  Logger.log('Status : ' + response.getResponseCode());
-  Logger.log('Body   : ' + response.getContentText());
+  const headers = data[0];
+  const monthCols = [];
+  for (let c = 1; c < headers.length; c++) {
+    const label = formatMonthLabel(headers[c]);
+    const order = parseMonthOrder(label);
+    if (order > 0) monthCols.push({ col: c, month: label, order });
+  }
+
+  if (monthCols.length === 0) {
+    SpreadsheetApp.getUi().alert(
+      'Error: No month columns found in row 1.\n\n' +
+      'First few headers: ' + headers.slice(0, 6).map(h => formatMonthLabel(h) || '(empty)').join(', ')
+    );
+    return;
+  }
+
+  // Row indices are 0-based array positions (sheet row = index + 1)
+  // Rows 21-24 (sheet) = indices 20-23: 6-month rolling average
+  // Row 25 (sheet) = index 24:          section header (skipped)
+  // Rows 26-29 (sheet) = indices 25-28: 3-month rolling average
+  const ROW = {
+    ar_total: 1, ar_other: 2, ar_bat: 3, ar_sme_bu: 4,
+    collections_total: 7, collections_other: 8, collections_bat: 9, collections_sme_bu: 10,
+    pct_total: 14, pct_other: 15, pct_bat: 16, pct_sme_bu: 17,
+    rolling_total: 20, rolling_other: 21, rolling_bat: 22, rolling_sme_bu: 23,
+    rolling_3m_total: 25, rolling_3m_other: 26, rolling_3m_bat: 27, rolling_3m_sme_bu: 28,
+  };
+
+  function numVal(rowIdx, colIdx) {
+    if (rowIdx >= data.length) return null;
+    const v = data[rowIdx][colIdx];
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
+  function pctVal(rowIdx, colIdx) {
+    const v = numVal(rowIdx, colIdx);
+    return v === null ? null : Math.round(v * 10000) / 100;
+  }
+
+  const records = monthCols.map(({ col, month, order }) => ({
+    month, month_order: order,
+    ar_total:              numVal(ROW.ar_total, col),
+    ar_bat:                numVal(ROW.ar_bat, col),
+    ar_sme_bu:             numVal(ROW.ar_sme_bu, col),
+    ar_other:              numVal(ROW.ar_other, col),
+    collections_total:     numVal(ROW.collections_total, col),
+    collections_bat:       numVal(ROW.collections_bat, col),
+    collections_sme_bu:    numVal(ROW.collections_sme_bu, col),
+    collections_other:     numVal(ROW.collections_other, col),
+    pct_total:             pctVal(ROW.pct_total, col),
+    pct_bat:               pctVal(ROW.pct_bat, col),
+    pct_sme_bu:            pctVal(ROW.pct_sme_bu, col),
+    pct_other:             pctVal(ROW.pct_other, col),
+    rolling_avg_total:     pctVal(ROW.rolling_total, col),
+    rolling_avg_bat:       pctVal(ROW.rolling_bat, col),
+    rolling_avg_sme_bu:    pctVal(ROW.rolling_sme_bu, col),
+    rolling_avg_other:     pctVal(ROW.rolling_other, col),
+    rolling_3m_avg_total:  pctVal(ROW.rolling_3m_total, col),
+    rolling_3m_avg_bat:    pctVal(ROW.rolling_3m_bat, col),
+    rolling_3m_avg_sme_bu: pctVal(ROW.rolling_3m_sme_bu, col),
+    rolling_3m_avg_other:  pctVal(ROW.rolling_3m_other, col),
+  }));
+
+  try {
+    const resp = UrlFetchApp.fetch(
+      SUPABASE_URL + '/rest/v1/collections_analysis?on_conflict=month',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'apikey':        SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Prefer':        'resolution=merge-duplicates,return=representation',
+        },
+        payload: JSON.stringify(records),
+        muteHttpExceptions: true,
+      }
+    );
+
+    const code = resp.getResponseCode();
+    if (code >= 200 && code < 300) {
+      const upserted = JSON.parse(resp.getContentText());
+      const months = upserted.map(r => r.month).sort().join(', ');
+      SpreadsheetApp.getUi().alert(
+        '✅ Success!\n\n' +
+        upserted.length + ' month(s) synced:\n' + months
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(
+        '❌ Upsert failed (HTTP ' + code + ')\n\n' + resp.getContentText().substring(0, 500)
+      );
+    }
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Network error:\n\n' + e.message);
+  }
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('AOP Tracker')
+    .addItem('Push to Supabase', 'pushToSupabase')
+    .addToUi();
 }
