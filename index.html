@@ -1112,8 +1112,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
     <div class="cc-subtabs">
-      <button class="cc-stbtn active" id="cc-st-log"     onclick="ccShowSubTab('log')">Log Interaction</button>
-      <button class="cc-stbtn"        id="cc-st-history" onclick="ccShowSubTab('history')">Interaction History</button>
+      <button class="cc-stbtn active" id="cc-st-log"        onclick="ccShowSubTab('log')">Log Interaction</button>
+      <button class="cc-stbtn"        id="cc-st-history"    onclick="ccShowSubTab('history')">Interaction History</button>
+      <button class="cc-stbtn"        id="cc-st-daysummary" onclick="ccShowSubTab('daysummary')">Day Summary</button>
     </div>
 
     <!-- ── LOG INTERACTION ──────────────────────────────── -->
@@ -1280,6 +1281,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
               <!-- populated dynamically by renderDisputeTypeButtons() -->
             </div>
           </div>
+          <div class="cc-field" style="display:flex;gap:.75rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <label class="cc-label">Disputed Amount (₹)</label>
+              <input type="number" id="cc-dispute-amount" class="cc-input" min="0" step="any" placeholder="Amount in dispute" style="width:100%;box-sizing:border-box">
+            </div>
+          </div>
           <div class="cc-field">
             <label class="cc-label">Description / Details</label>
             <textarea id="cc-dispute-desc" class="cc-input" rows="3" placeholder="Describe the issue or dispute…" style="resize:vertical;min-height:64px"></textarea>
@@ -1382,6 +1389,16 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Use filters above and click <strong>Load</strong> to view interaction history.</div>
       </div>
     </div>
+
+    <!-- Day Summary sub-tab pane -->
+    <div id="cc-pane-daysummary" style="display:none">
+      <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.85rem;flex-wrap:wrap">
+        <button type="button" class="cc-ds-card active" id="cc-ds-all" onclick="ccDsSelectCollector('__all__',this)" style="font-size:12px;padding:.3rem .85rem;border-radius:20px;border:1.5px solid var(--navy2);background:var(--navy2);color:#fff;cursor:pointer;font-weight:600">All</button>
+        <div id="cc-ds-collector-cards" style="display:flex;gap:.5rem;flex-wrap:wrap"></div>
+        <button type="button" onclick="ccLoadDaySummary()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+      </div>
+      <div id="cc-ds-content" style="font-size:12px;color:var(--txt3)">Loading…</div>
+    </div>
   </div><!-- end #collector-console -->
 
   <!-- ── Disputed Invoices Pane ── -->
@@ -1403,18 +1420,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <div id="di-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.4rem"></div>
     <div style="overflow-x:auto">
-      <table class="ar-tbl" style="min-width:960px">
+      <table class="ar-tbl" style="width:100%">
         <thead><tr>
-          <th style="text-align:left">Customer</th>
+          <th style="text-align:left;min-width:120px">Customer</th>
           <th style="text-align:left">BU</th>
           <th style="text-align:left">Collector</th>
           <th style="text-align:left">Invoice #</th>
-          <th style="text-align:right">Amount (₹)</th>
-          <th style="text-align:left">Dispute Type</th>
+          <th style="text-align:right;white-space:nowrap">Balance (₹)</th>
+          <th style="text-align:right;white-space:nowrap">Disputed (₹)</th>
+          <th style="text-align:left">Type</th>
           <th style="text-align:left">Description</th>
           <th style="text-align:center">Status</th>
-          <th style="text-align:left">Opened</th>
-          <th style="text-align:left">Last closed</th>
+          <th style="text-align:left;white-space:nowrap">Opened</th>
+          <th style="text-align:left;white-space:nowrap">Last closed</th>
           <th></th>
         </tr></thead>
         <tbody id="di-tbody"></tbody>
@@ -2880,7 +2898,7 @@ async function loadDisputedInvoices() {
     const invIds = [...new Set(_diRows.map(d => d.invoice_id).filter(Boolean))];
     if (invIds.length) {
       const ar = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${invIds.map(encodeURIComponent).join(',')})&select=invoice_id,balance_inr,total_inr,balance,currency_code`,
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${invIds.map(encodeURIComponent).join(',')})&select=invoice_id,balance_inr,total_inr,balance,currency_code,invoice_url`,
         { headers: cmrrHdr() }
       );
       if (ar.ok) {
@@ -3137,7 +3155,7 @@ function renderDisputedInvoices() {
   if (statusEl) statusEl.textContent = '';
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No disputes found.</td></tr>`;
     return;
   }
 
@@ -3147,10 +3165,17 @@ function renderDisputedInvoices() {
     const buBadge    = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--txt3)">—</span>';
     const invLabel   = escHtml(r.invoice_number || r.invoice_id || '—');
     const amtData    = _diAmounts[r.invoice_id];
-    const amtVal     = amtData ? (amtData.balance_inr ?? amtData.balance ?? null) : null;
-    const amtCell    = amtVal != null
-      ? `<span style="font-size:12px;font-family:monospace;font-weight:500">₹${Math.round(amtVal).toLocaleString('en-IN')}</span>`
+    const balVal     = amtData ? (amtData.balance_inr ?? amtData.balance ?? null) : null;
+    const balCell    = balVal != null
+      ? `<span style="font-size:12px;font-family:monospace;font-weight:500">₹${Math.round(balVal).toLocaleString('en-IN')}</span>`
       : '<span style="color:var(--txt3)">—</span>';
+    const dispAmt    = r.disputed_amount != null
+      ? `<span style="font-size:12px;font-family:monospace;font-weight:500;color:#92400e">₹${Math.round(r.disputed_amount).toLocaleString('en-IN')}</span>`
+      : '<span style="color:var(--txt3)">—</span>';
+    const invUrl     = amtData?.invoice_url;
+    const invLabelEl = invUrl
+      ? `<a href="${escHtml(invUrl)}" target="_blank" rel="noopener" style="color:var(--navy2);text-decoration:none;font-family:monospace;font-size:12px">${invLabel}</a>`
+      : `<span style="font-size:12px;font-family:monospace">${invLabel}</span>`;
     const disputeLabel = getDiDisputeLabel(r.dispute_type);
     const isOpen     = r.status !== 'closed';
     const statusPill = isOpen
@@ -3170,13 +3195,14 @@ function renderDisputedInvoices() {
       }
     </div>`;
     return `<tr data-dispute-id="${escHtml(r.id)}">
-      <td style="font-size:12.5px;font-weight:500">${escHtml(r.customer_name || '')}</td>
+      <td style="font-size:12.5px;font-weight:500;word-break:break-word;max-width:140px">${escHtml(r.customer_name || '')}</td>
       <td>${buBadge}</td>
-      <td style="font-size:12px;color:var(--txt2)">${escHtml(collector || '—')}</td>
-      <td style="font-size:12px;font-family:monospace">${invLabel}${openTimesNote}</td>
-      <td style="text-align:right">${amtCell}</td>
-      <td style="font-size:12px"><span style="background:var(--red-bg);color:var(--red);padding:.1rem .4rem;border-radius:4px;font-weight:600">${escHtml(disputeLabel)}</span></td>
-      <td>${descCell}</td>
+      <td style="font-size:12px;color:var(--txt2);white-space:nowrap">${escHtml(collector || '—')}</td>
+      <td style="white-space:nowrap">${invLabelEl}${openTimesNote}</td>
+      <td style="text-align:right;white-space:nowrap">${balCell}</td>
+      <td style="text-align:right;white-space:nowrap">${dispAmt}</td>
+      <td style="font-size:12px"><span style="background:var(--red-bg);color:var(--red);padding:.1rem .4rem;border-radius:4px;font-weight:600;white-space:nowrap">${escHtml(disputeLabel)}</span></td>
+      <td style="min-width:200px">${descCell}</td>
       <td style="text-align:center">${statusPill}</td>
       <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${openedDt}</td>
       <td style="font-size:11px;color:var(--txt3);white-space:nowrap">${closedDt}</td>
@@ -5487,11 +5513,147 @@ async function ccInit() {
 }
 
 function ccShowSubTab(tab) {
-  document.getElementById('cc-pane-log').style.display     = tab === 'log'     ? '' : 'none';
-  document.getElementById('cc-pane-history').style.display = tab === 'history' ? '' : 'none';
-  document.getElementById('cc-st-log').classList.toggle('active',     tab === 'log');
-  document.getElementById('cc-st-history').classList.toggle('active', tab === 'history');
-  if (tab === 'history') ccLoadHistory();
+  document.getElementById('cc-pane-log').style.display        = tab === 'log'        ? '' : 'none';
+  document.getElementById('cc-pane-history').style.display    = tab === 'history'    ? '' : 'none';
+  document.getElementById('cc-pane-daysummary').style.display = tab === 'daysummary' ? '' : 'none';
+  document.getElementById('cc-st-log').classList.toggle('active',        tab === 'log');
+  document.getElementById('cc-st-history').classList.toggle('active',    tab === 'history');
+  document.getElementById('cc-st-daysummary').classList.toggle('active', tab === 'daysummary');
+  if (tab === 'history')    ccLoadHistory();
+  if (tab === 'daysummary') ccLoadDaySummary();
+}
+
+/* ── Day Summary sub-tab ─────────────────────────────────────── */
+let _ccDsData        = [];   // raw interactions for summary
+let _ccDsSelectedCol = '__all__';
+
+async function ccLoadDaySummary() {
+  const contentEl = document.getElementById('cc-ds-content');
+  if (!contentEl) return;
+  contentEl.innerHTML = '<span style="color:var(--txt3)">Loading…</span>';
+  try {
+    // Fetch last 90 days of interactions with collector info
+    const since = new Date(); since.setDate(since.getDate() - 90);
+    const sinceStr = since.toISOString().split('T')[0];
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/interactions?created_at=gte.${sinceStr}&order=created_at.desc&select=id,created_at,customer_name,connected,outcome,collector_id`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _ccDsData = await r.json();
+
+    // Build collector list from data
+    const collectorIds = [...new Set(_ccDsData.map(i => i.collector_id).filter(Boolean))];
+    // Fetch display names for collectors
+    let collNameMap = {};
+    if (collectorIds.length) {
+      const ur = await fetch(
+        `${SUPABASE_URL}/rest/v1/app_users?id=in.(${collectorIds.map(encodeURIComponent).join(',')})&select=id,display_name`,
+        { headers: cmrrHdr() }
+      );
+      if (ur.ok) {
+        const urows = await ur.json();
+        urows.forEach(u => { collNameMap[u.id] = u.display_name || u.id; });
+      }
+    }
+    // Store name map for render
+    _ccDsCollNameMap = collNameMap;
+
+    // Render collector cards
+    const cards = document.getElementById('cc-ds-collector-cards');
+    if (cards) {
+      const collectors = collectorIds.sort((a,b) => (collNameMap[a]||a).localeCompare(collNameMap[b]||b));
+      cards.innerHTML = collectors.map(id =>
+        `<button type="button" class="cc-ds-card${_ccDsSelectedCol === id ? ' active' : ''}" data-col-id="${escHtml(id)}"
+          onclick="ccDsSelectCollector(this.dataset.colId,this)"
+          style="font-size:12px;padding:.3rem .85rem;border-radius:20px;cursor:pointer;border:1.5px solid var(--brd2);background:#fff;color:var(--txt2)">${escHtml(collNameMap[id] || id)}</button>`
+      ).join('');
+    }
+    // Keep All button active state
+    const allBtn = document.getElementById('cc-ds-all');
+    if (allBtn) allBtn.classList.toggle('active', _ccDsSelectedCol === '__all__');
+
+    ccRenderDaySummary();
+  } catch(e) {
+    contentEl.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(e.message)}</span>`;
+  }
+}
+
+let _ccDsCollNameMap = {};
+
+function ccDsSelectCollector(id, btn) {
+  _ccDsSelectedCol = id;
+  // Update button styles
+  document.querySelectorAll('.cc-ds-card').forEach(b => {
+    b.style.background = '#fff'; b.style.color = 'var(--txt2)'; b.style.borderColor = 'var(--brd2)';
+  });
+  if (btn) { btn.style.background = 'var(--navy2)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--navy2)'; }
+  ccRenderDaySummary();
+}
+
+function ccRenderDaySummary() {
+  const contentEl = document.getElementById('cc-ds-content');
+  if (!contentEl || !_ccDsData.length) return;
+
+  const rows = _ccDsSelectedCol === '__all__'
+    ? _ccDsData
+    : _ccDsData.filter(i => i.collector_id === _ccDsSelectedCol);
+
+  // Group by date (YYYY-MM-DD)
+  const byDate = {};
+  rows.forEach(i => {
+    const d = i.created_at.split('T')[0];
+    if (!byDate[d]) byDate[d] = { total: 0, connected: 0, outcomes: {} };
+    byDate[d].total++;
+    if (i.connected === 'yes') byDate[d].connected++;
+    if (i.outcome) byDate[d].outcomes[i.outcome] = (byDate[d].outcomes[i.outcome] || 0) + 1;
+  });
+
+  const OUTCOME_LABELS = {
+    payment_commitment: 'Payment Commitment',
+    dispute_raised: 'Dispute Raised',
+    payment_acknowledged_no_commitment: 'Acknowledged',
+    wrong_number: 'Wrong Number',
+    not_reachable: 'Not Reachable',
+    gatekeeper_blocked: 'Gatekeeper Blocked',
+  };
+
+  const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+  if (!dates.length) {
+    contentEl.innerHTML = '<span style="color:var(--txt3)">No interactions in last 90 days.</span>';
+    return;
+  }
+
+  contentEl.innerHTML = `
+    <table class="ar-tbl" style="width:100%">
+      <thead><tr>
+        <th style="text-align:left">Date</th>
+        <th style="text-align:right">Total</th>
+        <th style="text-align:right">Connected</th>
+        <th style="text-align:right">Not reached</th>
+        <th style="text-align:left;padding-left:.75rem">Outcomes</th>
+      </tr></thead>
+      <tbody>
+        ${dates.map(d => {
+          const s = byDate[d];
+          const notReached = s.total - s.connected;
+          const outcomeChips = Object.entries(s.outcomes)
+            .sort((a,b) => b[1]-a[1])
+            .map(([k,v]) => {
+              const lbl = OUTCOME_LABELS[k] || k.replace(/_/g,' ');
+              return `<span style="font-size:10.5px;background:#f0f4ff;color:#3b4dc8;padding:.1rem .45rem;border-radius:12px;margin-right:.25rem;white-space:nowrap">${escHtml(lbl)}: ${v}</span>`;
+            }).join('');
+          const dt = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', weekday:'short' });
+          return `<tr>
+            <td style="font-size:12px;white-space:nowrap;font-weight:500">${dt}</td>
+            <td style="text-align:right;font-size:13px;font-weight:700;color:var(--navy)">${s.total}</td>
+            <td style="text-align:right;font-size:12px;color:#166534">${s.connected}</td>
+            <td style="text-align:right;font-size:12px;color:var(--txt3)">${notReached}</td>
+            <td style="padding-left:.75rem">${outcomeChips || '<span style="color:var(--txt3);font-size:11px">—</span>'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
 }
 
 function ccResetForm() {
@@ -5499,7 +5661,7 @@ function ccResetForm() {
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
                 'cc-promised-amount','cc-promised-date','cc-esc-who','cc-esc-what',
                 'cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone',
-                'cc-dispute-desc'];
+                'cc-dispute-desc','cc-dispute-amount'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
   _ccOpenDisputes = {};
@@ -6144,6 +6306,8 @@ async function ccSubmit() {
       if (payload.outcome === 'dispute_raised') {
         const disputeRows = [...s.selectedInvIds].map(invId => {
           const inv = s.invoices.find(i => i.invoice_id === invId);
+          const amtRaw = document.getElementById('cc-dispute-amount')?.value;
+          const disputedAmt = amtRaw && !isNaN(parseFloat(amtRaw)) ? parseFloat(amtRaw) : null;
           return {
             invoice_id:             invId,
             invoice_number:         inv?.invoice_number || invId,
@@ -6151,6 +6315,7 @@ async function ccSubmit() {
             opening_interaction_id: interaction.id,
             dispute_type:           payload.dispute_type,
             dispute_description:    payload.dispute_description,
+            disputed_amount:        disputedAmt,
             status:                 'open',
           };
         });
