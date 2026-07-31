@@ -23,17 +23,10 @@ function pushToSupabase() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Summary - BAT & NonBAT Breakup');
-
-  if (!sheet) {
-    SpreadsheetApp.getUi().alert('Sheet "Summary - BAT & NonBAT Breakup" not found.');
-    return;
-  }
+  if (!sheet) { Logger.log('ERROR: Sheet not found'); return; }
 
   const data = sheet.getDataRange().getValues();
-  if (data.length < 2) {
-    SpreadsheetApp.getUi().alert('Error: Sheet has insufficient data.');
-    return;
-  }
+  Logger.log('Rows: ' + data.length + '  Cols: ' + (data[0] ? data[0].length : 0));
 
   const headers = data[0];
   const monthCols = [];
@@ -42,19 +35,13 @@ function pushToSupabase() {
     const order = parseMonthOrder(label);
     if (order > 0) monthCols.push({ col: c, month: label, order });
   }
+  Logger.log('Months found: ' + monthCols.length);
+  if (!monthCols.length) { Logger.log('ERROR: No month columns found'); return; }
 
-  if (monthCols.length === 0) {
-    SpreadsheetApp.getUi().alert(
-      'Error: No month columns found in row 1.\n\n' +
-      'First few headers: ' + headers.slice(0, 6).map(h => formatMonthLabel(h) || '(empty)').join(', ')
-    );
-    return;
-  }
-
-  // Row indices are 0-based array positions (sheet row = index + 1)
-  // Rows 21-24 (sheet) = indices 20-23: 6-month rolling average
-  // Row 25 (sheet) = index 24:          section header (skipped)
-  // Rows 26-29 (sheet) = indices 25-28: 3-month rolling average
+  // Row indices are 0-based (sheet row = index + 1)
+  // Rows 21-24 (sheet) = indices 20-23 : 6-month rolling average
+  // Row 25  (sheet)    = index  24     : section header (skipped)
+  // Rows 26-29 (sheet) = indices 25-28 : 3-month rolling average
   const ROW = {
     ar_total: 1, ar_other: 2, ar_bat: 3, ar_sme_bu: 4,
     collections_total: 7, collections_other: 8, collections_bat: 9, collections_sme_bu: 10,
@@ -63,15 +50,13 @@ function pushToSupabase() {
     rolling_3m_total: 25, rolling_3m_other: 26, rolling_3m_bat: 27, rolling_3m_sme_bu: 28,
   };
 
-  function numVal(rowIdx, colIdx) {
-    if (rowIdx >= data.length) return null;
-    const v = data[rowIdx][colIdx];
-    const n = parseFloat(v);
+  function numVal(ri, ci) {
+    if (ri >= data.length) return null;
+    const n = parseFloat(data[ri][ci]);
     return isNaN(n) ? null : n;
   }
-
-  function pctVal(rowIdx, colIdx) {
-    const v = numVal(rowIdx, colIdx);
+  function pctVal(ri, ci) {
+    const v = numVal(ri, ci);
     return v === null ? null : Math.round(v * 10000) / 100;
   }
 
@@ -118,18 +103,12 @@ function pushToSupabase() {
     const code = resp.getResponseCode();
     if (code >= 200 && code < 300) {
       const upserted = JSON.parse(resp.getContentText());
-      const months = upserted.map(r => r.month).sort().join(', ');
-      SpreadsheetApp.getUi().alert(
-        '✅ Success!\n\n' +
-        upserted.length + ' month(s) synced:\n' + months
-      );
+      Logger.log('SUCCESS: ' + upserted.length + ' month(s) synced → ' + upserted.map(r => r.month).sort().join(', '));
     } else {
-      SpreadsheetApp.getUi().alert(
-        '❌ Upsert failed (HTTP ' + code + ')\n\n' + resp.getContentText().substring(0, 500)
-      );
+      Logger.log('ERROR HTTP ' + code + ': ' + resp.getContentText().substring(0, 500));
     }
   } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Network error:\n\n' + e.message);
+    Logger.log('NETWORK ERROR: ' + e.message);
   }
 }
 
