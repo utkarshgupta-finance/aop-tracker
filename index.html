@@ -823,8 +823,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-collector" onclick="showSettingsSubTab('collector')">Collector Master</button>
       <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
       <button class="st-stbtn"        id="st-tab-coc"       onclick="showSettingsSubTab('coc')">Cost of Capital</button>
-      <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')" style="display:none">Outcome Options</button>
-      <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')" style="display:none">Manage Users</button>
+      <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')"    style="display:none">Outcome Options</button>
+      <button class="st-stbtn"        id="st-tab-escalation" onclick="showSettingsSubTab('escalation')" style="display:none">Escalation Persons</button>
+      <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')"     style="display:none">Manage Users</button>
     </div>
 
     <!-- GBP/INR Monthly Rates -->
@@ -1109,6 +1110,21 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
 
+    <!-- Escalation Persons (admin only) -->
+    <div id="st-pane-escalation" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:520px">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Escalation Persons</span>
+          <span style="font-size:12px;color:var(--txt2)">— names that appear in the "Who needs to act?" dropdown</span>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.85rem">
+          <input type="text" id="esc-person-new" class="cc-input" style="flex:1;font-size:13px" placeholder="Add name or team…" onkeydown="if(event.key==='Enter')addEscalationPerson()">
+          <button onclick="addEscalationPerson()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
+        </div>
+        <div id="esc-persons-list"></div>
+      </div>
+    </div>
+
     <!-- Manage Users (admin only) -->
     <div id="st-pane-users" class="st-pane" style="display:none">
       <div id="settings-users-section" style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);margin-bottom:1rem">
@@ -1332,8 +1348,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <div id="cc-esc-fields" style="display:none">
             <div class="cc-field">
               <label class="cc-label">Who needs to act? <span class="cc-req">*</span></label>
-              <input list="cc-esc-who-list" id="cc-esc-who" class="cc-input" placeholder="Name or team" style="max-width:320px" autocomplete="off">
-              <datalist id="cc-esc-who-list"></datalist>
+              <div class="cc-cust-wrap" style="max-width:320px">
+                <input type="text" id="cc-esc-who" class="cc-input" style="width:100%;box-sizing:border-box" placeholder="Type to search…" oninput="ccEscWhoFilter()" onfocus="ccEscWhoFilter()" autocomplete="off">
+                <div id="cc-esc-who-dd" class="cc-cust-dd" style="display:none"></div>
+              </div>
             </div>
             <div class="cc-field">
               <label class="cc-label">What do they need to do? <span class="cc-req">*</span></label>
@@ -1808,10 +1826,9 @@ function renderNav() {
     bn.innerHTML = canSettings ? '<button class="tbtn" data-tab="settings" data-abbr="ST" onclick="showSettingsTab(this)">⚙ Settings</button>' : '';
   }
   if (USER_ACCESS.is_admin) {
-    const usersTabBtn = document.getElementById('st-tab-users');
-    if (usersTabBtn) usersTabBtn.style.display = '';
-    const optionsTabBtn = document.getElementById('st-tab-options');
-    if (optionsTabBtn) optionsTabBtn.style.display = '';
+    ['st-tab-users','st-tab-options','st-tab-escalation'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = '';
+    });
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = localStorage.getItem('biz_tab');
@@ -1987,24 +2004,26 @@ function showSettingsSubTab(tab) {
   // always hide option sub-panes first
   const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
   const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
-  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','options','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','options','escalation','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
-  if (tab === 'coc')     renderCocSettings();
+  if (tab === 'coc')        renderCocSettings();
   if (tab === 'options') {
     loadOutcomeOptionsMaster(); loadSubOptMaster(); loadContactCatMaster();
     if (dsp) dsp.style.display = '';
     if (ccp) ccp.style.display = '';
   }
-  if (tab === 'users')   renderPermsSettings();
+  if (tab === 'escalation') renderEscalationPersonsList();
+  if (tab === 'users')      renderPermsSettings();
 }
 function showSettingsTab(btn) {
   showTab('settings', btn);
   loadSettingsPane();
   if (USER_ACCESS && USER_ACCESS.is_admin) {
-    const usersBtn = document.getElementById('st-tab-users');
-    if (usersBtn) usersBtn.style.display = '';
+    ['st-tab-users','st-tab-options','st-tab-escalation'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = '';
+    });
     Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
   }
 }
@@ -5606,7 +5625,7 @@ async function ccInit() {
     }
   } catch(e) { console.warn('ccInit:', e); }
   if (!_collectorList.length) await loadCollectorList();
-  await Promise.all([loadAppPermissions(), loadOutcomeOptionsMaster(), loadDisputeTypes()]);
+  await Promise.all([loadAppPermissions(), loadOutcomeOptionsMaster(), loadDisputeTypes(), loadEscalationPersons()]);
   ccResetForm();
 }
 
@@ -6277,7 +6296,6 @@ function ccSetEscalation(yes) {
     b.classList.toggle('selected', (b.dataset.val === 'yes') === yes)
   );
   document.getElementById('cc-esc-fields').style.display = yes ? '' : 'none';
-  if (yes) loadEscalationPersons();
 }
 
 /* ── Follow-up date suggestion ───────────────────────────── */
@@ -6465,7 +6483,7 @@ function ccHistSelectCust(name) {
 function ccClearHistFilters() {
   _ccHistCust = '';
   ['cc-hist-cust-input','cc-hist-kw'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  ['cc-hist-outcome','cc-hist-from','cc-hist-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cc-hist-outcome','cc-hist-from','cc-hist-to','cc-hist-collector'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const contentEl = document.getElementById('cc-hist-content');
   if (contentEl) contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Use filters above and click <strong>Load</strong> to view interaction history.</div>';
 }
@@ -6562,15 +6580,53 @@ async function ccLoadHistory() {
       if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
     }
 
+    // Analytics summary
+    const connCount   = filtered.filter(i => i.connected === 'yes').length;
+    const connPct     = filtered.length ? Math.round(100 * connCount / filtered.length) : 0;
+    const outcomeCounts = {};
+    filtered.forEach(i => { if (i.outcome) outcomeCounts[i.outcome] = (outcomeCounts[i.outcome] || 0) + 1; });
+    const topOutcomes = Object.entries(outcomeCounts).sort((a,b)=>b[1]-a[1]).slice(0,4);
+    const collectorBreakdown = {};
+    if (USER_ACCESS?.is_admin) {
+      filtered.forEach(i => { const n = collectorMap[i.collector_id]||'Unknown'; collectorBreakdown[n] = (collectorBreakdown[n]||0)+1; });
+    }
+    const topCollectors = Object.entries(collectorBreakdown).sort((a,b)=>b[1]-a[1]).slice(0,4);
+
+    const analyticsHtml = `
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:stretch;margin-bottom:1rem;padding:.7rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px">
+        <div style="display:flex;flex-direction:column;gap:.1rem;padding-right:.85rem;border-right:1px solid var(--brd)">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">Total</span>
+          <span style="font-size:22px;font-weight:700;color:var(--ink);line-height:1.1">${filtered.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.1rem;padding-right:.85rem;border-right:1px solid var(--brd)">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">Connected</span>
+          <span style="font-size:22px;font-weight:700;color:#16a34a;line-height:1.1">${connCount} <span style="font-size:12px;color:var(--txt3)">${connPct}%</span></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.3rem;flex:1;min-width:180px">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">Outcomes</span>
+          <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+            ${topOutcomes.map(([k,v]) => { const oc = CC_OUTCOME_COLORS[k]; return `<span style="font-size:11px;padding:.15rem .5rem;border-radius:20px;font-weight:600;background:${oc?oc.bg:'#f3f4f6'};color:${oc?oc.fg:'#374151'}">${CC_OUTCOME_LABELS[k]||k.replace(/_/g,' ')}: ${v}</span>`; }).join('')}
+            ${!topOutcomes.length ? '<span style="font-size:11px;color:var(--txt3)">—</span>' : ''}
+          </div>
+        </div>
+        ${topCollectors.length ? `<div style="display:flex;flex-direction:column;gap:.3rem;min-width:140px">
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">By Collector</span>
+          <div style="display:flex;gap:.3rem;flex-wrap:wrap">
+            ${topCollectors.map(([n,v])=>`<span style="font-size:11px;padding:.15rem .5rem;border-radius:20px;background:#e8eef7;color:var(--navy2);font-weight:500">${escHtml(n)}: ${v}</span>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>`;
+
     const heading = custName
       ? `<span class="slabel" style="margin:0;font-size:13px">${escHtml(custName)}</span>`
       : '<span class="slabel" style="margin:0;font-size:13px">All Customers</span>';
     contentEl.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      ${analyticsHtml}
+      <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
         ${heading}
         <span style="font-size:11.5px;color:var(--txt3)">${filtered.length} interaction${filtered.length !== 1 ? 's' : ''}</span>
       </div>
-      <div class="cc-timeline">
+      <div>
         ${filtered.map(i => ccRenderTLItem(i, invMap[i.id] || [], contactMap, collectorMap)).join('')}
       </div>`;
   } catch(e) {
@@ -6580,51 +6636,67 @@ async function ccLoadHistory() {
 
 function ccRenderTLItem(i, invoiceIds, contactMap, collectorMap) {
   collectorMap = collectorMap || {};
-  const oc      = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
-  const opill   = oc
-    ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
-  const dotCol  = i.connected === 'yes' ? '#166534' : '#9ca3af';
-  const connLbl = CC_CONNECTED_LABELS[i.connected] || i.connected || '';
-  const connCol = i.connected === 'yes' ? '#166534' : '#6b7280';
-  const ch      = i.channel ? ({call:'Call',whatsapp:'WhatsApp',email:'Email'})[i.channel] || i.channel : '';
-  const contact = i.contact_id ? contactMap[i.contact_id] : null;
-  const dt      = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const chips   = invoiceIds.length
-    ? `<div class="cc-inv-list">${invoiceIds.map(id=>`<span class="cc-inv-chip">${escHtml(id)}</span>`).join('')}</div>` : '';
-  const refBadge = i.ref_no
-    ? `<span style="font-size:10.5px;font-family:monospace;background:#f0f4ff;color:#3b5cb8;border:1px solid #c7d4f7;padding:.1rem .4rem;border-radius:4px;margin-right:.45rem">#${String(i.ref_no).padStart(4,'0')}</span>`
-    : '';
+  const oc           = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
+  const opill        = oc ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
+  const connLbl      = CC_CONNECTED_LABELS[i.connected] || i.connected || '';
+  const connCol      = i.connected === 'yes' ? '#16a34a' : '#6b7280';
+  const connDotCol   = i.connected === 'yes' ? '#22c55e' : '#d1d5db';
+  const ch           = i.channel ? ({call:'Call',whatsapp:'WhatsApp',email:'Email'})[i.channel] || i.channel : '';
+  const contact      = i.contact_id ? contactMap[i.contact_id] : null;
+  const dt           = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const refBadge     = i.ref_no ? `<span style="font-family:var(--mono);background:#f0f4ff;color:#3b5cb8;border:1px solid #c7d4f7;padding:.1rem .4rem;border-radius:4px;font-size:11px">#${String(i.ref_no).padStart(4,'0')}</span>` : '';
   const collectorLabel = i.collector_id ? (collectorMap[i.collector_id] || '') : '';
-  const dtLabel = (_disputeTypes || []).find(d => d.value === i.dispute_type)?.label || (i.dispute_type || '').replace(/_/g,' ');
+  const dtLabel      = (_disputeTypes || []).find(d => d.value === i.dispute_type)?.label || (i.dispute_type || '').replace(/_/g,' ');
+  const canDelete    = USER_ACCESS?.is_admin || (CURRENT_USER?.id && i.collector_id === CURRENT_USER.id);
+  const delBtn       = canDelete ? `<button onclick="ccDeleteInteraction('${escHtml(i.id)}')" style="font-size:11px;padding:.18rem .55rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;flex-shrink:0">Delete</button>` : '';
 
-  const lines = [];
-  if (i.customer_name) lines.push(`Customer: <strong>${escHtml(i.customer_name)}</strong>${collectorLabel ? ` · <span style="color:var(--txt3)">${escHtml(collectorLabel)}</span>` : ''}`);
-  if (contact) lines.push(`Spoke with: <strong>${escHtml(contact.name)}${contact.role?' ('+escHtml(contact.role)+')':''}</strong>${ch?' · '+ch:''}`);
-  if (i.promised_date) lines.push(`Promise date: <strong>${i.promised_date}</strong>${i.promised_amount?' · ₹'+f(i.promised_amount):''}`);
-  if (i.payment_type)  lines.push(`Payment type: ${(i.payment_type||'').replace(/_/g,' ')}`);
-  if (i.ack_reason)    lines.push(`Reason: ${(i.ack_reason||'').replace(/_/g,' ')}`);
-  if (i.dispute_type)  lines.push(`Dispute type: <strong>${escHtml(dtLabel)}</strong>${i.dispute_description ? ` — <em>${escHtml(i.dispute_description)}</em>` : ''}`);
-  if (i.needs_internal_help) lines.push(`<span style="color:#b45309;font-weight:600">&#9888; Needs internal help</span>`);
-  if (i.escalation_needed && i.escalation_who) lines.push(`Escalation → <strong>${escHtml(i.escalation_who)}</strong>${i.escalation_what?': '+escHtml(i.escalation_what):''}`);
-  if (i.note)          lines.push(`Note: <em>${escHtml(i.note)}</em>`);
-  if (i.follow_up_date) lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
+  // Invoice chips
+  const chips = invoiceIds.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin:.45rem 0 .1rem">${invoiceIds.map(id=>`<span class="cc-inv-chip">${escHtml(id)}</span>`).join('')}</div>` : '';
 
-  const canDelete = USER_ACCESS?.is_admin || (CURRENT_USER?.id && i.collector_id === CURRENT_USER.id);
-  const delBtn = canDelete
-    ? `<button onclick="ccDeleteInteraction('${escHtml(i.id)}')" style="flex-shrink:0;font-size:11px;padding:.2rem .55rem;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;line-height:1.4" title="Delete interaction">Delete</button>`
+  // Detail rows — structured, not a wall of text
+  const details = [];
+  if (contact) {
+    const contactName = `${escHtml(contact.name)}${contact.role ? ` <span style="color:var(--txt3);font-weight:400">(${escHtml(contact.role)})</span>` : ''}`;
+    details.push(`<div style="font-size:12px"><span style="color:var(--txt3)">Spoke with</span> <strong>${contactName}</strong>${ch ? ` <span style="color:var(--txt3)">· ${ch}</span>` : ''}</div>`);
+  }
+  if (i.promised_date) details.push(`<div style="font-size:12px"><span style="color:var(--txt3)">Promise date</span> <strong style="color:var(--ink)">${i.promised_date}</strong>${i.promised_amount ? ` <span style="color:var(--txt3)">· ₹${f(i.promised_amount)}</span>` : ''}</div>`);
+  if (i.payment_type)  details.push(`<div style="font-size:12px;color:var(--txt2)">Payment type: ${(i.payment_type||'').replace(/_/g,' ')}</div>`);
+  if (i.ack_reason)    details.push(`<div style="font-size:12px;color:var(--txt2)">Reason: ${(i.ack_reason||'').replace(/_/g,' ')}</div>`);
+  if (i.dispute_type) {
+    const desc = i.dispute_description ? `<div style="margin-top:.25rem;padding:.3rem .6rem;background:#fffbeb;border-left:2.5px solid #f59e0b;border-radius:0 4px 4px 0;font-size:11.5px;color:var(--txt2);font-style:italic">${escHtml(i.dispute_description)}</div>` : '';
+    details.push(`<div><span style="font-size:12px;color:var(--txt3)">Dispute </span><strong style="font-size:12px;color:var(--ink)">${escHtml(dtLabel)}</strong>${desc}</div>`);
+  }
+  if (i.needs_internal_help) details.push(`<div style="font-size:12px;font-weight:600;color:#b45309;display:flex;align-items:center;gap:.3rem"><span style="font-size:13px">⚠</span> Needs internal help</div>`);
+  if (i.escalation_needed && i.escalation_who) details.push(`<div style="font-size:12px"><span style="color:var(--txt3)">→ Escalation</span> <strong style="color:var(--ink)">${escHtml(i.escalation_who)}</strong>${i.escalation_what ? `<span style="color:var(--txt2)"> — ${escHtml(i.escalation_what)}</span>` : ''}</div>`);
+  if (i.note) details.push(`<div style="font-size:12px;color:var(--txt2);padding:.3rem .55rem;background:var(--surf2,#f8f9fb);border-radius:4px;font-style:italic">${escHtml(i.note)}</div>`);
+
+  const fuChip = i.follow_up_date
+    ? `<div style="margin-top:.5rem"><span style="display:inline-flex;align-items:center;gap:.3rem;font-size:11.5px;font-weight:600;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;padding:.2rem .6rem;border-radius:20px">📅 Follow-up: ${i.follow_up_date}</span></div>`
     : '';
-  return `<div class="cc-tl-item">
-    <div class="cc-tl-dot-col"><div class="cc-tl-dot" style="background:${dotCol}"></div><div class="cc-tl-line"></div></div>
-    <div class="cc-tl-body">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem">
-        <div>
-          <div class="cc-tl-date">${refBadge}${dt}</div>
-          <div style="margin:.2rem 0"><span style="font-size:12px;font-weight:600;color:${connCol}">${connLbl}</span> ${opill}</div>
-        </div>
+
+  return `<div style="border:1px solid var(--brd);border-radius:8px;overflow:hidden;margin-bottom:.7rem">
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;background:var(--surf2,#f8f9fb);border-bottom:1px solid var(--brd)">
+      <div style="display:flex;align-items:center;gap:.45rem;flex:1;min-width:0">
+        ${refBadge}
+        <span style="font-size:11px;color:var(--txt3);font-family:var(--mono)">${dt}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
+        ${collectorLabel ? `<span style="font-size:11px;background:#e8eef7;color:var(--navy2);padding:.12rem .55rem;border-radius:20px;font-weight:500">${escHtml(collectorLabel)}</span>` : ''}
         ${delBtn}
       </div>
+    </div>
+    <div style="padding:.6rem .85rem .65rem">
+      <div style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;margin-bottom:.3rem">
+        <span style="font-size:14px;font-weight:700;color:var(--ink)">${escHtml(i.customer_name||'')}</span>
+        <span style="display:inline-flex;align-items:center;gap:.25rem;font-size:11.5px;font-weight:600;color:${connCol}">
+          <span style="width:7px;height:7px;border-radius:50%;background:${connDotCol};flex-shrink:0;display:inline-block"></span>${escHtml(connLbl)}
+        </span>
+        ${opill}
+      </div>
       ${chips}
-      <div style="font-size:12px;color:var(--ink-soft);margin-top:.3rem;line-height:1.7">${lines.map(l=>`<div>${l}</div>`).join('')}</div>
+      ${details.length ? `<div style="display:flex;flex-direction:column;gap:.3rem;margin-top:.4rem">${details.join('')}</div>` : ''}
+      ${fuChip}
     </div>
   </div>`;
 }
@@ -6660,16 +6732,65 @@ async function ccPopulateHistCollectorDd() {
   } catch(e) { console.warn('ccPopulateHistCollectorDd:', e); }
 }
 
-/* ─── ESCALATION PERSONS DATALIST ───────────────────────────── */
+/* ─── ESCALATION PERSONS ─────────────────────────────────────── */
+let _escalationPersons = [];
 async function loadEscalationPersons() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/interactions?escalation_needed=eq.true&escalation_who=not.is.null&select=escalation_who`, { headers: cmrrHdr() });
-    if (!r.ok) return;
-    const rows = await r.json();
-    const names = [...new Set(rows.map(r => r.escalation_who).filter(Boolean))].sort();
-    const dl = document.getElementById('cc-esc-who-list');
-    if (dl) dl.innerHTML = names.map(n => `<option value="${escHtml(n)}">`).join('');
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=name&order=name`, { headers: cmrrHdr() });
+    if (r.ok) _escalationPersons = (await r.json()).map(x => x.name).filter(Boolean);
   } catch(e) { console.warn('loadEscalationPersons:', e); }
+}
+function ccEscWhoFilter() {
+  const q = (document.getElementById('cc-esc-who').value || '').toLowerCase().trim();
+  const dd = document.getElementById('cc-esc-who-dd');
+  if (!dd) return;
+  if (!q) { dd.style.display = 'none'; return; }
+  const matches = _escalationPersons.filter(n => n.toLowerCase().includes(q)).slice(0, 15);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(n => `<div class="cc-cust-dd-item" onclick="ccEscWhoSelect(${JSON.stringify(escHtml(n))})">${escHtml(n)}</div>`).join('');
+  dd.style.display = '';
+}
+function ccEscWhoSelect(name) {
+  const inp = document.getElementById('cc-esc-who');
+  if (inp) inp.value = name;
+  const dd = document.getElementById('cc-esc-who-dd');
+  if (dd) dd.style.display = 'none';
+}
+
+/* ─── ESCALATION PERSONS SETTINGS ───────────────────────────── */
+async function renderEscalationPersonsList() {
+  const listEl = document.getElementById('esc-persons-list');
+  if (!listEl) return;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name&order=name`, { headers: cmrrHdr() });
+    if (!r.ok) { listEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading list.</div>'; return; }
+    const rows = await r.json();
+    _escalationPersons = rows.map(x => x.name);
+    if (!rows.length) { listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3)">No escalation persons yet.</div>'; return; }
+    listEl.innerHTML = rows.map(p => `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
+      <span style="font-size:13px;color:var(--ink)">${escHtml(p.name)}</span>
+      <button onclick="deleteEscalationPerson('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+    </div>`).join('');
+  } catch(e) { listEl.innerHTML = `<div style="color:var(--red);font-size:12px">${escHtml(e.message)}</div>`; }
+}
+async function addEscalationPerson() {
+  const inp = document.getElementById('esc-person-new');
+  const name = (inp?.value || '').trim();
+  if (!name) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons`, {
+    method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) { alert('Could not add: name may already exist.'); return; }
+  if (inp) inp.value = '';
+  renderEscalationPersonsList();
+}
+async function deleteEscalationPerson(id) {
+  if (!confirm('Remove this person from the escalation list?')) return;
+  await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
+  });
+  renderEscalationPersonsList();
 }
 
 /* ─── FOLLOW UPS TAB ─────────────────────────────────────────── */
