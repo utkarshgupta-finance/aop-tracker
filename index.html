@@ -1132,6 +1132,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="cc-stbtn active" id="cc-st-log"        onclick="ccShowSubTab('log')">Log Interaction</button>
       <button class="cc-stbtn"        id="cc-st-history"    onclick="ccShowSubTab('history')">Interaction History</button>
       <button class="cc-stbtn"        id="cc-st-daysummary" onclick="ccShowSubTab('daysummary')">Day Summary</button>
+      <button class="cc-stbtn"        id="cc-st-followups"  onclick="ccShowSubTab('followups')">Follow Ups</button>
     </div>
 
     <!-- ── LOG INTERACTION ──────────────────────────────── -->
@@ -1150,7 +1151,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="cc-cust-summary" class="cc-summary-line" style="display:none"></div>
         <div id="cc-invoices-wrap" style="display:none">
           <label class="cc-label">Select invoices to discuss <span class="cc-req">*</span></label>
-          <div id="cc-invoice-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:.25rem .15rem"></div>
+          <div id="cc-invoice-list" style="height:220px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:.25rem .15rem"></div>
           <div id="cc-disputes-panel" style="display:none;margin-top:.6rem"></div>
         </div>
       </div>
@@ -1331,7 +1332,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <div id="cc-esc-fields" style="display:none">
             <div class="cc-field">
               <label class="cc-label">Who needs to act? <span class="cc-req">*</span></label>
-              <input type="text" id="cc-esc-who" class="cc-input" placeholder="Name or team" style="max-width:320px">
+              <input list="cc-esc-who-list" id="cc-esc-who" class="cc-input" placeholder="Name or team" style="max-width:320px" autocomplete="off">
+              <datalist id="cc-esc-who-list"></datalist>
             </div>
             <div class="cc-field">
               <label class="cc-label">What do they need to do? <span class="cc-req">*</span></label>
@@ -1371,6 +1373,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
               <input type="text" id="cc-hist-cust-input" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box" placeholder="All customers" oninput="ccHistCustFilter()" onfocus="ccHistCustFilter()" autocomplete="off">
               <div id="cc-hist-cust-dd" class="cc-cust-dd" style="display:none"></div>
             </div>
+          </div>
+          <div id="cc-hist-col-wrap" style="display:none;flex:0 0 150px;min-width:120px">
+            <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">Collector</label>
+            <select id="cc-hist-collector" class="cc-input" style="font-size:12px;width:100%;box-sizing:border-box">
+              <option value="">All collectors</option>
+            </select>
           </div>
           <div style="flex:0 0 175px;min-width:140px">
             <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">Outcome</label>
@@ -1415,6 +1423,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <button type="button" onclick="ccLoadDaySummary()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
       </div>
       <div id="cc-ds-content" style="font-size:12px;color:var(--txt3)">Loading…</div>
+    </div>
+
+    <!-- Follow Ups pane -->
+    <div id="cc-pane-followups" style="display:none">
+      <div id="cc-followups-content">
+        <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Click to load follow-ups.</div>
+      </div>
     </div>
   </div><!-- end #collector-console -->
 
@@ -5599,11 +5614,21 @@ function ccShowSubTab(tab) {
   document.getElementById('cc-pane-log').style.display        = tab === 'log'        ? '' : 'none';
   document.getElementById('cc-pane-history').style.display    = tab === 'history'    ? '' : 'none';
   document.getElementById('cc-pane-daysummary').style.display = tab === 'daysummary' ? '' : 'none';
+  document.getElementById('cc-pane-followups').style.display  = tab === 'followups'  ? '' : 'none';
   document.getElementById('cc-st-log').classList.toggle('active',        tab === 'log');
   document.getElementById('cc-st-history').classList.toggle('active',    tab === 'history');
   document.getElementById('cc-st-daysummary').classList.toggle('active', tab === 'daysummary');
-  if (tab === 'history')    ccLoadHistory();
+  document.getElementById('cc-st-followups').classList.toggle('active',  tab === 'followups');
+  if (tab === 'history') {
+    if (USER_ACCESS?.is_admin) {
+      const colWrap = document.getElementById('cc-hist-col-wrap');
+      if (colWrap) colWrap.style.display = '';
+      ccPopulateHistCollectorDd();
+    }
+    ccLoadHistory();
+  }
   if (tab === 'daysummary') ccLoadDaySummary();
+  if (tab === 'followups')  ccLoadFollowUps();
 }
 
 /* ── Day Summary sub-tab ─────────────────────────────────────── */
@@ -6252,6 +6277,7 @@ function ccSetEscalation(yes) {
     b.classList.toggle('selected', (b.dataset.val === 'yes') === yes)
   );
   document.getElementById('cc-esc-fields').style.display = yes ? '' : 'none';
+  if (yes) loadEscalationPersons();
 }
 
 /* ── Follow-up date suggestion ───────────────────────────── */
@@ -6445,20 +6471,22 @@ function ccClearHistFilters() {
 }
 
 async function ccLoadHistory() {
-  const custName = _ccHistCust || (document.getElementById('cc-hist-cust-input')?.value.trim() || '');
-  const outcome  = document.getElementById('cc-hist-outcome')?.value || '';
-  const from     = document.getElementById('cc-hist-from')?.value || '';
-  const to       = document.getElementById('cc-hist-to')?.value || '';
-  const kw       = (document.getElementById('cc-hist-kw')?.value || '').toLowerCase().trim();
+  const custName       = _ccHistCust || (document.getElementById('cc-hist-cust-input')?.value.trim() || '');
+  const outcome        = document.getElementById('cc-hist-outcome')?.value || '';
+  const from           = document.getElementById('cc-hist-from')?.value || '';
+  const to             = document.getElementById('cc-hist-to')?.value || '';
+  const kw             = (document.getElementById('cc-hist-kw')?.value || '').toLowerCase().trim();
+  const collectorFilter = USER_ACCESS?.is_admin ? (document.getElementById('cc-hist-collector')?.value || '') : '';
   const contentEl = document.getElementById('cc-hist-content');
   if (!contentEl) return;
   contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
 
   let url = `${SUPABASE_URL}/rest/v1/interactions?order=created_at.desc&limit=200&select=*`;
-  if (custName) url += `&customer_name=eq.${encodeURIComponent(custName)}`;
-  if (outcome)  url += `&outcome=eq.${encodeURIComponent(outcome)}`;
-  if (from)     url += `&created_at=gte.${encodeURIComponent(from)}`;
-  if (to)       url += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
+  if (custName)        url += `&customer_name=eq.${encodeURIComponent(custName)}`;
+  if (outcome)         url += `&outcome=eq.${encodeURIComponent(outcome)}`;
+  if (from)            url += `&created_at=gte.${encodeURIComponent(from)}`;
+  if (to)              url += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
+  if (collectorFilter) url += `&collector_id=eq.${encodeURIComponent(collectorFilter)}`;
 
   try {
     const r = await fetch(url, { headers: cmrrHdr() });
@@ -6528,10 +6556,10 @@ async function ccLoadHistory() {
     const ihCollectorIds = [...new Set(filtered.map(i => i.collector_id).filter(Boolean))];
     if (ihCollectorIds.length) {
       const cr2 = await fetch(
-        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${ihCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name`,
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${ihCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`,
         { headers: cmrrHdr() }
       );
-      if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.user_id; });
+      if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
     }
 
     const heading = custName
@@ -6581,15 +6609,135 @@ function ccRenderTLItem(i, invoiceIds, contactMap, collectorMap) {
   if (i.note)          lines.push(`Note: <em>${escHtml(i.note)}</em>`);
   if (i.follow_up_date) lines.push(`Follow-up: <strong>${i.follow_up_date}</strong>`);
 
+  const canDelete = USER_ACCESS?.is_admin || (CURRENT_USER?.id && i.collector_id === CURRENT_USER.id);
+  const delBtn = canDelete
+    ? `<button onclick="ccDeleteInteraction('${escHtml(i.id)}')" style="flex-shrink:0;font-size:11px;padding:.2rem .55rem;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;cursor:pointer;line-height:1.4" title="Delete interaction">Delete</button>`
+    : '';
   return `<div class="cc-tl-item">
     <div class="cc-tl-dot-col"><div class="cc-tl-dot" style="background:${dotCol}"></div><div class="cc-tl-line"></div></div>
     <div class="cc-tl-body">
-      <div class="cc-tl-date">${refBadge}${dt}</div>
-      <div style="margin:.2rem 0"><span style="font-size:12px;font-weight:600;color:${connCol}">${connLbl}</span> ${opill}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem">
+        <div>
+          <div class="cc-tl-date">${refBadge}${dt}</div>
+          <div style="margin:.2rem 0"><span style="font-size:12px;font-weight:600;color:${connCol}">${connLbl}</span> ${opill}</div>
+        </div>
+        ${delBtn}
+      </div>
       ${chips}
       <div style="font-size:12px;color:var(--ink-soft);margin-top:.3rem;line-height:1.7">${lines.map(l=>`<div>${l}</div>`).join('')}</div>
     </div>
   </div>`;
+}
+
+/* ─── DELETE INTERACTION ─────────────────────────────────────── */
+async function ccDeleteInteraction(id) {
+  if (!confirm('Delete this interaction? This cannot be undone.')) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
+    });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/interactions?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
+    });
+    if (!r.ok) { alert('Delete failed. Please try again.'); return; }
+    ccLoadHistory();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+/* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
+let _histCollectorDdLoaded = false;
+async function ccPopulateHistCollectorDd() {
+  if (_histCollectorDdLoaded) return;
+  _histCollectorDdLoaded = true;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/user_access?role=eq.collector&select=user_id,collector_name,display_name&order=display_name`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const sel = document.getElementById('cc-hist-collector');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All collectors</option>' +
+      rows.map(u => `<option value="${escHtml(u.user_id)}">${escHtml(u.collector_name || u.display_name || u.user_id)}</option>`).join('');
+  } catch(e) { console.warn('ccPopulateHistCollectorDd:', e); }
+}
+
+/* ─── ESCALATION PERSONS DATALIST ───────────────────────────── */
+async function loadEscalationPersons() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/interactions?escalation_needed=eq.true&escalation_who=not.is.null&select=escalation_who`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const names = [...new Set(rows.map(r => r.escalation_who).filter(Boolean))].sort();
+    const dl = document.getElementById('cc-esc-who-list');
+    if (dl) dl.innerHTML = names.map(n => `<option value="${escHtml(n)}">`).join('');
+  } catch(e) { console.warn('loadEscalationPersons:', e); }
+}
+
+/* ─── FOLLOW UPS TAB ─────────────────────────────────────────── */
+async function ccLoadFollowUps() {
+  const contentEl = document.getElementById('cc-followups-content');
+  if (!contentEl) return;
+  contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  const today   = new Date().toISOString().slice(0,10);
+  const since   = new Date(); since.setDate(since.getDate() - 30);
+  const sinceStr = since.toISOString().slice(0,10);
+  try {
+    let url = `${SUPABASE_URL}/rest/v1/interactions?follow_up_date=not.is.null&follow_up_date=gte.${sinceStr}&order=follow_up_date.asc&limit=300&select=id,customer_name,follow_up_date,outcome,connected,collector_id,note,created_at`;
+    const r = await fetch(url, { headers: cmrrHdr() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    let rows = await r.json();
+
+    const isCollectorRole = (USER_ACCESS?.role || '') === 'collector';
+    if (isCollectorRole) rows = rows.filter(i => i.collector_id === CURRENT_USER?.id);
+
+    if (!rows.length) {
+      contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No follow-ups found in the last 30 days.</div>';
+      return;
+    }
+
+    const collectorMap = {};
+    if (USER_ACCESS?.is_admin) {
+      const colIds = [...new Set(rows.map(i => i.collector_id).filter(Boolean))];
+      if (colIds.length) {
+        const cr = await fetch(`${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${colIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`, { headers: cmrrHdr() });
+        if (cr.ok) (await cr.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+      }
+    }
+
+    const overdue  = rows.filter(i => i.follow_up_date < today);
+    const todayArr = rows.filter(i => i.follow_up_date === today);
+    const upcoming = rows.filter(i => i.follow_up_date > today);
+
+    const renderGroup = (title, items, color) => {
+      if (!items.length) return '';
+      return `<div style="margin-bottom:1.25rem">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${color};margin-bottom:.55rem">${title} (${items.length})</div>
+        ${items.map(i => {
+          const oc = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
+          const opill = oc ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
+          const collector = collectorMap[i.collector_id] || '';
+          const loggedDate = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+          return `<div style="display:flex;align-items:flex-start;gap:.75rem;padding:.6rem .75rem;background:var(--surf);border:1px solid var(--brd);border-radius:7px;margin-bottom:.4rem">
+            <div style="flex-shrink:0;min-width:76px;text-align:center;padding:.35rem .45rem;background:${color}18;border-radius:5px;border:1px solid ${color}40">
+              <div style="font-size:11px;font-weight:700;color:${color}">${i.follow_up_date}</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--ink)">${escHtml(i.customer_name||'')}</div>
+              <div style="margin-top:.2rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${opill}${collector?`<span style="font-size:11px;color:var(--txt3)">${escHtml(collector)}</span>`:''}</div>
+              ${i.note?`<div style="font-size:12px;color:var(--txt2);margin-top:.2rem;font-style:italic">${escHtml(i.note)}</div>`:''}
+              <div style="font-size:11px;color:var(--txt3);margin-top:.2rem">Logged: ${loggedDate}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    };
+
+    const html = renderGroup('Overdue', overdue, '#dc2626') +
+                 renderGroup('Today', todayArr, '#059669') +
+                 renderGroup('Upcoming', upcoming, '#2563eb');
+    contentEl.innerHTML = html || '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No follow-ups found.</div>';
+  } catch(e) {
+    contentEl.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message || 'failed')}</div>`;
+  }
 }
 
 async function createTagAndAddCust(customerName, rawName) {
