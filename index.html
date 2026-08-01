@@ -1138,18 +1138,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <!-- Aging Brackets -->
     <div id="st-pane-aging-brackets" class="st-pane" style="display:none">
       <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:560px">
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Aging Brackets</span>
-          <span style="font-size:11.5px;color:var(--txt2)">Define overdue-day ranges. Historical snapshots re-bucket automatically.</span>
+          <span style="font-size:11.5px;color:var(--txt2)">Min days are derived automatically. Last bracket is always open-ended (∞).</span>
+          <button onclick="abSaveAll()" style="margin-left:auto;font-size:12px;padding:.32rem .9rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">Save All</button>
         </div>
         <div id="aging-brackets-list" style="margin-bottom:.85rem"></div>
-        <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:.4rem;align-items:center;margin-bottom:.35rem">
-          <input type="text" id="ab-new-label"   class="cc-input" style="font-size:12px" placeholder="Label (e.g. 61–90 days)">
-          <input type="number" id="ab-new-min"   class="cc-input" style="font-size:12px" placeholder="Min days" min="-9999">
-          <input type="number" id="ab-new-max"   class="cc-input" style="font-size:12px" placeholder="Max (blank=∞)">
+        <div style="display:grid;grid-template-columns:1fr 90px auto;gap:.4rem;align-items:center;margin-bottom:.35rem">
+          <input type="text"   id="ab-new-label" class="cc-input" style="font-size:12px" placeholder="New bracket label…">
+          <input type="number" id="ab-new-max"   class="cc-input" style="font-size:12px" placeholder="Max days">
           <button onclick="abAddBracket()" style="font-size:12px;padding:.32rem .75rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
         </div>
-        <div style="font-size:11px;color:var(--txt3)">Min days: negative or 0 = not yet overdue. Max blank = no upper limit.</div>
+        <div style="font-size:11px;color:var(--txt3)">New bracket is inserted before the last (∞) row. Enter its upper day limit.</div>
+        <div id="ab-status" style="font-size:12px;min-height:1.2rem;margin-top:.5rem"></div>
       </div>
     </div>
 
@@ -7352,60 +7353,118 @@ async function renderAgingBracketsList() {
     list.innerHTML = '<div style="color:var(--txt3);font-size:12px">No brackets defined.</div>';
     return;
   }
+  const thS = 'text-align:left;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase';
   list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
     <thead><tr style="border-bottom:1px solid var(--brd)">
-      <th style="text-align:left;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Label</th>
-      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Min days</th>
-      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Max days</th>
-      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Order</th>
+      <th style="${thS}">#</th>
+      <th style="${thS}">Label</th>
+      <th style="${thS};text-align:right">From (days)</th>
+      <th style="${thS};text-align:right">To (days)</th>
       <th></th>
     </tr></thead>
     <tbody>
-      ${_agingBrackets.map(b => `<tr style="border-bottom:1px solid var(--line)" id="ab-row-${b.id}">
-        <td style="padding:.3rem .5rem"><input class="cc-input" style="font-size:12px;width:100%" value="${escHtml(b.label)}" id="ab-lbl-${b.id}"></td>
-        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:70px;text-align:right" value="${b.min_days}" id="ab-min-${b.id}"></td>
-        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:70px;text-align:right" value="${b.max_days ?? ''}" placeholder="∞" id="ab-max-${b.id}"></td>
-        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:55px;text-align:right" value="${b.sort_order}" id="ab-ord-${b.id}"></td>
-        <td style="padding:.3rem .5rem;text-align:right;white-space:nowrap">
-          <button onclick="abSaveBracket(${b.id})" style="font-size:11px;padding:.1rem .45rem;border:1px solid #bfdbfe;border-radius:4px;background:#fff;color:#2563eb;cursor:pointer;margin-right:.25rem">Save</button>
-          <button onclick="abDeleteBracket(${b.id})" style="font-size:11px;padding:.1rem .45rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Delete</button>
-        </td>
-      </tr>`).join('')}
+      ${_agingBrackets.map((b, idx) => {
+        const isLast  = idx === _agingBrackets.length - 1;
+        const minDerived = idx === 0 ? b.min_days : (_agingBrackets[idx-1].max_days ?? 0) + 1;
+        return `<tr style="border-bottom:1px solid var(--line)" data-ab-id="${b.id}">
+          <td style="padding:.35rem .5rem;color:var(--txt3);font-size:11px">${idx+1}</td>
+          <td style="padding:.35rem .5rem">
+            <input class="cc-input ab-lbl" style="font-size:12px;width:100%" value="${escHtml(b.label)}">
+          </td>
+          <td style="padding:.35rem .5rem;text-align:right;color:var(--txt3);font-family:var(--mono);font-size:12px">${minDerived}</td>
+          <td style="padding:.35rem .5rem;text-align:right">
+            ${isLast
+              ? `<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink-faint)">∞</span>`
+              : `<input type="number" class="cc-input ab-max" style="font-size:12px;width:72px;text-align:right" value="${b.max_days ?? ''}">`}
+          </td>
+          <td style="padding:.35rem .5rem;text-align:right">
+            <button onclick="abDeleteBracket(${b.id})" style="font-size:11px;padding:.1rem .45rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Delete</button>
+          </td>
+        </tr>`;
+      }).join('')}
     </tbody>
   </table>`;
 }
 
+async function abSaveAll() {
+  const list   = document.getElementById('aging-brackets-list');
+  const status = document.getElementById('ab-status');
+  const rows   = list ? [...list.querySelectorAll('tr[data-ab-id]')] : [];
+  if (!rows.length) return;
+
+  // Collect edited values
+  const edits = rows.map((tr, idx) => ({
+    id:    parseInt(tr.dataset.abId),
+    label: tr.querySelector('.ab-lbl')?.value.trim() || '',
+    maxInput: tr.querySelector('.ab-max')?.value ?? '',
+    isLast: idx === rows.length - 1,
+  }));
+
+  // Validate
+  for (const e of edits) {
+    if (!e.label) { if (status) { status.textContent = 'All labels must be filled in.'; status.style.color = 'var(--red)'; } return; }
+    if (!e.isLast && e.maxInput === '') { if (status) { status.textContent = `"${e.label}" needs a Max days value.`; status.style.color = 'var(--red)'; } return; }
+  }
+
+  // Compute final values with derived min_days and last row max = null
+  const bracket = _agingBrackets; // sorted by sort_order
+  let prevMax = bracket[0].min_days; // keep first row's original min
+  const patches = edits.map((e, idx) => {
+    const min_days = idx === 0 ? bracket[0].min_days : prevMax + 1;
+    const max_days = e.isLast ? null : parseInt(e.maxInput);
+    prevMax = max_days ?? prevMax;
+    return { id: e.id, label: e.label, min_days, max_days, sort_order: idx + 1 };
+  });
+
+  if (status) { status.textContent = 'Saving…'; status.style.color = 'var(--txt3)'; }
+  try {
+    await Promise.all(patches.map(p =>
+      fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets?id=eq.${p.id}`, {
+        method: 'PATCH',
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ label: p.label, min_days: p.min_days, max_days: p.max_days, sort_order: p.sort_order }),
+      })
+    ));
+    if (status) { status.textContent = '✓ Saved'; status.style.color = '#16a34a'; setTimeout(() => { status.textContent = ''; }, 2500); }
+    _agingBrackets = [];
+    renderAgingBracketsList();
+  } catch(e) {
+    if (status) { status.textContent = 'Error: ' + e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
 async function abAddBracket() {
   const label  = (document.getElementById('ab-new-label')?.value || '').trim();
-  const minVal = document.getElementById('ab-new-min')?.value;
-  const maxVal = document.getElementById('ab-new-max')?.value;
-  if (!label || minVal === '') { alert('Label and Min days are required.'); return; }
-  const maxOrder = _agingBrackets.reduce((m, b) => Math.max(m, b.sort_order), 0);
-  const payload = { label, min_days: parseInt(minVal), max_days: maxVal !== '' ? parseInt(maxVal) : null, sort_order: maxOrder + 1 };
+  const maxVal = (document.getElementById('ab-new-max')?.value || '').trim();
+  const status = document.getElementById('ab-status');
+  if (!label)   { if (status) { status.textContent = 'Label is required.'; status.style.color = 'var(--red)'; } return; }
+  if (!maxVal)  { if (status) { status.textContent = 'Max days is required (the new bracket is inserted before the ∞ row).'; status.style.color = 'var(--red)'; } return; }
+  const newMax = parseInt(maxVal);
+
+  // Insert before the last bracket (which will remain ∞)
+  // New sort_order = last - 0.5, then we renumber on Save All
+  const lastOrder = _agingBrackets.length ? _agingBrackets[_agingBrackets.length - 1].sort_order : 1;
+  const prevOrder = _agingBrackets.length > 1 ? _agingBrackets[_agingBrackets.length - 2].sort_order : 0;
+  const insertOrder = prevOrder + 1; // will shift last row up
+
+  // Shift the last bracket's sort_order up by 1
+  if (_agingBrackets.length) {
+    const lastB = _agingBrackets[_agingBrackets.length - 1];
+    await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets?id=eq.${lastB.id}`, {
+      method: 'PATCH',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ sort_order: lastOrder + 1 }),
+    });
+  }
+
   const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets`, {
     method: 'POST',
     headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ label, min_days: 0, max_days: newMax, sort_order: insertOrder }),
   });
-  if (!r.ok) { alert('Save failed: ' + await r.text()); return; }
-  ['ab-new-label','ab-new-min','ab-new-max'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  _agingBrackets = []; // force reload
-  renderAgingBracketsList();
-}
-
-async function abSaveBracket(id) {
-  const label = (document.getElementById(`ab-lbl-${id}`)?.value || '').trim();
-  const minV  = document.getElementById(`ab-min-${id}`)?.value;
-  const maxV  = document.getElementById(`ab-max-${id}`)?.value;
-  const ordV  = document.getElementById(`ab-ord-${id}`)?.value;
-  if (!label || minV === '') { alert('Label and Min days are required.'); return; }
-  const payload = { label, min_days: parseInt(minV), max_days: maxV !== '' ? parseInt(maxV) : null, sort_order: ordV !== '' ? parseInt(ordV) : 0 };
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets?id=eq.${id}`, {
-    method: 'PATCH',
-    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify(payload),
-  });
-  if (!r.ok) { alert('Save failed: ' + await r.text()); return; }
+  if (!r.ok) { if (status) { status.textContent = 'Add failed: ' + await r.text(); status.style.color = 'var(--red)'; } return; }
+  ['ab-new-label','ab-new-max'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  if (status) { status.textContent = 'Added — click Save All to confirm continuity.'; status.style.color = '#16a34a'; }
   _agingBrackets = [];
   renderAgingBracketsList();
 }
