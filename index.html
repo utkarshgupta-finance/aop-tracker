@@ -626,6 +626,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button class="ar-stbtn"        id="ar-snap-tab-collector" onclick="arSnapSetTab('collector')">By Collector</button>
           <button class="ar-stbtn"        id="ar-snap-tab-customer"  onclick="arSnapSetTab('customer')">By Customer</button>
           <button class="ar-stbtn"        id="ar-snap-tab-dispute"   onclick="arSnapSetTab('dispute')">By Dispute</button>
+          <button class="ar-stbtn"        id="ar-snap-tab-aging"     onclick="arSnapSetTab('aging')">By Aging</button>
         </div>
         <select class="nret-sel" id="ar-snap-days" onchange="loadARSnapshots()" style="font-size:12px;margin-left:.5rem">
           <option value="14">Last 14 days</option>
@@ -831,6 +832,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-collector" onclick="showSettingsSubTab('collector')">Collector Master</button>
       <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
       <button class="st-stbtn"        id="st-tab-coc"       onclick="showSettingsSubTab('coc')">Cost of Capital</button>
+      <button class="st-stbtn"        id="st-tab-aging-brackets" onclick="showSettingsSubTab('aging-brackets')">Aging Brackets</button>
       <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')"    style="display:none">Outcome Options</button>
       <button class="st-stbtn"        id="st-tab-escalation" onclick="showSettingsSubTab('escalation')" style="display:none">Escalation Persons</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')"     style="display:none">Manage Users</button>
@@ -1130,6 +1132,24 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button onclick="addEscalationPerson()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
         </div>
         <div id="esc-persons-list"></div>
+      </div>
+    </div>
+
+    <!-- Aging Brackets -->
+    <div id="st-pane-aging-brackets" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:560px">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Aging Brackets</span>
+          <span style="font-size:11.5px;color:var(--txt2)">Define overdue-day ranges. Historical snapshots re-bucket automatically.</span>
+        </div>
+        <div id="aging-brackets-list" style="margin-bottom:.85rem"></div>
+        <div style="display:grid;grid-template-columns:1fr 80px 80px auto;gap:.4rem;align-items:center;margin-bottom:.35rem">
+          <input type="text" id="ab-new-label"   class="cc-input" style="font-size:12px" placeholder="Label (e.g. 61–90 days)">
+          <input type="number" id="ab-new-min"   class="cc-input" style="font-size:12px" placeholder="Min days" min="-9999">
+          <input type="number" id="ab-new-max"   class="cc-input" style="font-size:12px" placeholder="Max (blank=∞)">
+          <button onclick="abAddBracket()" style="font-size:12px;padding:.32rem .75rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
+        </div>
+        <div style="font-size:11px;color:var(--txt3)">Min days: negative or 0 = not yet overdue. Max blank = no upper limit.</div>
       </div>
     </div>
 
@@ -2061,11 +2081,12 @@ function showSettingsSubTab(tab) {
   // always hide option sub-panes first
   const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
   const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
-  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','options','escalation','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','options','escalation','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
-  if (tab === 'coc')        renderCocSettings();
+  if (tab === 'coc')             renderCocSettings();
+  if (tab === 'aging-brackets')  renderAgingBracketsList();
   if (tab === 'options') {
     loadOutcomeOptionsMaster(); loadSubOptMaster(); loadContactCatMaster();
     if (dsp) dsp.style.display = '';
@@ -3620,12 +3641,12 @@ let _arActivePanes = new Set(['invoices']);
 function toggleARSubTab(tab) {
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily') { _loadARDisputeMap(); loadARSnapshots(); }
+  if (tab === 'daily') { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
 }
 function showARSubTab(tab) { // legacy compat
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily') { _loadARDisputeMap(); loadARSnapshots(); }
+  if (tab === 'daily') { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
 }
 function _applyARSubTabs() {
   for (const id of ['invoices','aging','daily','summary']) {
@@ -4466,11 +4487,15 @@ let _arSnapRows = []; // cached snapshot rows
 
 function arSnapSetTab(tab) {
   _arSnapTab = tab;
-  ['bu','collector','customer','dispute'].forEach(t => {
+  ['bu','collector','customer','dispute','aging'].forEach(t => {
     const btn = document.getElementById(`ar-snap-tab-${t}`);
     if (btn) btn.classList.toggle('active', t === tab);
   });
-  if (_arSnapRows.length) renderARSnapshots(_arSnapRows);
+  if (tab === 'aging' && !_agingBrackets.length) {
+    loadAgingBrackets().then(() => { if (_arSnapRows.length) renderARSnapshots(_arSnapRows); });
+  } else if (_arSnapRows.length) {
+    renderARSnapshots(_arSnapRows);
+  }
 }
 
 async function arTakeSnapshot() {
@@ -4588,10 +4613,17 @@ function renderARSnapshots(rows) {
   } else if (_arSnapTab === 'customer') {
     getKey = r => r.customer_name || 'Unknown';
   } else if (_arSnapTab === 'dispute') {
-    // Use stored dispute_type from snapshot; fall back to live map for today's data
     getKey = r => {
       const dt = r.dispute_type || (_arInvDisputeMap[r.invoice_id]?.dispute_type);
       return dt ? dt.replace(/_/g, ' ') : 'No Dispute';
+    };
+  } else if (_arSnapTab === 'aging') {
+    getKey = r => {
+      const snapDate = new Date((r.snapshot_date || '').slice(0,10));
+      const dueDate  = new Date(r.due_date || '');
+      if (isNaN(snapDate) || isNaN(dueDate)) return 'Unknown';
+      const days = Math.floor((snapDate - dueDate) / 86400000);
+      return agingBucketForDays(days);
     };
   } else {
     getKey = r => arGetBu(r.customer_name) || 'Uncategorised';
@@ -4612,7 +4644,15 @@ function renderARSnapshots(rows) {
 
   const dates  = Object.keys(dateMap).sort().reverse();
   let allKeys;
-  if (_arSnapTab === 'dispute') {
+  if (_arSnapTab === 'aging') {
+    // Preserve bracket order from _agingBrackets, then any unknown buckets at the end
+    const bracketLabels = _agingBrackets.map(b => b.label);
+    const seen = new Set(filtered.map(getKey));
+    allKeys = [
+      ...bracketLabels.filter(l => seen.has(l)),
+      ...[...seen].filter(l => !bracketLabels.includes(l)).sort(),
+    ];
+  } else if (_arSnapTab === 'dispute') {
     // Show specific dispute types; put "No Dispute" last
     allKeys = [...new Set(filtered.map(getKey))].sort((a,b) => {
       if (a === 'No Dispute') return 1; if (b === 'No Dispute') return -1; return a.localeCompare(b);
@@ -7281,6 +7321,103 @@ function ccEscWhoSelect(name) {
   if (inp) inp.value = name;
   const dd = document.getElementById('cc-esc-who-dd');
   if (dd) dd.style.display = 'none';
+}
+
+/* ─── AGING BRACKETS ────────────────────────────────────────── */
+let _agingBrackets = []; // loaded from ar_aging_brackets, sorted by sort_order
+
+async function loadAgingBrackets() {
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_aging_brackets?order=sort_order.asc,id.asc`,
+      { headers: cmrrHdr() }
+    );
+    if (r.ok) _agingBrackets = await r.json();
+  } catch(e) { console.warn('loadAgingBrackets:', e); }
+}
+
+function agingBucketForDays(days) {
+  // days = snapshot_date - due_date (positive = overdue)
+  const b = _agingBrackets.find(b =>
+    days >= b.min_days && (b.max_days === null || days <= b.max_days)
+  );
+  return b ? b.label : `${days}d`;
+}
+
+async function renderAgingBracketsList() {
+  await loadAgingBrackets();
+  const list = document.getElementById('aging-brackets-list');
+  if (!list) return;
+  if (!_agingBrackets.length) {
+    list.innerHTML = '<div style="color:var(--txt3);font-size:12px">No brackets defined.</div>';
+    return;
+  }
+  list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="border-bottom:1px solid var(--brd)">
+      <th style="text-align:left;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Label</th>
+      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Min days</th>
+      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Max days</th>
+      <th style="text-align:right;padding:.3rem .5rem;color:var(--txt3);font-size:10.5px;font-weight:700;text-transform:uppercase">Order</th>
+      <th></th>
+    </tr></thead>
+    <tbody>
+      ${_agingBrackets.map(b => `<tr style="border-bottom:1px solid var(--line)" id="ab-row-${b.id}">
+        <td style="padding:.3rem .5rem"><input class="cc-input" style="font-size:12px;width:100%" value="${escHtml(b.label)}" id="ab-lbl-${b.id}"></td>
+        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:70px;text-align:right" value="${b.min_days}" id="ab-min-${b.id}"></td>
+        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:70px;text-align:right" value="${b.max_days ?? ''}" placeholder="∞" id="ab-max-${b.id}"></td>
+        <td style="padding:.3rem .5rem;text-align:right"><input type="number" class="cc-input" style="font-size:12px;width:55px;text-align:right" value="${b.sort_order}" id="ab-ord-${b.id}"></td>
+        <td style="padding:.3rem .5rem;text-align:right;white-space:nowrap">
+          <button onclick="abSaveBracket(${b.id})" style="font-size:11px;padding:.1rem .45rem;border:1px solid #bfdbfe;border-radius:4px;background:#fff;color:#2563eb;cursor:pointer;margin-right:.25rem">Save</button>
+          <button onclick="abDeleteBracket(${b.id})" style="font-size:11px;padding:.1rem .45rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Delete</button>
+        </td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function abAddBracket() {
+  const label  = (document.getElementById('ab-new-label')?.value || '').trim();
+  const minVal = document.getElementById('ab-new-min')?.value;
+  const maxVal = document.getElementById('ab-new-max')?.value;
+  if (!label || minVal === '') { alert('Label and Min days are required.'); return; }
+  const maxOrder = _agingBrackets.reduce((m, b) => Math.max(m, b.sort_order), 0);
+  const payload = { label, min_days: parseInt(minVal), max_days: maxVal !== '' ? parseInt(maxVal) : null, sort_order: maxOrder + 1 };
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) { alert('Save failed: ' + await r.text()); return; }
+  ['ab-new-label','ab-new-min','ab-new-max'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  _agingBrackets = []; // force reload
+  renderAgingBracketsList();
+}
+
+async function abSaveBracket(id) {
+  const label = (document.getElementById(`ab-lbl-${id}`)?.value || '').trim();
+  const minV  = document.getElementById(`ab-min-${id}`)?.value;
+  const maxV  = document.getElementById(`ab-max-${id}`)?.value;
+  const ordV  = document.getElementById(`ab-ord-${id}`)?.value;
+  if (!label || minV === '') { alert('Label and Min days are required.'); return; }
+  const payload = { label, min_days: parseInt(minV), max_days: maxV !== '' ? parseInt(maxV) : null, sort_order: ordV !== '' ? parseInt(ordV) : 0 };
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) { alert('Save failed: ' + await r.text()); return; }
+  _agingBrackets = [];
+  renderAgingBracketsList();
+}
+
+async function abDeleteBracket(id) {
+  if (!confirm('Delete this bracket?')) return;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_aging_brackets?id=eq.${id}`, {
+    method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' },
+  });
+  if (!r.ok) { alert('Delete failed.'); return; }
+  _agingBrackets = [];
+  renderAgingBracketsList();
 }
 
 /* ─── ESCALATION PERSONS SETTINGS ───────────────────────────── */
