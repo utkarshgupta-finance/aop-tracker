@@ -1452,7 +1452,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="overflow-x:auto">
       <table class="ar-tbl" style="width:100%">
         <thead><tr>
-          <th style="text-align:left;min-width:120px">Customer</th>
+          <th style="text-align:left;min-width:120px;max-width:160px">Customer</th>
           <th style="text-align:left">BU</th>
           <th style="text-align:left">Collector</th>
           <th style="text-align:left">Invoice #</th>
@@ -3129,7 +3129,14 @@ async function toggleDisputeTimeline(id, invoiceId) {
   ].sort((a, b) => new Date(b._at) - new Date(a._at));
 
   const collectorMap = {};
-  (_collectorList || []).forEach(c => { collectorMap[c.user_id] = c.display_name || c.email || ''; });
+  const tlCollectorIds = [...new Set(interactions.map(i => i.collector_id).filter(Boolean))];
+  if (tlCollectorIds.length) {
+    const cr = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${tlCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
+      { headers: cmrrHdr() }
+    );
+    if (cr.ok) (await cr.json()).forEach(u => { collectorMap[u.user_id] = u.display_name || u.user_id; });
+  }
 
   const EVENT_COLORS = { opened:'#166534', closed:'#991b1b', reopened:'#7c3aed' };
   const contentEl = document.getElementById(`di-tl-content-${id}`);
@@ -3243,7 +3250,7 @@ function renderDisputedInvoices() {
       }
     </div>`;
     return `<tr data-dispute-id="${escHtml(r.id)}">
-      <td style="font-size:12.5px;font-weight:500;word-break:break-word;max-width:140px">${escHtml(r.customer_name || '')}</td>
+      <td style="font-size:12.5px;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.customer_name || '')}">${escHtml(r.customer_name || '')}</td>
       <td>${buBadge}</td>
       <td style="font-size:12px;color:var(--txt2);white-space:nowrap">${escHtml(collector || '—')}</td>
       <td style="white-space:nowrap">${invLabelEl}${openTimesNote}</td>
@@ -3474,6 +3481,7 @@ async function loadARExcluded() {
     if (!r.ok) return;
     const rows = await r.json();
     _arExcluded = rows.map(r => r.customer_name);
+    renderAR();
   } catch(e) { console.warn('loadARExcluded:', e); }
 }
 let _arBuSelected        = new Set(); // empty = all BUs
@@ -3526,14 +3534,9 @@ function showRateCalcTab(btn) {
 
 let _arActivePanes = new Set(['invoices']);
 function toggleARSubTab(tab) {
-  if (_arActivePanes.has(tab)) {
-    if (_arActivePanes.size === 1) return; // keep at least one
-    _arActivePanes.delete(tab);
-  } else {
-    _arActivePanes.add(tab);
-  }
+  _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (_arActivePanes.has('daily')) loadARSnapshots();
+  if (tab === 'daily') loadARSnapshots();
 }
 function showARSubTab(tab) { // legacy compat
   _arActivePanes = new Set([tab]);
@@ -3712,7 +3715,7 @@ async function saveArSettingsFxRate() {
   status.textContent = 'Saving…'; status.style.color = '';
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/fx_rates`, {
-      method: 'POST', headers: { ...cmrrHdr(), 'Prefer': 'resolution=merge-duplicates' },
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
       body: JSON.stringify({ year_month: month, currency: 'GBP', rate, updated_at: new Date().toISOString() }),
     });
     if (!r.ok) throw new Error(await r.text());
@@ -5639,7 +5642,7 @@ async function ccLoadDaySummary() {
       );
       if (ur.ok) {
         const urows = await ur.json();
-        urows.forEach(u => { collNameMap[u.user_id] = u.display_name || u.user_id; });
+        urows.forEach(u => { collNameMap[u.user_id] = u.display_name || u.collector_name || u.user_id; });
       }
     }
     // Store name map for render
@@ -6528,7 +6531,14 @@ async function ccLoadHistory() {
 
     // Build collector display name map
     const collectorMap = {};
-    (_collectorList || []).forEach(c => { collectorMap[c.user_id] = c.display_name || c.email || ''; });
+    const ihCollectorIds = [...new Set(filtered.map(i => i.collector_id).filter(Boolean))];
+    if (ihCollectorIds.length) {
+      const cr2 = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${ihCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
+        { headers: cmrrHdr() }
+      );
+      if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.display_name || u.user_id; });
+    }
 
     const heading = custName
       ? `<span class="slabel" style="margin:0;font-size:13px">${escHtml(custName)}</span>`
