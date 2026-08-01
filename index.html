@@ -632,6 +632,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <option value="60">Last 60 days</option>
           <option value="90">Last 90 days</option>
         </select>
+        <button id="ar-snap-take-btn" onclick="arTakeSnapshot()" style="margin-left:auto;font-size:12px;padding:.32rem .9rem;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">📸 Take Today's Snapshot</button>
         <span id="ar-snap-status" style="font-size:11.5px;color:var(--txt3)"></span>
       </div>
       <div class="twrap" id="ar-daily-wrap"></div>
@@ -4471,6 +4472,61 @@ function arSnapSetTab(tab) {
   if (_arSnapRows.length) renderARSnapshots(_arSnapRows);
 }
 
+async function arTakeSnapshot() {
+  const btn    = document.getElementById('ar-snap-take-btn');
+  const status = document.getElementById('ar-snap-status');
+  if (!_arAllRows.length) { alert('No AR data loaded yet. Please wait for invoices to load first.'); return; }
+  const today = new Date().toISOString().slice(0, 10);
+  if (!confirm(`Take snapshot of ${_arAllRows.length} invoices for ${today}? Any existing snapshot for today will be replaced.`)) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (status) status.textContent = '';
+  try {
+    // Delete existing today's snapshot first
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?snapshot_date=eq.${today}`,
+      { method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' } }
+    );
+    // Insert in batches of 200
+    const BATCH = 200;
+    let inserted = 0;
+    for (let i = 0; i < _arAllRows.length; i += BATCH) {
+      const chunk = _arAllRows.slice(i, i + BATCH).map(r => ({
+        snapshot_date:  today,
+        received_at:    new Date().toISOString(),
+        entity:         r.entity         || null,
+        invoice_id:     r.invoice_id     || null,
+        invoice_number: r.invoice_number || null,
+        customer_name:  r.customer_name  || null,
+        invoice_date:   r.invoice_date   || null,
+        due_date:       r.due_date       || null,
+        status:         r.status         || null,
+        total:          r.total          ?? null,
+        balance:        r.balance        ?? null,
+        currency_code:  r.currency_code  || null,
+        exchange_rate:  r.exchange_rate  ?? null,
+        total_inr:      r.total_inr      ?? null,
+        balance_inr:    r.balance_inr    ?? null,
+      }));
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_snapshots`, {
+        method: 'POST',
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify(chunk),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + await r.text());
+      inserted += chunk.length;
+      if (status) status.textContent = `Saving… ${inserted}/${_arAllRows.length}`;
+    }
+    if (status) { status.textContent = `✓ Snapshot saved — ${inserted} invoices`; status.style.color = '#16a34a'; }
+    setTimeout(() => { if (status) { status.textContent = ''; status.style.color = ''; } }, 4000);
+    _arSnapRows = []; // force reload
+    loadARSnapshots();
+  } catch(e) {
+    if (status) { status.textContent = 'Error: ' + e.message; status.style.color = 'var(--red)'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📸 Take Today\'s Snapshot'; }
+  }
+}
+
 async function loadARSnapshots() {
   const wrap   = document.getElementById('ar-daily-wrap');
   const status = document.getElementById('ar-snap-status');
@@ -4993,15 +5049,14 @@ function renderARInvoiceList(rows) {
     else if (days > 30) sevCls = 'sev-med';
     else if (days > 0)  sevCls = 'sev-low';
     else if (days === 0) sevCls = 'sev-low';
-    const invNum = escHtml(r.invoice_number || '');
-    const invLinkWithPopup = r.invoice_id
-      ? `<span class="ar-inv-link" onclick="arShowInvInteractions(${JSON.stringify(r.invoice_id)},${JSON.stringify(r.invoice_number||'')})" title="View interactions">${r.invoice_url ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${invNum}</a>` : invNum}</span>`
-      : invLink;
+    const intPopupBtn = r.invoice_id
+      ? `<button onclick="arShowInvInteractions(${JSON.stringify(r.invoice_id)},${JSON.stringify(r.invoice_number||'')})" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
+      : '';
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td style="white-space:nowrap">${buCell}</td>
       <td style="white-space:nowrap">${collectorCell}</td>
-      <td class="td-inv">${invLinkWithPopup}</td>
+      <td class="td-inv">${invLink}${intPopupBtn}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
       <td class="td-days">${daysCell}</td>
