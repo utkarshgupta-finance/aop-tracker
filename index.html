@@ -4632,33 +4632,47 @@ function renderARSnapshots(rows) {
     });
   }
 
-  const keyCols   = allKeys.map(k => `<th style="${thS}">${escHtml(k)}</th>`).join('');
-  const rowsHtml  = dates.map(date => {
-    const d        = dateMap[date];
-    const dayTotal = allKeys.reduce((s, k) => s + (d[k]?.total || 0), 0);
-    const dayOvd   = allKeys.reduce((s, k) => s + (d[k]?.overdue || 0), 0);
-    const ovdTag   = dayOvd > 0
-      ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(dayOvd/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
-    const keyCells = allKeys.map(k => {
-      const v = d[k]?.total   || 0;
-      const o = d[k]?.overdue || 0;
+  // Transposed: rows = keys (BU/Collector/Customer/Dispute), columns = dates
+  const rowLabel = _arSnapTab === 'collector' ? 'Collector' : _arSnapTab === 'customer' ? 'Customer' : _arSnapTab === 'dispute' ? 'Dispute Type' : 'BU';
+  const dateCols = dates.map(d => `<th style="${thS}">${d}</th>`).join('');
+
+  // Grand total per date (for Total row)
+  const dateTotals = {}, dateOvds = {};
+  dates.forEach(d => {
+    dateTotals[d] = allKeys.reduce((s, k) => s + (dateMap[d]?.[k]?.total || 0), 0);
+    dateOvds[d]   = allKeys.reduce((s, k) => s + (dateMap[d]?.[k]?.overdue || 0), 0);
+  });
+
+  const totalRow = `<tr style="border-top:2px solid #cbd5e1;background:#f8fafc">
+    <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:700;color:#0f172a">Total</td>
+    ${dates.map(d => {
+      const v = dateTotals[d] || 0;
+      const o = dateOvds[d]   || 0;
+      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
+      return `<td style="${tdS};font-weight:700;color:var(--navy)">₹${(v/1e7).toFixed(2)} Cr${ovd}</td>`;
+    }).join('')}
+  </tr>`;
+
+  const rowsHtml = allKeys.map(key => {
+    const dateCells = dates.map(date => {
+      const v = dateMap[date]?.[key]?.total   || 0;
+      const o = dateMap[date]?.[key]?.overdue || 0;
       const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
       return `<td style="${tdS}">${v > 0 ? '₹'+(v/1e7).toFixed(2)+' Cr' : '<span style="color:#e2e8f0">—</span>'}${ovd}</td>`;
     }).join('');
     return `<tr>
-      <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:600;color:#0f172a">${date}</td>
-      <td style="${tdS};font-weight:700;color:var(--navy)">₹${(dayTotal/1e7).toFixed(2)} Cr${ovdTag}</td>
-      ${keyCells}
+      <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:600;color:#0f172a;white-space:normal;max-width:180px">${escHtml(key)}</td>
+      ${dateCells}
     </tr>`;
   }).join('');
 
-  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${360+allKeys.length*130}px">
+  const labelColW = _arSnapTab === 'customer' ? 200 : 160;
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${labelColW + dates.length*120}px">
     <thead><tr>
-      <th style="${thS};text-align:left">Snapshot Date</th>
-      <th style="${thS}">Total</th>
-      ${keyCols}
+      <th style="${thS};text-align:left">${rowLabel}</th>
+      ${dateCols}
     </tr></thead>
-    <tbody>${rowsHtml}</tbody>
+    <tbody>${totalRow}${rowsHtml}</tbody>
   </table></div>`;
 }
 
