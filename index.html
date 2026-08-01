@@ -588,15 +588,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <input type="text" class="cust-input" id="ar-search" placeholder="Search anything…"
         style="font-size:12px;max-width:220px;padding:.35rem .75rem" oninput="renderAR()">
     </div>
-    <!-- BU + Collector capsule filters — same row -->
-    <div style="display:flex;align-items:flex-start;gap:1.25rem;margin-bottom:.85rem">
-      <div style="display:flex;align-items:flex-start;gap:.5rem;flex:1;min-width:160px">
-        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:22px;padding-top:6px">BU</span>
-        <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
-      </div>
-      <div id="ar-collector-filter-wrap" style="display:flex;align-items:flex-start;gap:.5rem;flex:1;min-width:160px">
-        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px;padding-top:6px">Collector</span>
-        <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
+    <!-- BU + Collector capsule filters — single row -->
+    <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap">BU</span>
+      <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"></div>
+      <div id="ar-collector-filter-wrap" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;margin-left:.5rem">Collector</span>
+        <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"></div>
       </div>
     </div>
     <!-- AR sub-tabs -->
@@ -1119,19 +1117,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button class="modal-csv" onclick="openUserModal(null)" style="margin-left:auto;padding:.28rem .75rem;font-size:12px">+ Add User</button>
         </div>
         <div id="users-list"></div>
-      </div>
-      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:520px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.85rem">Collector Permissions</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem 0;border-bottom:1px solid var(--brd)">
-          <div>
-            <div style="font-size:13px;color:var(--ink)">Allow collectors to delete contacts</div>
-            <div style="font-size:11.5px;color:var(--txt3);margin-top:.15rem">By default only admins can delete contacts. Enable this to let collectors delete too.</div>
-          </div>
-          <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;flex-shrink:0;margin-left:1rem">
-            <input type="checkbox" id="perm-collector-delete-contacts" style="width:17px;height:17px;accent-color:var(--navy2);cursor:pointer" onchange="savePermission('collector_can_delete_contacts', this.checked)">
-          </label>
-        </div>
-        <div id="perms-save-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem;margin-top:.6rem"></div>
       </div>
     </div>
   </div>
@@ -1984,6 +1969,9 @@ async function deleteUser(userId, name) {
 let _stActiveTab = 'fx';
 function showSettingsSubTab(tab) {
   _stActiveTab = tab;
+  // always hide option sub-panes first
+  const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
+  const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
   for (const id of ['fx','excluded','tags','bu','collector','customers','coc','options','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
@@ -1991,8 +1979,8 @@ function showSettingsSubTab(tab) {
   if (tab === 'coc')     renderCocSettings();
   if (tab === 'options') {
     loadOutcomeOptionsMaster(); loadSubOptMaster(); loadContactCatMaster();
-    const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = '';
-    const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = '';
+    if (dsp) dsp.style.display = '';
+    if (ccp) ccp.style.display = '';
   }
   if (tab === 'users')   renderPermsSettings();
 }
@@ -3254,7 +3242,7 @@ function renderDisputedInvoices() {
       }
     </div>`;
     return `<tr data-dispute-id="${escHtml(r.id)}">
-      <td style="font-size:12.5px;font-weight:500;max-width:160px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word" title="${escHtml(r.customer_name || '')}">${escHtml(r.customer_name || '')}</td>
+      <td style="font-size:12.5px;font-weight:500;max-width:160px" title="${escHtml(r.customer_name || '')}"><div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;word-break:break-word;white-space:normal">${escHtml(r.customer_name || '')}</div></td>
       <td>${buBadge}</td>
       <td style="font-size:12px;color:var(--txt2);white-space:nowrap">${escHtml(collector || '—')}</td>
       <td style="white-space:nowrap">${invLabelEl}${openTimesNote}</td>
