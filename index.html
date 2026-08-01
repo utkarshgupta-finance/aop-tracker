@@ -326,6 +326,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-tbl .td-cust{font-weight:500;font-size:11.5px;color:var(--ink);max-width:200px;white-space:normal;word-break:break-word;line-height:1.35}
 .ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--action);text-decoration:none}
 .ar-tbl .td-inv a:hover{text-decoration:underline}
+.ar-inv-link{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--action)}
+.ar-inv-link:hover{text-decoration:underline}
 .ar-tbl .td-date{font-size:12px;color:var(--ink-soft);white-space:nowrap;font-variant-numeric:tabular-nums}
 .ar-tbl .td-days{white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}
 .ar-tbl .td-amt{text-align:right!important;font-family:var(--mono);font-size:12.5px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -618,9 +620,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <!-- Daily Snapshots pane -->
     <div id="ar-pane-daily" style="display:none">
-      <div id="ar-daily-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center;min-height:28px"></div>
       <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.85rem;flex-wrap:wrap">
-        <select class="nret-sel" id="ar-snap-days" onchange="loadARSnapshots()" style="font-size:12px">
+        <div style="display:flex;gap:.35rem">
+          <button class="ar-stbtn active" id="ar-snap-tab-bu"        onclick="arSnapSetTab('bu')">By BU</button>
+          <button class="ar-stbtn"        id="ar-snap-tab-collector" onclick="arSnapSetTab('collector')">By Collector</button>
+          <button class="ar-stbtn"        id="ar-snap-tab-dispute"   onclick="arSnapSetTab('dispute')">By Dispute</button>
+        </div>
+        <select class="nret-sel" id="ar-snap-days" onchange="loadARSnapshots()" style="font-size:12px;margin-left:.5rem">
           <option value="14">Last 14 days</option>
           <option value="30" selected>Last 30 days</option>
           <option value="60">Last 60 days</option>
@@ -1382,6 +1388,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
     <!-- ── INTERACTION HISTORY ───────────────────────────── -->
     <div id="cc-pane-history" style="display:none">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem">
+        <button class="ar-stbtn" id="cc-qf-today" onclick="ccHistQuickFilter('today')">Today</button>
+        <button class="ar-stbtn" id="cc-qf-week"  onclick="ccHistQuickFilter('week')">This Week</button>
+        <button class="ar-stbtn" id="cc-qf-month" onclick="ccHistQuickFilter('month')">This Month</button>
+      </div>
       <div style="background:var(--surf);border:1px solid var(--brd);border-radius:8px;padding:.85rem 1rem;margin-bottom:.85rem">
         <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.65rem">Filters</div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
@@ -1669,6 +1680,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div>
 </div>
+
+<!-- Invoice Interactions Modal -->
+<div id="ar-inv-modal" class="modal-overlay hidden" onclick="if(event.target===this)arCloseInvModal()">
+  <div class="modal" style="max-width:680px;width:100%">
+    <div class="modal-hdr">
+      <span class="modal-title" id="ar-inv-modal-title">Interactions</span>
+      <button class="modal-close" onclick="arCloseInvModal()">&#215;</button>
+    </div>
+    <div class="modal-body" style="padding:1rem 1.1rem;max-height:72vh;overflow-y:auto" id="ar-inv-modal-body">
+      <div style="color:var(--txt3);font-size:12px">Loading…</div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════════════════
    CONFIG
@@ -3493,6 +3518,7 @@ let _cmData = []; // raw rows from ar_customer_master
 let _tagMaster = {}; // { tag_name: { color } }
 let _tagMasterList = []; // sorted array of tag names
 let _arInvTags = {}; // { 'invoice_number||entity': [tag_name,...] }
+let _arInvDisputeMap = {}; // { invoice_id: { dispute_type, status } }
 let _arSortCol  = null;
 let _arSortDir  = 0;  // 0=default, 1=asc, 2=desc
 let _arSubTab   = 'invoices'; // legacy — use _arActivePanes instead
@@ -3562,12 +3588,12 @@ let _arActivePanes = new Set(['invoices']);
 function toggleARSubTab(tab) {
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily') loadARSnapshots();
+  if (tab === 'daily') { _loadARDisputeMap(); loadARSnapshots(); }
 }
 function showARSubTab(tab) { // legacy compat
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily') loadARSnapshots();
+  if (tab === 'daily') { _loadARDisputeMap(); loadARSnapshots(); }
 }
 function _applyARSubTabs() {
   for (const id of ['invoices','aging','daily','summary']) {
@@ -4099,7 +4125,21 @@ async function loadAR() {
     _arAllRows = await r.json();
     status.textContent = '';
     renderAR();
+    // Fetch disputes in background and re-render
+    _loadARDisputeMap().then(() => renderARInvoiceList(_arLastRows));
   } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#a32d2d'; }
+}
+
+async function _loadARDisputeMap() {
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/invoice_disputes?status=eq.open&select=invoice_id,dispute_type,status`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) return;
+    _arInvDisputeMap = {};
+    (await r.json()).forEach(d => { _arInvDisputeMap[d.invoice_id] = d; });
+  } catch(e) { console.warn('_loadARDisputeMap:', e); }
 }
 
 function arOverdueDays(dueDateStr) {
@@ -4118,7 +4158,7 @@ function arAgeBucket(dueDateStr) {
 }
 
 // Capsule rows use data-bu / data-collector attributes; delegated listeners.
-const _arBuRowIds        = ['ar-bu-row','ar-aging-bu-row','ar-daily-bu-row'];
+const _arBuRowIds        = ['ar-bu-row','ar-aging-bu-row'];
 const _arCollectorRowIds = ['ar-collector-row'];
 
 function initARCapsuleListeners() {
@@ -4198,7 +4238,6 @@ function renderAR() {
   });
   _arBuCapsuleHTML('ar-bu-row',       allBus);
   _arBuCapsuleHTML('ar-aging-bu-row', allBus);
-  _arBuCapsuleHTML('ar-daily-bu-row', allBus);
 
   // Collectors only see their own data — no need for a collector filter capsule
   const collectorWrap = document.getElementById('ar-collector-filter-wrap');
@@ -4390,6 +4429,17 @@ function renderARAgingTable(rows) {
 }
 
 let _arSnapLoaded = false;
+let _arSnapTab = 'bu'; // 'bu' | 'collector' | 'dispute'
+let _arSnapRows = []; // cached snapshot rows
+
+function arSnapSetTab(tab) {
+  _arSnapTab = tab;
+  ['bu','collector','dispute'].forEach(t => {
+    const btn = document.getElementById(`ar-snap-tab-${t}`);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  if (_arSnapRows.length) renderARSnapshots(_arSnapRows);
+}
 
 async function loadARSnapshots() {
   const wrap   = document.getElementById('ar-daily-wrap');
@@ -4399,7 +4449,8 @@ async function loadARSnapshots() {
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading snapshots…</div>';
   if (status) status.textContent = '';
   try {
-    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const daysAgo = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const since = daysAgo > '2026-08-01' ? daysAgo : '2026-08-01'; // only show from Aug 1, 2026
     const snapRows = [], PAGE = 1000;
     let snapOff = 0;
     while (true) {
@@ -4414,10 +4465,10 @@ async function loadARSnapshots() {
       if (page.length < PAGE) break;
       snapOff += PAGE;
     }
-    const rows = snapRows;
     _arSnapLoaded = true;
-    if (status) status.textContent = rows.length ? `${rows.length} rows` : '';
-    renderARSnapshots(rows);
+    _arSnapRows = snapRows;
+    if (status) status.textContent = snapRows.length ? `${snapRows.length} rows` : '';
+    renderARSnapshots(snapRows);
   } catch(e) {
     wrap.innerHTML = `<div style="padding:2rem;color:#b91c1c;font-size:12px">Error loading snapshots: ${e.message}</div>`;
   }
@@ -4427,65 +4478,82 @@ function renderARSnapshots(rows) {
   const wrap = document.getElementById('ar-daily-wrap');
   if (!wrap) return;
   if (!rows.length) {
-    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No snapshots found for this period.</div>';
+    wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No snapshots found for this period. Snapshots are recorded from 1 Aug 2026 onwards.</div>';
     return;
   }
 
-  // Apply exclusions and BU filter from main AR state
+  // Apply exclusions
   const filtered = rows.filter(r => {
     const cn = (r.customer_name || '').toLowerCase();
-    if (_arExcluded.some(ex => cn.includes(ex.toLowerCase()))) return false;
-    if (_arBuSelected.size > 0 && !_arBuSelected.has(arGetBu(r.customer_name) || 'Uncategorised')) return false;
-    return true;
+    return !_arExcluded.some(ex => cn.includes(ex.toLowerCase()));
   });
 
-  // Group by snapshot_date → BU → totals
-  const dateMap = {}; // date → { buName → { total, overdue } }
-  for (const r of filtered) {
-    const date = (r.snapshot_date || '').slice(0, 10);
-    const bu   = arGetBu(r.customer_name) || 'Uncategorised';
-    const bal  = arInr(r);
-    const isOvd = arOverdueDays(r.due_date) > 0;
-    if (!dateMap[date]) dateMap[date] = {};
-    if (!dateMap[date][bu]) dateMap[date][bu] = { total: 0, overdue: 0 };
-    dateMap[date][bu].total  += bal;
-    if (isOvd) dateMap[date][bu].overdue += bal;
-  }
-
-  const dates  = Object.keys(dateMap).sort().reverse();
-  const allBus = [...new Set(filtered.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort((a,b) => {
-    if (a === 'Uncategorised') return 1; if (b === 'Uncategorised') return -1; return a.localeCompare(b);
-  });
-
-  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '<span style="color:#e2e8f0">—</span>';
   const thS = `padding:.45rem .75rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;text-align:right;white-space:nowrap`;
   const tdS = `padding:.42rem .75rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9`;
 
-  const buCols  = allBus.map(b => `<th style="${thS}">${escHtml(b)}</th>`).join('');
-  const rowsHtml = dates.map(date => {
-    const d       = dateMap[date];
-    const dayTotal = allBus.reduce((s, b) => s + (d[b]?.total || 0), 0);
-    const dayOvd   = allBus.reduce((s, b) => s + (d[b]?.overdue || 0), 0);
+  // Determine grouping key based on active tab
+  let getKey;
+  if (_arSnapTab === 'collector') {
+    getKey = r => arGetCollector(r.customer_name) || 'Unmapped';
+  } else if (_arSnapTab === 'dispute') {
+    getKey = r => _arInvDisputeMap[r.invoice_id] ? 'Disputed' : 'Non-Disputed';
+  } else {
+    getKey = r => arGetBu(r.customer_name) || 'Uncategorised';
+  }
+
+  // Group by snapshot_date → key → totals
+  const dateMap = {};
+  for (const r of filtered) {
+    const date = (r.snapshot_date || '').slice(0, 10);
+    const key  = getKey(r);
+    const bal  = arInr(r);
+    const isOvd = arOverdueDays(r.due_date) > 0;
+    if (!dateMap[date]) dateMap[date] = {};
+    if (!dateMap[date][key]) dateMap[date][key] = { total: 0, overdue: 0 };
+    dateMap[date][key].total  += bal;
+    if (isOvd) dateMap[date][key].overdue += bal;
+  }
+
+  const dates  = Object.keys(dateMap).sort().reverse();
+  let allKeys;
+  if (_arSnapTab === 'dispute') {
+    allKeys = ['Disputed', 'Non-Disputed'].filter(k => dates.some(d => dateMap[d][k]));
+  } else if (_arSnapTab === 'collector') {
+    allKeys = [...new Set(filtered.map(r => arGetCollector(r.customer_name) || 'Unmapped'))].sort((a,b) => {
+      if (a === 'Unmapped') return 1; if (b === 'Unmapped') return -1; return a.localeCompare(b);
+    });
+  } else {
+    allKeys = [...new Set(filtered.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort((a,b) => {
+      if (a === 'Uncategorised') return 1; if (b === 'Uncategorised') return -1; return a.localeCompare(b);
+    });
+  }
+
+  const keyCols   = allKeys.map(k => `<th style="${thS}">${escHtml(k)}</th>`).join('');
+  const rowsHtml  = dates.map(date => {
+    const d        = dateMap[date];
+    const dayTotal = allKeys.reduce((s, k) => s + (d[k]?.total || 0), 0);
+    const dayOvd   = allKeys.reduce((s, k) => s + (d[k]?.overdue || 0), 0);
     const ovdTag   = dayOvd > 0
       ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(dayOvd/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
-    const buCells  = allBus.map(bu => {
-      const v = d[bu]?.total   || 0;
-      const o = d[bu]?.overdue || 0;
+    const keyCells = allKeys.map(k => {
+      const v = d[k]?.total   || 0;
+      const o = d[k]?.overdue || 0;
       const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
       return `<td style="${tdS}">${v > 0 ? '₹'+(v/1e7).toFixed(2)+' Cr' : '<span style="color:#e2e8f0">—</span>'}${ovd}</td>`;
     }).join('');
     return `<tr>
       <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:600;color:#0f172a">${date}</td>
       <td style="${tdS};font-weight:700;color:var(--navy)">₹${(dayTotal/1e7).toFixed(2)} Cr${ovdTag}</td>
-      ${buCells}
+      ${keyCells}
     </tr>`;
   }).join('');
 
-  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${360+allBus.length*130}px">
+  const colHeader = _arSnapTab === 'collector' ? 'Collector' : _arSnapTab === 'dispute' ? 'Dispute' : 'BU';
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${360+allKeys.length*130}px">
     <thead><tr>
       <th style="${thS};text-align:left">Snapshot Date</th>
       <th style="${thS}">Total</th>
-      ${buCols}
+      ${keyCols}
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table></div>`;
@@ -4851,9 +4919,9 @@ function renderARInvoiceList(rows) {
 
   const trs = sorted.map(r => {
     const days = arOverdueDays(r.due_date);
-    const daysCell = days > 0 ? `<span style="color:var(--red);font-weight:600;font-variant-numeric:tabular-nums">${days}d overdue</span>`
-      : days === 0 ? `<span style="color:var(--amber);font-weight:600">Due today</span>`
-      : `<span style="color:var(--ink-soft)">In ${-days}d</span>`;
+    const daysCell = days > 0 ? `<span style="color:var(--red);font-weight:600;font-variant-numeric:tabular-nums">${days}d</span>`
+      : days === 0 ? `<span style="color:var(--amber);font-weight:600">0d</span>`
+      : `<span style="color:var(--ink-faint)">—</span>`;
     // status pill — rounded, semantic, sentence case
     const badge = r.status === 'overdue'
       ? `<span style="font-size:10px;background:var(--red-bg);color:var(--red);padding:.2rem .55rem;border-radius:20px;font-weight:600;white-space:nowrap">Overdue</span>`
@@ -4884,6 +4952,11 @@ function renderARInvoiceList(rows) {
       return `<span class="inv-tag-cap" style="background:${escHtml(bg)}20;color:${escHtml(bg)};border:1px solid ${escHtml(bg)}40" onclick="removeInvTag('${escHtml(r.invoice_number)}','${escHtml(r.entity)}','${escHtml(t)}')">${escHtml(t)} ×</span>`;
     }).join('');
     const addTagBtn = `<button class="inv-tag-add" onclick="openTagPicker(this,'${escHtml(r.invoice_number)}','${escHtml(r.entity)}')">+ Tag</button>`;
+    // Dispute cell
+    const dispInfo = r.invoice_id ? _arInvDisputeMap[r.invoice_id] : null;
+    const disputeCell = dispInfo
+      ? `<span style="font-size:10.5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;padding:.15rem .45rem;border-radius:4px;font-weight:600">${escHtml((dispInfo.dispute_type||'').replace(/_/g,' '))}</span>`
+      : `<span style="color:var(--ink-faint);font-size:11px">—</span>`;
     // severity class for left-edge accent
     let sevCls = 'sev-current';
     if (days > 90)      sevCls = 'sev-crit';
@@ -4891,11 +4964,15 @@ function renderARInvoiceList(rows) {
     else if (days > 30) sevCls = 'sev-med';
     else if (days > 0)  sevCls = 'sev-low';
     else if (days === 0) sevCls = 'sev-low';
+    const invNum = escHtml(r.invoice_number || '');
+    const invLinkWithPopup = r.invoice_id
+      ? `<span class="ar-inv-link" onclick="arShowInvInteractions(${JSON.stringify(r.invoice_id)},${JSON.stringify(r.invoice_number||'')})" title="View interactions">${r.invoice_url ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${invNum}</a>` : invNum}</span>`
+      : invLink;
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td style="white-space:nowrap">${buCell}</td>
       <td style="white-space:nowrap">${collectorCell}</td>
-      <td class="td-inv">${invLink}</td>
+      <td class="td-inv">${invLinkWithPopup}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
       <td class="td-days">${daysCell}</td>
@@ -4903,6 +4980,7 @@ function renderARInvoiceList(rows) {
       <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
       <td>${badge}</td>
+      <td style="white-space:nowrap">${disputeCell}</td>
       <td class="td-tags" style="min-width:120px"><div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center">${tagCapsules}${addTagBtn}</div></td>
     </tr>`;
   }).join('');
@@ -4920,6 +4998,7 @@ function renderARInvoiceList(rows) {
       ${th('Total (INR)','total','r')}
       ${th('Type','type')}
       ${th('Status','status')}
+      <th>Dispute</th>
       <th>Tags</th>
     </tr></thead>
     <tbody>${trs}</tbody>
@@ -6480,6 +6559,30 @@ function ccHistSelectCust(name) {
   document.getElementById('cc-hist-cust-dd').style.display = 'none';
 }
 
+function ccHistQuickFilter(preset) {
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const today = new Date();
+  const fromEl = document.getElementById('cc-hist-from');
+  const toEl   = document.getElementById('cc-hist-to');
+  if (!fromEl || !toEl) return;
+  const todayStr = fmt(today);
+  if (preset === 'today') {
+    fromEl.value = todayStr; toEl.value = todayStr;
+  } else if (preset === 'week') {
+    const mon = new Date(today); mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    fromEl.value = fmt(mon); toEl.value = todayStr;
+  } else if (preset === 'month') {
+    fromEl.value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-01`; toEl.value = todayStr;
+  }
+  // Highlight active quick filter
+  ['today','week','month'].forEach(p => {
+    const btn = document.getElementById(`cc-qf-${p}`);
+    if (btn) btn.classList.toggle('active', p === preset);
+  });
+  ccLoadHistory();
+}
+
 function ccClearHistFilters() {
   _ccHistCust = '';
   ['cc-hist-cust-input','cc-hist-kw'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -6675,8 +6778,8 @@ function ccRenderTLItem(i, invoiceIds, contactMap, collectorMap) {
     ? `<div style="margin-top:.5rem"><span style="display:inline-flex;align-items:center;gap:.3rem;font-size:11.5px;font-weight:600;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;padding:.2rem .6rem;border-radius:20px">📅 Follow-up: ${i.follow_up_date}</span></div>`
     : '';
 
-  return `<div style="border:1px solid var(--brd);border-radius:8px;overflow:hidden;margin-bottom:.7rem">
-    <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;background:var(--surf2,#f8f9fb);border-bottom:1px solid var(--brd)">
+  return `<div style="border:1px solid var(--brd);border-radius:8px;overflow:hidden;margin-bottom:.7rem;background:#fff">
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;background:#f0f4fa;border-bottom:1px solid var(--brd)">
       <div style="display:flex;align-items:center;gap:.45rem;flex:1;min-width:0">
         ${refBadge}
         <span style="font-size:11px;color:var(--txt3);font-family:var(--mono)">${dt}</span>
@@ -6714,6 +6817,53 @@ async function ccDeleteInteraction(id) {
     if (!r.ok) { alert('Delete failed. Please try again.'); return; }
     ccLoadHistory();
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+/* ─── INVOICE INTERACTIONS MODAL ────────────────────────────── */
+function arCloseInvModal() {
+  document.getElementById('ar-inv-modal').classList.add('hidden');
+}
+
+async function arShowInvInteractions(invoiceId, invoiceNumber) {
+  const modal = document.getElementById('ar-inv-modal');
+  const body  = document.getElementById('ar-inv-modal-body');
+  const title = document.getElementById('ar-inv-modal-title');
+  title.textContent = `Interactions — ${invoiceNumber || invoiceId}`;
+  body.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  modal.classList.remove('hidden');
+  try {
+    // Get interaction IDs linked to this invoice
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/interaction_invoices?invoice_id=eq.${encodeURIComponent(invoiceId)}&select=interaction_id`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const links = await r.json();
+    if (!links.length) {
+      body.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No interactions recorded for this invoice.</div>';
+      return;
+    }
+    const ids = links.map(l => l.interaction_id);
+    const ir = await fetch(
+      `${SUPABASE_URL}/rest/v1/interactions?id=in.(${ids.map(encodeURIComponent).join(',')})&order=created_at.desc`,
+      { headers: cmrrHdr() }
+    );
+    if (!ir.ok) throw new Error('HTTP ' + ir.status);
+    const interactions = await ir.json();
+    // Build collector name map
+    const collIds = [...new Set(interactions.map(i => i.collector_id).filter(Boolean))];
+    const collMap = {};
+    if (collIds.length) {
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`,
+        { headers: cmrrHdr() }
+      );
+      if (cr.ok) (await cr.json()).forEach(u => { collMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+    }
+    body.innerHTML = interactions.map(i => ccRenderTLItem(i, [invoiceId], {}, collMap)).join('');
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
 }
 
 /* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
