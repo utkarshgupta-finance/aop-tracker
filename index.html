@@ -624,6 +624,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="display:flex;gap:.35rem">
           <button class="ar-stbtn active" id="ar-snap-tab-bu"        onclick="arSnapSetTab('bu')">By BU</button>
           <button class="ar-stbtn"        id="ar-snap-tab-collector" onclick="arSnapSetTab('collector')">By Collector</button>
+          <button class="ar-stbtn"        id="ar-snap-tab-customer"  onclick="arSnapSetTab('customer')">By Customer</button>
           <button class="ar-stbtn"        id="ar-snap-tab-dispute"   onclick="arSnapSetTab('dispute')">By Dispute</button>
         </div>
         <select class="nret-sel" id="ar-snap-days" onchange="loadARSnapshots()" style="font-size:12px;margin-left:.5rem">
@@ -4465,7 +4466,7 @@ let _arSnapRows = []; // cached snapshot rows
 
 function arSnapSetTab(tab) {
   _arSnapTab = tab;
-  ['bu','collector','dispute'].forEach(t => {
+  ['bu','collector','customer','dispute'].forEach(t => {
     const btn = document.getElementById(`ar-snap-tab-${t}`);
     if (btn) btn.classList.toggle('active', t === tab);
   });
@@ -4486,6 +4487,8 @@ async function arTakeSnapshot() {
       `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?snapshot_date=eq.${today}`,
       { method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' } }
     );
+    // Ensure dispute map is loaded so we can stamp dispute_type on each row
+    await _loadARDisputeMap();
     // Insert in batches of 200
     const BATCH = 200;
     let inserted = 0;
@@ -4506,6 +4509,7 @@ async function arTakeSnapshot() {
         exchange_rate:  r.exchange_rate  ?? null,
         total_inr:      r.total_inr      ?? null,
         balance_inr:    r.balance_inr    ?? null,
+        dispute_type:   (r.invoice_id && _arInvDisputeMap[r.invoice_id]?.dispute_type) || null,
       }));
       const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_snapshots`, {
         method: 'POST',
@@ -4581,8 +4585,14 @@ function renderARSnapshots(rows) {
   let getKey;
   if (_arSnapTab === 'collector') {
     getKey = r => arGetCollector(r.customer_name) || 'Unmapped';
+  } else if (_arSnapTab === 'customer') {
+    getKey = r => r.customer_name || 'Unknown';
   } else if (_arSnapTab === 'dispute') {
-    getKey = r => _arInvDisputeMap[r.invoice_id] ? 'Disputed' : 'Non-Disputed';
+    // Use stored dispute_type from snapshot; fall back to live map for today's data
+    getKey = r => {
+      const dt = r.dispute_type || (_arInvDisputeMap[r.invoice_id]?.dispute_type);
+      return dt ? dt.replace(/_/g, ' ') : 'No Dispute';
+    };
   } else {
     getKey = r => arGetBu(r.customer_name) || 'Uncategorised';
   }
@@ -4603,11 +4613,19 @@ function renderARSnapshots(rows) {
   const dates  = Object.keys(dateMap).sort().reverse();
   let allKeys;
   if (_arSnapTab === 'dispute') {
-    allKeys = ['Disputed', 'Non-Disputed'].filter(k => dates.some(d => dateMap[d][k]));
+    // Show specific dispute types; put "No Dispute" last
+    allKeys = [...new Set(filtered.map(getKey))].sort((a,b) => {
+      if (a === 'No Dispute') return 1; if (b === 'No Dispute') return -1; return a.localeCompare(b);
+    });
   } else if (_arSnapTab === 'collector') {
     allKeys = [...new Set(filtered.map(r => arGetCollector(r.customer_name) || 'Unmapped'))].sort((a,b) => {
       if (a === 'Unmapped') return 1; if (b === 'Unmapped') return -1; return a.localeCompare(b);
     });
+  } else if (_arSnapTab === 'customer') {
+    // Sort by latest snapshot total descending (highest AR first)
+    const custTotals = {};
+    filtered.forEach(r => { custTotals[r.customer_name] = (custTotals[r.customer_name] || 0) + arInr(r); });
+    allKeys = [...new Set(filtered.map(r => r.customer_name || 'Unknown'))].sort((a,b) => (custTotals[b]||0) - (custTotals[a]||0));
   } else {
     allKeys = [...new Set(filtered.map(r => arGetBu(r.customer_name) || 'Uncategorised'))].sort((a,b) => {
       if (a === 'Uncategorised') return 1; if (b === 'Uncategorised') return -1; return a.localeCompare(b);
