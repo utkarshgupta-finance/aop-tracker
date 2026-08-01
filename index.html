@@ -50,7 +50,7 @@ header{display:none}
 .sidebar{width:210px;min-width:210px;background:var(--navy);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0;transition:width .2s ease,min-width .2s ease}
 .sidebar.collapsed{width:52px;min-width:52px;overflow-x:hidden}
 .sb-brand{padding:.9rem 1.1rem .75rem;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:.5rem;position:relative}
-.sb-brand-logo{flex-shrink:0;width:28px;height:28px;object-fit:contain}
+.sb-brand-logo{flex-shrink:0;width:120px;height:auto;object-fit:contain}
 .sb-brand-text{flex:1;min-width:0;transition:opacity .15s}
 .sidebar.collapsed .sb-brand-text{opacity:0;pointer-events:none;width:0;overflow:hidden}
 .sidebar.collapsed .sb-brand-logo{display:none}
@@ -356,7 +356,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .st-stbtn:hover:not(.active){color:var(--txt)}
 .st-pane{}
 /* ── AR invoice view toggle ───────────────────────────────────── */
-.ar-view-tog{display:flex;gap:.35rem;margin-bottom:.85rem}
+.ar-view-tog{display:flex;gap:.35rem;justify-content:flex-end;margin-bottom:.5rem}
 .ar-vtbtn{padding:.26rem .7rem;font-size:11.5px;font-family:var(--sans);border:1px solid var(--brd2);border-radius:4px;cursor:pointer;background:#fff;color:var(--txt2);transition:background .12s,color .12s}
 .ar-vtbtn.active{background:var(--navy2);color:#fff;border-color:var(--navy2)}
 /* ── AR customer view ─────────────────────────────────────────── */
@@ -590,12 +590,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <!-- BU + Collector capsule filters — same row -->
     <div style="display:flex;align-items:flex-start;gap:1.25rem;flex-wrap:wrap;margin-bottom:.85rem">
-      <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px;flex-wrap:wrap">
-        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:22px">BU</span>
+      <div style="display:flex;align-items:flex-start;gap:.5rem;flex:1;min-width:160px">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:22px;padding-top:6px">BU</span>
         <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
       </div>
-      <div id="ar-collector-filter-wrap" style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px;flex-wrap:wrap">
-        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px">Collector</span>
+      <div id="ar-collector-filter-wrap" style="display:flex;align-items:flex-start;gap:.5rem;flex:1;min-width:160px">
+        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;min-width:52px;padding-top:6px">Collector</span>
         <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-height:28px"></div>
       </div>
     </div>
@@ -3132,10 +3132,10 @@ async function toggleDisputeTimeline(id, invoiceId) {
   const tlCollectorIds = [...new Set(interactions.map(i => i.collector_id).filter(Boolean))];
   if (tlCollectorIds.length) {
     const cr = await fetch(
-      `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${tlCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
+      `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${tlCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name`,
       { headers: cmrrHdr() }
     );
-    if (cr.ok) (await cr.json()).forEach(u => { collectorMap[u.user_id] = u.display_name || u.user_id; });
+    if (cr.ok) (await cr.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.user_id; });
   }
 
   const EVENT_COLORS = { opened:'#166534', closed:'#991b1b', reopened:'#7c3aed' };
@@ -5637,12 +5637,12 @@ async function ccLoadDaySummary() {
     let collNameMap = {};
     if (collectorIds.length) {
       const ur = await fetch(
-        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collectorIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name`,
         { headers: cmrrHdr() }
       );
       if (ur.ok) {
         const urows = await ur.json();
-        urows.forEach(u => { collNameMap[u.user_id] = u.display_name || u.collector_name || u.user_id; });
+        urows.forEach(u => { collNameMap[u.user_id] = u.collector_name || u.user_id; });
       }
     }
     // Store name map for render
@@ -6534,10 +6534,10 @@ async function ccLoadHistory() {
     const ihCollectorIds = [...new Set(filtered.map(i => i.collector_id).filter(Boolean))];
     if (ihCollectorIds.length) {
       const cr2 = await fetch(
-        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${ihCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,display_name`,
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${ihCollectorIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name`,
         { headers: cmrrHdr() }
       );
-      if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.display_name || u.user_id; });
+      if (cr2.ok) (await cr2.json()).forEach(u => { collectorMap[u.user_id] = u.collector_name || u.user_id; });
     }
 
     const heading = custName
