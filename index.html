@@ -1524,6 +1524,34 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   </div>
 
   <!-- ── Rate Calculator Pane ── -->
+  <!-- ── Confirmed Dates (PTP) Pane ──────────────────────────── -->
+  <div id="confirmed-dates" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Confirmed Dates</span>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">Promise-to-Pay tracking by invoice</div>
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <input type="text" id="cd-search" class="cust-input" style="font-size:12px;width:200px" placeholder="Search invoice / customer…" oninput="cdFilterAndRender()">
+        <select id="cd-bu-filter" class="nret-sel" style="font-size:12px" onchange="cdFilterAndRender()">
+          <option value="">All BUs</option>
+        </select>
+        <select id="cd-status-filter" class="nret-sel" style="font-size:12px" onchange="cdFilterAndRender()">
+          <option value="">All statuses</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="today">Due today</option>
+          <option value="overdue">Overdue PTP</option>
+          <option value="kept">Kept</option>
+        </select>
+        <button onclick="loadConfirmedDates()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="cd-summary" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
+    <div id="cd-content">
+      <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>
+    </div>
+  </div>
+
   <div id="rate-calculator" class="pane">
     <iframe id="rc-iframe" style="width:100%;height:calc(100vh - 40px);border:none;display:block"></iframe>
   </div>
@@ -1734,6 +1762,8 @@ const ALL_TABS_CFG = [
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'contacts',            label: 'Contacts',            abbr: 'CT',  fn: 'showContactsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
+  { id: 'confirmed-dates',     label: 'Confirmed Dates',     abbr: 'CD',  fn: 'showConfirmedDatesTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     abbr: 'RC',  fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            abbr: 'ST',  fn: 'showSettingsTab(this)',
     roles: ['admin-edit'] },
@@ -4548,7 +4578,6 @@ function renderARSnapshots(rows) {
     </tr>`;
   }).join('');
 
-  const colHeader = _arSnapTab === 'collector' ? 'Collector' : _arSnapTab === 'dispute' ? 'Dispute' : 'BU';
   wrap.innerHTML = `<div style="overflow-x:auto"><table class="ar-tbl" style="min-width:${360+allKeys.length*130}px">
     <thead><tr>
       <th style="${thS};text-align:left">Snapshot Date</th>
@@ -6864,6 +6893,266 @@ async function arShowInvInteractions(invoiceId, invoiceNumber) {
   } catch(e) {
     body.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
   }
+}
+
+/* ─── CONFIRMED DATES (PTP) TAB ─────────────────────────────── */
+let _cdInited = false;
+let _cdAllData = []; // array of { invoiceId, invoiceNumber, customerName, bu, collector, ptpHistory: [{date, amount, loggedAt, collectorName, interactionId}] }
+
+function showConfirmedDatesTab(btn) {
+  showTab('confirmed-dates', btn);
+  if (!_cdInited) {
+    _cdInited = true;
+    loadArCustMaster();
+    loadConfirmedDates();
+  } else {
+    loadConfirmedDates();
+  }
+}
+
+async function loadConfirmedDates() {
+  const content = document.getElementById('cd-content');
+  if (!content) return;
+  content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading PTP interactions…</div>';
+  try {
+    // Fetch all interactions with a promised_date, newest first
+    const PAGE = 1000;
+    let off = 0, allInteractions = [];
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/interactions?promised_date=not.is.null&order=created_at.asc&limit=${PAGE}&offset=${off}&select=id,collector_id,customer_name,promised_date,promised_amount,created_at`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const page = await r.json();
+      allInteractions.push(...page);
+      if (page.length < PAGE) break;
+      off += PAGE;
+    }
+    if (!allInteractions.length) {
+      content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No promise-to-pay dates have been logged yet.</div>';
+      return;
+    }
+
+    // Fetch linked invoice IDs for all interactions
+    const iids = allInteractions.map(i => i.id);
+    const invLinks = [];
+    for (let start = 0; start < iids.length; start += 100) {
+      const chunk = iids.slice(start, start + 100);
+      const lr = await fetch(
+        `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
+        { headers: cmrrHdr() }
+      );
+      if (lr.ok) invLinks.push(...(await lr.json()));
+    }
+    const invLinkMap = {}; // interaction_id → [invoice_id]
+    invLinks.forEach(l => {
+      if (!invLinkMap[l.interaction_id]) invLinkMap[l.interaction_id] = [];
+      invLinkMap[l.interaction_id].push(l.invoice_id);
+    });
+
+    // Fetch invoice numbers for linked invoice IDs
+    const allInvIds = [...new Set(invLinks.map(l => l.invoice_id))];
+    const invoiceInfoMap = {}; // invoice_id → { invoice_number, customer_name }
+    for (let start = 0; start < allInvIds.length; start += 100) {
+      const chunk = allInvIds.slice(start, start + 100);
+      const ivr = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number,customer_name`,
+        { headers: cmrrHdr() }
+      );
+      if (ivr.ok) (await ivr.json()).forEach(inv => { invoiceInfoMap[inv.invoice_id] = inv; });
+    }
+
+    // Fetch collector display names
+    const collIds = [...new Set(allInteractions.map(i => i.collector_id).filter(Boolean))];
+    const collMap = {};
+    if (collIds.length) {
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`,
+        { headers: cmrrHdr() }
+      );
+      if (cr.ok) (await cr.json()).forEach(u => { collMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+    }
+
+    // Build per-invoice PTP history
+    const invoicePtpMap = {}; // invoice_id → { invoiceId, invoiceNumber, customerName, bu, collector, ptpHistory[] }
+    for (const interaction of allInteractions) {
+      const invoiceIds = invLinkMap[interaction.id] || [];
+      const collName = collMap[interaction.collector_id] || '';
+      for (const invId of invoiceIds) {
+        if (!invoicePtpMap[invId]) {
+          const invInfo = invoiceInfoMap[invId] || {};
+          const custName = invInfo.customer_name || interaction.customer_name || '';
+          invoicePtpMap[invId] = {
+            invoiceId: invId,
+            invoiceNumber: invInfo.invoice_number || invId,
+            customerName: custName,
+            bu: arGetBu(custName) || '',
+            collector: arGetCollector(custName) || collName,
+            ptpHistory: []
+          };
+        }
+        invoicePtpMap[invId].ptpHistory.push({
+          date: interaction.promised_date,
+          amount: interaction.promised_amount,
+          loggedAt: interaction.created_at,
+          collectorName: collName,
+          interactionId: interaction.id
+        });
+      }
+      // Also handle interactions without linked invoices (customer-level PTP)
+      if (!invoiceIds.length) {
+        const custName = interaction.customer_name || '';
+        const synKey = `__noinv__${interaction.id}`;
+        invoicePtpMap[synKey] = {
+          invoiceId: null,
+          invoiceNumber: null,
+          customerName: custName,
+          bu: arGetBu(custName) || '',
+          collector: arGetCollector(custName) || collName,
+          ptpHistory: [{
+            date: interaction.promised_date,
+            amount: interaction.promised_amount,
+            loggedAt: interaction.created_at,
+            collectorName: collName,
+            interactionId: interaction.id
+          }]
+        };
+      }
+    }
+
+    _cdAllData = Object.values(invoicePtpMap).filter(d => d.ptpHistory.length > 0);
+    // Sort: most recent PTP date first
+    _cdAllData.sort((a, b) => {
+      const aLast = a.ptpHistory[a.ptpHistory.length - 1]?.date || '';
+      const bLast = b.ptpHistory[b.ptpHistory.length - 1]?.date || '';
+      return aLast.localeCompare(bLast);
+    });
+
+    // Populate BU filter
+    const buSel = document.getElementById('cd-bu-filter');
+    if (buSel && buSel.options.length <= 1) {
+      const allBus = [...new Set(_cdAllData.map(d => d.bu).filter(Boolean))].sort();
+      allBus.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; buSel.appendChild(o); });
+    }
+
+    cdFilterAndRender();
+  } catch(e) {
+    const content = document.getElementById('cd-content');
+    if (content) content.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function cdFilterAndRender() {
+  const content = document.getElementById('cd-content');
+  if (!content || !_cdAllData.length) return;
+  const sq    = (document.getElementById('cd-search')?.value || '').toLowerCase().trim();
+  const buF   = document.getElementById('cd-bu-filter')?.value || '';
+  const statF = document.getElementById('cd-status-filter')?.value || '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().slice(0,10);
+
+  const filtered = _cdAllData.filter(d => {
+    if (buF && d.bu !== buF) return false;
+    const lastPtp = d.ptpHistory[d.ptpHistory.length - 1]?.date || '';
+    if (statF) {
+      const inv = _arAllRows.find(r => r.invoice_id === d.invoiceId);
+      const isPaid = inv && (inv.balance === 0 || inv.status === 'paid');
+      if (statF === 'kept' && !isPaid) return false;
+      if (statF !== 'kept') {
+        if (isPaid) return false;
+        if (statF === 'upcoming' && lastPtp <= todayStr) return false;
+        if (statF === 'today'    && lastPtp !== todayStr) return false;
+        if (statF === 'overdue'  && lastPtp >= todayStr) return false;
+      }
+    }
+    if (sq) {
+      const hay = [d.invoiceNumber||'', d.customerName||'', d.bu||'', d.collector||''].join(' ').toLowerCase();
+      if (!hay.includes(sq)) return false;
+    }
+    return true;
+  });
+
+  // Summary strip
+  const summary = document.getElementById('cd-summary');
+  if (summary) {
+    const totalCount = filtered.length;
+    const overdueCount  = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; const inv = _arAllRows.find(r=>r.id===d.invoiceId); return lp < todayStr && !(inv && inv.balance===0); }).length;
+    const todayCount    = filtered.filter(d => d.ptpHistory[d.ptpHistory.length-1]?.date === todayStr).length;
+    const upcomingCount = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp > todayStr; }).length;
+    const movedCount    = filtered.filter(d => d.ptpHistory.length > 1).length;
+    summary.innerHTML = [
+      { label: 'Total', val: totalCount, color: 'var(--navy)' },
+      { label: 'Overdue PTP', val: overdueCount, color: 'var(--red)' },
+      { label: 'Due Today', val: todayCount, color: 'var(--amber)' },
+      { label: 'Upcoming', val: upcomingCount, color: '#16a34a' },
+      { label: 'Date Moved', val: movedCount, color: '#6366f1' },
+    ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
+      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
+      <span style="font-size:22px;font-weight:700;color:${s.color};line-height:1">${s.val}</span>
+    </div>`).join('');
+  }
+
+  if (!filtered.length) {
+    content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No results match the current filters.</div>';
+    return;
+  }
+
+  content.innerHTML = filtered.map(d => cdRenderInvoiceCard(d, todayStr)).join('');
+}
+
+function cdRenderInvoiceCard(d, todayStr) {
+  const lastPtp = d.ptpHistory[d.ptpHistory.length - 1];
+  const currentDate = lastPtp?.date || '';
+  const inv = _arAllRows.find(r => r.invoice_id === d.invoiceId);
+  const isPaid = inv && (inv.balance === 0 || inv.status === 'paid');
+  let statusLabel = '', statusColor = '', statusBg = '';
+  if (isPaid) { statusLabel = 'Kept'; statusColor = '#166534'; statusBg = '#dcfce7'; }
+  else if (currentDate < todayStr) { statusLabel = 'Overdue PTP'; statusColor = 'var(--red)'; statusBg = 'var(--red-bg)'; }
+  else if (currentDate === todayStr) { statusLabel = 'Due Today'; statusColor = '#b45309'; statusBg = '#fef3c7'; }
+  else { statusLabel = 'Upcoming'; statusColor = '#16a34a'; statusBg = '#f0fdf4'; }
+
+  const buChip = d.bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(d.bu)}</span>` : '';
+  const collChip = d.collector ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.1rem .4rem;border-radius:4px">${escHtml(d.collector)}</span>` : '';
+  const invBal = inv ? `<span style="font-size:11px;color:var(--txt3);font-family:var(--mono)">₹${f(arInr(inv))}</span>` : '';
+
+  // PTP history timeline
+  const histHtml = d.ptpHistory.map((entry, idx) => {
+    const isLast = idx === d.ptpHistory.length - 1;
+    const logDt = new Date(entry.loggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const ptpDays = Math.floor((new Date(entry.date) - new Date(todayStr)) / 86400000);
+    const ptpRelative = ptpDays === 0 ? 'today' : ptpDays > 0 ? `in ${ptpDays}d` : `${-ptpDays}d ago`;
+    return `<div style="display:flex;align-items:flex-start;gap:.6rem;padding:.4rem 0;${idx > 0 ? 'border-top:1px dashed var(--brd)' : ''}">
+      <div style="flex-shrink:0;margin-top:.2rem">
+        <div style="width:8px;height:8px;border-radius:50%;background:${isLast ? '#2563eb' : '#cbd5e1'};border:1.5px solid ${isLast ? '#1d4ed8' : '#94a3b8'}"></div>
+        ${idx < d.ptpHistory.length - 1 ? `<div style="width:1px;height:calc(100% + .4rem);background:#e2e8f0;margin:2px auto 0"></div>` : ''}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:${isLast?'700':'500'};color:${isLast?'var(--ink)':'var(--txt2)'};font-variant-numeric:tabular-nums">${entry.date}</span>
+          <span style="font-size:11px;color:var(--txt3)">${ptpRelative}</span>
+          ${entry.amount ? `<span style="font-size:11px;color:#16a34a;font-weight:600;font-family:var(--mono)">₹${f(entry.amount)}</span>` : ''}
+          ${isLast ? `<span style="font-size:10px;padding:.1rem .4rem;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:600">${statusLabel}</span>` : '<span style="font-size:10px;color:var(--ink-faint)">← moved</span>'}
+        </div>
+        <div style="font-size:11px;color:var(--txt3);margin-top:.1rem">
+          Logged ${logDt}${entry.collectorName ? ` · ${escHtml(entry.collectorName)}` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const moved = d.ptpHistory.length > 1 ? `<span style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:.1rem .45rem;border-radius:20px;font-weight:600">Moved ${d.ptpHistory.length - 1}×</span>` : '';
+
+  return `<div style="border:1px solid var(--brd);border-radius:8px;overflow:hidden;margin-bottom:.65rem;background:#fff">
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .85rem;background:#f0f4fa;border-bottom:1px solid var(--brd);flex-wrap:wrap">
+      <span style="font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--ink)">${escHtml(d.invoiceNumber || '—')}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--ink);flex:1">${escHtml(d.customerName)}</span>
+      ${buChip}${collChip}${invBal}${moved}
+    </div>
+    <div style="padding:.55rem .85rem">
+      ${histHtml}
+    </div>
+  </div>`;
 }
 
 /* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
