@@ -3605,7 +3605,7 @@ function showTab(id, btn) {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); loadAgingBrackets(); }
   loadArCustMaster();
 }
 
@@ -4204,11 +4204,27 @@ function arOverdueDays(dueDateStr) {
 
 function arAgeBucket(dueDateStr) {
   const d = arOverdueDays(dueDateStr);
+  if (_agingBrackets.length) return agingBucketForDays(d);
   if (d <= 0)  return 'current';
   if (d <= 30) return '1_30';
   if (d <= 60) return '31_60';
   if (d <= 90) return '61_90';
   return '90plus';
+}
+
+const _AR_AGING_PALETTE = ['#1E6E45','#d97706','#ea580c','#B3261E','#7f1d1d','#4a0000','#6b21a8','#0369a1'];
+
+function arGetActiveBuckets() {
+  if (_agingBrackets.length) {
+    return _agingBrackets.map((b, i) => ({
+      key:      b.label,
+      label:    b.label,
+      color:    _AR_AGING_PALETTE[i] || _AR_AGING_PALETTE[_AR_AGING_PALETTE.length - 1],
+      min_days: b.min_days,
+      max_days: b.max_days,
+    }));
+  }
+  return AR_BUCKETS;
 }
 
 // Capsule rows use data-bu / data-collector attributes; delegated listeners.
@@ -4439,34 +4455,33 @@ function renderARAgingBar(rows) {
   const total = rows.reduce((s, r) => s + inr(r), 0);
   if (total === 0) { wrap.innerHTML = ''; return; }
   const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
-  const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, 0]));
+  const activeBuckets = arGetActiveBuckets();
+  const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, 0]));
   rows.forEach(r => { buckets[arAgeBucket(r.due_date)] += inr(r); });
-  const COLORS = { current:'#1E6E45', '1_30':'#d97706', '31_60':'#ea580c', '61_90':'var(--red)', '90plus':'#7f1d1d' };
-  const segs = AR_BUCKETS.map(b => {
+  const segs = activeBuckets.map(b => {
     const pct = total > 0 ? (buckets[b.key] / total * 100) : 0;
     if (pct < 0.5) return '';
-    const col = COLORS[b.key] || b.color;
-    return `<div class="ar-aging-seg" title="${b.label}: ${cr(buckets[b.key])} (${pct.toFixed(1)}%)" style="flex:${pct};background:${col}"></div>`;
+    return `<div class="ar-aging-seg" title="${b.label}: ${cr(buckets[b.key])} (${pct.toFixed(1)}%)" style="flex:${pct};background:${b.color}"></div>`;
   }).join('');
-  const legend = AR_BUCKETS.map(b => {
+  const legend = activeBuckets.map(b => {
     const pct = total > 0 ? (buckets[b.key] / total * 100) : 0;
     if (pct < 0.1) return '';
-    const col = COLORS[b.key] || b.color;
-    return `<div class="ar-aging-leg-item"><div class="ar-aging-leg-dot" style="background:${col}"></div>${b.label.split('(')[0].trim()}: ${pct.toFixed(1)}%</div>`;
+    return `<div class="ar-aging-leg-item"><div class="ar-aging-leg-dot" style="background:${b.color}"></div>${b.label.split('(')[0].trim()}: ${pct.toFixed(1)}%</div>`;
   }).join('');
   wrap.innerHTML = `<div class="ar-aging-bar">${segs}</div><div class="ar-aging-legend">${legend}</div>`;
 }
 
 function renderARAgingTable(rows) {
   const inr = r => arInr(r);
-  const buckets = Object.fromEntries(AR_BUCKETS.map(b => [b.key, { count: 0, balance: 0 }]));
-  rows.forEach(r => { const bk = arAgeBucket(r.due_date); buckets[bk].count++; buckets[bk].balance += inr(r); });
+  const activeBuckets = arGetActiveBuckets();
+  const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, { count: 0, balance: 0 }]));
+  rows.forEach(r => { const bk = arAgeBucket(r.due_date); if (buckets[bk]) { buckets[bk].count++; buckets[bk].balance += inr(r); } });
   const total = rows.reduce((s, r) => s + inr(r), 0);
   const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
   let cumBal = 0;
-  const trs = AR_BUCKETS.map(b => {
-    const { count, balance } = buckets[b.key];
+  const trs = activeBuckets.map(b => {
+    const { count, balance } = buckets[b.key] || { count: 0, balance: 0 };
     cumBal += balance;
     const cumPct = total > 0 ? (cumBal / total * 100).toFixed(1) + '%' : '—';
     return `<tr>
@@ -4727,6 +4742,7 @@ function renderARDailyTable(rows) {
 
   // BU × Aging bucket matrix
   // Rows = BUs, Columns = aging buckets + total
+  const activeBuckets = arGetActiveBuckets();
   const buMap = {}; // bu → { bucketKey → balance, total, ovdTotal }
   for (const r of rows) {
     const bu  = arGetBu(r.customer_name) || 'Uncategorised';
@@ -4735,7 +4751,7 @@ function renderARDailyTable(rows) {
     if (!buMap[bu]) buMap[bu] = { total: 0, ovdTotal: 0 };
     buMap[bu][bk]    = (buMap[bu][bk] || 0) + bal;
     buMap[bu].total += bal;
-    if (bk !== 'current') buMap[bu].ovdTotal += bal;
+    if (arOverdueDays(r.due_date) > 0) buMap[bu].ovdTotal += bal;
   }
 
   const allBus  = Object.keys(buMap).sort((a, b) => {
@@ -4745,7 +4761,7 @@ function renderARDailyTable(rows) {
   });
   const grandTotal    = allBus.reduce((s, b) => s + buMap[b].total, 0);
   const grandByBucket = {};
-  AR_BUCKETS.forEach(bk => {
+  activeBuckets.forEach(bk => {
     grandByBucket[bk.key] = allBus.reduce((s, b) => s + (buMap[b][bk.key] || 0), 0);
   });
 
@@ -4754,10 +4770,10 @@ function renderARDailyTable(rows) {
   const thS = 'padding:.5rem .85rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap;text-align:right';
   const tdS = (extra='') => `padding:.45rem .85rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9;${extra}`;
 
-  const bucketCols = AR_BUCKETS.map(b => `<th style="${thS};color:${b.color}">${b.label}</th>`).join('');
+  const bucketCols = activeBuckets.map(b => `<th style="${thS};color:${b.color}">${b.label}</th>`).join('');
   const rows_html  = allBus.map(bu => {
     const d   = buMap[bu];
-    const cells = AR_BUCKETS.map(b => {
+    const cells = activeBuckets.map(b => {
       const v = d[b.key] || 0;
       return `<td style="${tdS()}color:${v>0?b.color:'inherit'}">${cr(v)}</td>`;
     }).join('');
@@ -4773,7 +4789,7 @@ function renderARDailyTable(rows) {
   }).join('');
 
   // Totals row
-  const totCells = AR_BUCKETS.map(b => {
+  const totCells = activeBuckets.map(b => {
     const v = grandByBucket[b.key] || 0;
     return `<td style="${tdS('font-weight:700;')}color:${v>0?b.color:'inherit'}">${cr(v)}</td>`;
   }).join('');
@@ -7333,7 +7349,11 @@ async function loadAgingBrackets() {
       `${SUPABASE_URL}/rest/v1/ar_aging_brackets?order=sort_order.asc,id.asc`,
       { headers: cmrrHdr() }
     );
-    if (r.ok) _agingBrackets = await r.json();
+    if (r.ok) {
+      _agingBrackets = await r.json();
+      // Re-render AR aging views if data is already loaded
+      if (_arAllRows.length) { renderARAgingBar(_arAllRows); renderARAgingTable(_arAllRows); }
+    }
   } catch(e) { console.warn('loadAgingBrackets:', e); }
 }
 
