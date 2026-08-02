@@ -7482,8 +7482,10 @@ function _tblSortRows(tbl, colIdx, asc, skipLastRow) {
     return (clean === '—' || clean === '') ? NaN : parseFloat(clean);
   };
   all.sort((a, b) => {
-    const av = a.querySelectorAll('td')[colIdx]?.textContent?.trim() ?? '';
-    const bv = b.querySelectorAll('td')[colIdx]?.textContent?.trim() ?? '';
+    const acell = a.querySelectorAll('td')[colIdx];
+    const bcell = b.querySelectorAll('td')[colIdx];
+    const av = acell?.dataset.sort ?? acell?.textContent?.trim() ?? '';
+    const bv = bcell?.dataset.sort ?? bcell?.textContent?.trim() ?? '';
     const an = toNum(av), bn = toNum(bv);
     if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
     return asc ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -7522,7 +7524,7 @@ function renderAdvancesEntry() {
       <td style="${tdS};text-align:left;white-space:nowrap">${buCell}</td>
       <td style="${tdS};text-align:left;white-space:nowrap">${clCell}</td>
       <td style="${tdS};text-align:left;color:var(--ink-soft)">${escHtml(r.payment_number || '—')}</td>
-      <td style="${tdS};text-align:left;color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmtD(r.payment_date)}</td>
+      <td data-sort="${r.payment_date || ''}" style="${tdS};text-align:left;color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmtD(r.payment_date)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.amount_inr || 0)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:600;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(r.unused_amount_inr || 0)}</td>
       <td style="${tdS};text-align:left;color:var(--ink-faint);font-size:11px">${escHtml(r.currency_code || 'INR')}${r.currency_code && r.currency_code !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''}</td>
