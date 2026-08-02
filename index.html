@@ -655,6 +655,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button class="ar-stbtn"        id="adv-view-customer" onclick="advSetView('customer')">By Customer</button>
         </div>
         <input type="text" id="adv-search" class="cust-input" placeholder="Search customers…" oninput="renderAdvances()" style="font-size:12px;min-width:180px;max-width:260px">
+        <label style="font-size:12px;display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;color:var(--txt3)">
+          <input type="checkbox" id="adv-show-excl" onchange="renderAdvances()"> Include excluded
+        </label>
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
           <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
           <div id="adv-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
@@ -7382,6 +7385,7 @@ let _advRows  = [];
 let _advView  = 'entry';
 let _advLoaded = false;
 let _advBalances = {}; // contact_name → outstanding_receivable_amount_bcy
+let _advNativeBal = {}; // contact_name → { amount, currency_code }
 
 async function loadAdvances() {
   if (_advLoaded) return;
@@ -7390,14 +7394,20 @@ async function loadAdvances() {
   try {
     const [advR, balR] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/customer_advances?order=payment_date.desc&select=*`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,outstanding_receivable_amount,currency_code`, { headers: cmrrHdr() }),
     ]);
     if (!advR.ok) throw new Error('HTTP ' + advR.status);
     _advRows = await advR.json();
     if (balR.ok) {
       const bals = await balR.json();
       _advBalances = {};
-      for (const b of bals) _advBalances[b.contact_name] = b.outstanding_receivable_amount_bcy;
+      _advNativeBal = {};
+      for (const b of bals) {
+        _advBalances[b.contact_name] = b.outstanding_receivable_amount_bcy;
+        if (b.currency_code && b.currency_code !== 'INR') {
+          _advNativeBal[b.contact_name] = { amount: b.outstanding_receivable_amount, currency_code: b.currency_code };
+        }
+      }
     }
     _advLoaded = true;
     _advUpdateSyncInfo();
@@ -7469,7 +7479,9 @@ function renderAdvancesEntry() {
   const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap';
   const tdS = 'padding:.45rem .85rem;font-size:12.5px;border-bottom:1px solid #f1f5f9';
   const sq = (document.getElementById('adv-search')?.value || '').toLowerCase();
+  const showExcl = document.getElementById('adv-show-excl')?.checked;
   let rows = [..._advRows].sort((a, b) => (b.unused_amount_inr || 0) - (a.unused_amount_inr || 0));
+  if (!showExcl) rows = rows.filter(r => !_arExcluded.includes(r.customer_name));
   if (sq) rows = rows.filter(r => (r.customer_name || '').toLowerCase().includes(sq) || (r.payment_number || '').toLowerCase().includes(sq));
   const total = rows.reduce((s, r) => s + (r.unused_amount_inr || 0), 0);
   const trs = rows.map((r, i) => {
@@ -7519,8 +7531,10 @@ function renderAdvancesCustomer() {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No open customer advances. Click "Sync Advances" to fetch from Zoho Books.</div>';
     return;
   }
-  const fmt = v => { const a = Math.abs(v); const s = a < 1 ? a.toFixed(2) : Math.round(a).toLocaleString('en-IN'); return (v < 0 ? '-₹' : '₹') + s; };
+  const fmt = v => { const a = Math.abs(v); const s = a.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return (v < 0 ? '-₹' : '₹') + s; };
+  const fmtFx = (v, ccy) => { const a = Math.abs(v); const s = a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return (v < 0 ? '-' : '') + ccy + ' ' + s; };
   const sq = (document.getElementById('adv-search')?.value || '').toLowerCase();
+  const showExcl = document.getElementById('adv-show-excl')?.checked;
   // Build AR open invoice count per customer
   const arInvCount = {};
   for (const r of (_arAllRows || [])) {
@@ -7537,6 +7551,7 @@ function renderAdvancesCustomer() {
     custMap[cn].unused_inr      += r.unused_amount_inr || 0;
   }
   let customers = Object.entries(custMap).sort((a, b) => b[1].unused_inr - a[1].unused_inr);
+  if (!showExcl) customers = customers.filter(([name]) => !_arExcluded.includes(name));
   if (sq) customers = customers.filter(([name]) => name.toLowerCase().includes(sq));
   const grandTotal = customers.reduce((s, [, d]) => s + d.unused_inr, 0);
   const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap';
@@ -7545,7 +7560,8 @@ function renderAdvancesCustomer() {
   const trs = customers.map(([name, d], i) => {
     const invCount = arInvCount[name] || 0;
     const zohoAR = _advBalances[name];
-    // Statement balance = Zoho outstanding AR minus this customer's own unused advances
+    const nativeBal = _advNativeBal[name]; // { amount, currency_code } if non-INR customer
+    // Statement balance = Zoho outstanding AR (BCY=INR) minus this customer's own unused advances
     const stmtBal = zohoAR !== undefined ? zohoAR - d.unused_inr : undefined;
     let lbCell;
     if (!hasBal) {
@@ -7553,9 +7569,13 @@ function renderAdvancesCustomer() {
     } else if (stmtBal === undefined) {
       lbCell = '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     } else {
-      lbCell = stmtBal >= 0
-        ? `<span style="color:#16a34a;font-weight:700">${fmt(stmtBal)} Dr</span>`
-        : `<span style="color:var(--red);font-weight:700">${fmt(Math.abs(stmtBal))} Cr</span>`;
+      const drCr = stmtBal >= 0 ? 'Dr' : 'Cr';
+      const color = stmtBal >= 0 ? '#16a34a' : 'var(--red)';
+      const inrLine = `<span style="color:${color};font-weight:700">${fmt(Math.abs(stmtBal))} ${drCr}</span>`;
+      const nativeLine = nativeBal
+        ? `<br><span style="color:var(--ink-faint);font-size:11px">${fmtFx(nativeBal.amount, nativeBal.currency_code)} outstanding</span>`
+        : '';
+      lbCell = inrLine + nativeLine;
     }
     const bu = arGetBu(name);
     const cl = arGetCollector(name);
@@ -7620,44 +7640,13 @@ function _advUpdateSyncInfo(msg, color) {
 async function syncAdvances() {
   const btn = document.getElementById('adv-sync-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  _advUpdateSyncInfo('Connecting to Zoho Books…');
+  _advUpdateSyncInfo('Contacting Zoho Books… (this may take ~30s)');
   try {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
-    if (!resp.ok && !resp.headers.get('content-type')?.includes('event-stream')) {
-      const j = await resp.json().catch(() => ({}));
-      throw new Error(j.error || 'HTTP ' + resp.status);
-    }
-    if (!resp.body) throw new Error('No response body');
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', result = null;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const parts = buf.split('\n\n'); buf = parts.pop() || '';
-      for (const block of parts) {
-        let evName = 'message', dataStr = '';
-        for (const line of block.split('\n')) {
-          const trimmed = line.replace(/\r$/, '');
-          if (trimmed.startsWith('event: ')) evName = trimmed.slice(7).trim();
-          else if (trimmed.startsWith('data: '))  dataStr = trimmed.slice(6).trim();
-        }
-        if (!dataStr) continue;
-        let ev;
-        try { ev = JSON.parse(dataStr); } catch(_jsonErr) { continue; }
-        if (evName === 'progress') {
-          if (ev.step === 'payments') _advUpdateSyncInfo(`Fetching payments… ${ev.count} found (page ${ev.page})`);
-          else if (ev.step === 'contacts') _advUpdateSyncInfo(`Fetching balances… ${ev.count} customers (page ${ev.page})`);
-          else if (ev.step === 'saving')   _advUpdateSyncInfo('Saving to database…');
-        } else if (evName === 'done') {
-          result = ev;
-        }
-      }
-    }
-    if (!result?.ok) throw new Error(result?.error || 'Sync failed');
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok || !result.ok) throw new Error(result.error || 'HTTP ' + resp.status);
     _advUpdateSyncInfo(`✓ Synced ${result.synced} advance${result.synced !== 1 ? 's' : ''}, ${result.contacts} customer balances`, '#16a34a');
-    _advLoaded = false; _advBalances = {};
+    _advLoaded = false; _advBalances = {}; _advNativeBal = {};
     await loadAdvances();
   } catch(e) {
     _advUpdateSyncInfo('Error: ' + e.message, 'var(--red)');
@@ -7670,26 +7659,8 @@ async function _syncAdvancesBackground() {
   try {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
     if (!resp.ok) return;
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', ok = false;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const parts = buf.split('\n\n'); buf = parts.pop();
-      for (const block of parts) {
-        let evName = 'message', dataStr = '';
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event: ')) evName = line.slice(7).trim();
-          if (line.startsWith('data: '))  dataStr = line.slice(6).trim();
-        }
-        if (evName === 'done' && dataStr) {
-          try { const ev = JSON.parse(dataStr); ok = ev.ok; } catch(_e) {}
-        }
-      }
-    }
-    if (ok) { _advLoaded = false; _advBalances = {}; if (_arActivePanes.has('advances')) loadAdvances(); }
+    const result = await resp.json().catch(() => ({}));
+    if (result.ok) { _advLoaded = false; _advBalances = {}; _advNativeBal = {}; if (_arActivePanes.has('advances')) loadAdvances(); }
   } catch(e) { console.warn('advances background sync:', e); }
 }
 
