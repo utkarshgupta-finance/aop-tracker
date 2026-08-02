@@ -7544,7 +7544,9 @@ function renderAdvancesCustomer() {
   const hasBal = Object.keys(_advBalances).length > 0;
   const trs = customers.map(([name, d], i) => {
     const invCount = arInvCount[name] || 0;
-    const stmtBal = _advBalances[name];
+    const zohoAR = _advBalances[name];
+    // Statement balance = Zoho outstanding AR minus this customer's own unused advances
+    const stmtBal = zohoAR !== undefined ? zohoAR - d.unused_inr : undefined;
     let lbCell;
     if (!hasBal) {
       lbCell = '<span style="color:var(--ink-faint);font-size:11px">Sync to load</span>';
