@@ -1922,7 +1922,7 @@ function renderNav() {
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     document.getElementById('bottom-nav')?.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets(); }
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
     if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
@@ -4289,10 +4289,13 @@ function _arCollectorCapsuleHTML(targetId, allCollectors) {
 }
 
 function renderAR() {
+  const agSel = document.getElementById('ar-f-aging');
+  if (agSel && agSel.options.length <= 1 && _agingBrackets.length) _populateArAgingFilter();
+
   const ef  = document.getElementById('ar-f-entity')?.value || '';
   const sf  = document.getElementById('ar-f-status')?.value || '';
   const rf  = document.getElementById('ar-f-rev')?.value    || '';
-  const agf = document.getElementById('ar-f-aging')?.value  || '';
+  const agf = agSel?.value || '';
   const sq  = (document.getElementById('ar-search')?.value  || '').toLowerCase();
   const agBracket = agf ? _agingBrackets.find(b => b.label === agf) : null;
 
