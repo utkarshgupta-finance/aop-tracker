@@ -855,6 +855,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-customers" onclick="showSettingsSubTab('customers')">Customer Master</button>
       <button class="st-stbtn"        id="st-tab-coc"       onclick="showSettingsSubTab('coc')">Cost of Capital</button>
       <button class="st-stbtn"        id="st-tab-aging-brackets" onclick="showSettingsSubTab('aging-brackets')">Aging Brackets</button>
+      <button class="st-stbtn"        id="st-tab-adv-actions"    onclick="showSettingsSubTab('adv-actions')">Advance Actions</button>
       <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')"    style="display:none">Outcome Options</button>
       <button class="st-stbtn"        id="st-tab-escalation" onclick="showSettingsSubTab('escalation')" style="display:none">Escalation Persons</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')"     style="display:none">Manage Users</button>
@@ -1173,6 +1174,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </div>
         <div style="font-size:11px;color:var(--txt3)">New bracket is inserted before the last (∞) row. Enter its upper day limit.</div>
         <div id="ab-status" style="font-size:12px;min-height:1.2rem;margin-top:.5rem"></div>
+      </div>
+    </div>
+
+    <!-- Advance Action Options -->
+    <div id="st-pane-adv-actions" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:480px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.3rem">Advance Action Options</div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.85rem">These appear in the Action dropdown on the By Entry advances view.</div>
+        <div id="adv-actions-list" style="margin-bottom:.75rem"></div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.4rem">
+          <input type="text" id="adv-actions-new-label" class="cc-input" style="flex:1;font-size:12.5px" placeholder="New option label…" onkeydown="if(event.key==='Enter')advActOptAdd()">
+          <button onclick="advActOptAdd()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
+        </div>
+        <div id="adv-actions-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem"></div>
       </div>
     </div>
 
@@ -2104,12 +2119,13 @@ function showSettingsSubTab(tab) {
   // always hide option sub-panes first
   const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
   const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
-  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','options','escalation','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','adv-actions','options','escalation','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
   if (tab === 'coc')             renderCocSettings();
   if (tab === 'aging-brackets')  renderAgingBracketsList();
+  if (tab === 'adv-actions')     renderAdvActOptList();
   if (tab === 'options') {
     loadOutcomeOptionsMaster(); loadSubOptMaster(); loadContactCatMaster();
     if (dsp) dsp.style.display = '';
@@ -7381,39 +7397,48 @@ function ccEscWhoSelect(name) {
 }
 
 /* ─── CUSTOMER ADVANCES ─────────────────────────────────────── */
-let _advRows  = [];
-let _advView  = 'entry';
-let _advLoaded = false;
-let _advBalances = {}; // contact_name → outstanding_receivable_amount_bcy
-let _advNativeBal = {}; // contact_name → { amount, currency_code }
+let _advRows          = [];
+let _advView          = 'entry';
+let _advLoaded        = false;
+let _advActions       = {}; // payment_id → action label
+let _advActionOptions = []; // [{id, label, sort_order, active}]
 
 async function loadAdvances() {
   if (_advLoaded) return;
   const wrap = document.getElementById('adv-wrap');
   if (wrap) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
   try {
-    const [advR, balR] = await Promise.all([
+    const [advR, actR, optR] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/customer_advances?order=payment_date.desc&select=*`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,outstanding_receivable_amount,currency_code`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/advance_actions?select=payment_id,action`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/advance_action_options?select=id,label,sort_order,active&order=sort_order`, { headers: cmrrHdr() }),
     ]);
     if (!advR.ok) throw new Error('HTTP ' + advR.status);
     _advRows = await advR.json();
-    if (balR.ok) {
-      const bals = await balR.json();
-      _advBalances = {};
-      _advNativeBal = {};
-      for (const b of bals) {
-        _advBalances[b.contact_name] = b.outstanding_receivable_amount_bcy;
-        if (b.currency_code && b.currency_code !== 'INR') {
-          _advNativeBal[b.contact_name] = { amount: b.outstanding_receivable_amount, currency_code: b.currency_code };
-        }
-      }
-    }
+    if (actR.ok) { const acts = await actR.json(); _advActions = {}; for (const a of acts) _advActions[a.payment_id] = a.action; }
+    if (optR.ok) { _advActionOptions = await optR.json(); }
     _advLoaded = true;
     _advUpdateSyncInfo();
     renderAdvances();
   } catch(e) {
     if (wrap) wrap.innerHTML = `<div style="padding:2rem;color:var(--red)">Error loading advances: ${e.message}</div>`;
+  }
+}
+
+async function setAdvanceAction(paymentId, action) {
+  const body = action ? { payment_id: paymentId, action, updated_at: new Date().toISOString() } : null;
+  if (action) {
+    await fetch(`${SUPABASE_URL}/rest/v1/advance_actions`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify(body),
+    });
+    _advActions[paymentId] = action;
+  } else {
+    await fetch(`${SUPABASE_URL}/rest/v1/advance_actions?payment_id=eq.${encodeURIComponent(paymentId)}`, {
+      method: 'DELETE', headers: cmrrHdr(),
+    });
+    delete _advActions[paymentId];
   }
 }
 
@@ -7500,7 +7525,8 @@ function renderAdvancesEntry() {
       <td style="${tdS};text-align:left;color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmtD(r.payment_date)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.amount_inr || 0)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:600;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(r.unused_amount_inr || 0)}</td>
-      <td style="${tdS};text-align:left;font-size:11px">${(() => { const pmtCcy = r.currency_code || 'INR'; const contactCcy = _advNativeBal[r.customer_name]?.currency_code; const mismatch = contactCcy && contactCcy !== pmtCcy; const rateStr = pmtCcy !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''; return mismatch ? `<span style="color:#b45309;font-weight:600" title="Payment entered as ${pmtCcy} but contact currency is ${contactCcy} — check Zoho entry">⚠ ${escHtml(pmtCcy)}${rateStr} (contact: ${escHtml(contactCcy)})</span>` : `<span style="color:var(--ink-faint)">${escHtml(pmtCcy)}${rateStr}</span>`; })()}</td>
+      <td style="${tdS};text-align:left;color:var(--ink-faint);font-size:11px">${escHtml(r.currency_code || 'INR')}${r.currency_code && r.currency_code !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''}</td>
+      <td style="${tdS};text-align:left">${(() => { const opts = _advActionOptions.filter(o => o.active); const cur = _advActions[r.payment_id] || ''; return `<select onchange="setAdvanceAction('${escHtml(r.payment_id)}', this.value)" style="font-size:11.5px;padding:.2rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--surf);color:${cur ? 'var(--ink)' : 'var(--ink-faint)'};cursor:pointer;max-width:130px"><option value="">—</option>${opts.map(o => `<option value="${escHtml(o.label)}" ${cur === o.label ? 'selected' : ''}>${escHtml(o.label)}</option>`).join('')}</select>`; })()}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:750px" id="adv-entry-tbl">
@@ -7514,6 +7540,7 @@ function renderAdvancesEntry() {
       <th style="${thS};text-align:right">Total Paid</th>
       <th style="${thS};text-align:right">Unused Amount</th>
       <th style="${thS};text-align:left">Currency</th>
+      <th style="${thS};text-align:left">Action</th>
     </tr></thead>
     <tbody>${trs}</tbody>
     <tfoot>
@@ -7523,8 +7550,9 @@ function renderAdvancesEntry() {
         <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums"></td>
         <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(total)}</td>
         <td style="${tdS}"></td>
+        <td style="${tdS}"></td>
       </tr>
-      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="9" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
+      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="10" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
     </tfoot>
   </table></div>`;
   makeSortable(wrap.querySelector('table'));
@@ -7538,7 +7566,6 @@ function renderAdvancesCustomer() {
     return;
   }
   const fmt = v => { const a = Math.abs(v); const s = a.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return (v < 0 ? '-₹' : '₹') + s; };
-  const fmtFx = (v, ccy) => { const a = Math.abs(v); const s = a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return (v < 0 ? '-' : '') + ccy + ' ' + s; };
   const sq = (document.getElementById('adv-search')?.value || '').toLowerCase();
   const showExcl = document.getElementById('adv-show-excl')?.checked;
   // Build AR open invoice count per customer
@@ -7564,27 +7591,8 @@ function renderAdvancesCustomer() {
   const syncLabel = latestSync ? 'Data as of: ' + new Date(latestSync).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap';
   const tdS = 'padding:.45rem .85rem;font-size:12.5px;border-bottom:1px solid #f1f5f9';
-  const hasBal = Object.keys(_advBalances).length > 0;
   const trs = customers.map(([name, d], i) => {
     const invCount = arInvCount[name] || 0;
-    const zohoAR = _advBalances[name];
-    const nativeBal = _advNativeBal[name]; // { amount, currency_code } if non-INR customer
-    // Statement balance = Zoho outstanding AR (BCY=INR) minus this customer's own unused advances
-    const stmtBal = zohoAR !== undefined ? zohoAR - d.unused_inr : undefined;
-    let lbCell;
-    if (!hasBal) {
-      lbCell = '<span style="color:var(--ink-faint);font-size:11px">Sync to load</span>';
-    } else if (stmtBal === undefined) {
-      lbCell = '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    } else {
-      const drCr = stmtBal >= 0 ? 'Dr' : 'Cr';
-      const color = stmtBal >= 0 ? '#16a34a' : 'var(--red)';
-      const inrLine = `<span style="color:${color};font-weight:700">${fmt(Math.abs(stmtBal))} ${drCr}</span>`;
-      const nativeLine = nativeBal
-        ? `<br><span style="color:var(--ink-faint);font-size:11px">${fmtFx(nativeBal.amount, nativeBal.currency_code)} outstanding</span>`
-        : '';
-      lbCell = inrLine + nativeLine;
-    }
     const bu = arGetBu(name);
     const cl = arGetCollector(name);
     const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
@@ -7598,11 +7606,10 @@ function renderAdvancesCustomer() {
       <td style="${tdS};text-align:right;font-family:var(--mono);color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmt(d.total_paid_inr)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:700;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(d.unused_inr)}</td>
       <td style="${tdS};text-align:center;font-variant-numeric:tabular-nums">${invCount || '—'}</td>
-      <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${lbCell}</td>
       <td style="${tdS};text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums">${grandTotal > 0 ? (d.unused_inr / grandTotal * 100).toFixed(1) + '%' : '—'}</td>
     </tr>`;
   }).join('');
-  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:800px">
+  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
     <thead><tr>
       <th style="${thS};text-align:center">#</th>
       <th style="${thS};text-align:left">Customer</th>
@@ -7612,7 +7619,6 @@ function renderAdvancesCustomer() {
       <th style="${thS};text-align:right">Total Received</th>
       <th style="${thS};text-align:right">Unused / Advance</th>
       <th style="${thS};text-align:center">Open Invoices</th>
-      <th style="${thS};text-align:right">Statement Balance</th>
       <th style="${thS};text-align:right">% of Total</th>
     </tr></thead>
     <tbody>${trs}</tbody>
@@ -7624,13 +7630,64 @@ function renderAdvancesCustomer() {
         <td style="${tdS}"></td>
         <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(grandTotal)}</td>
         <td style="${tdS}"></td>
-        <td style="${tdS}"></td>
         <td style="${tdS};text-align:right">100%</td>
       </tr>
-      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="10" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
+      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="9" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
     </tfoot>
   </table></div>`;
   makeSortable(wrap.querySelector('table'));
+}
+
+/* ── Advance Action Options (settings) ─────────────────────── */
+async function advActOptAdd() {
+  const inp = document.getElementById('adv-actions-new-label');
+  const label = (inp?.value || '').trim();
+  if (!label) return;
+  const maxOrder = _advActionOptions.length ? Math.max(..._advActionOptions.map(o => o.sort_order)) : 0;
+  const { data, error } = await fetch(`${SUPABASE_URL}/rest/v1/advance_action_options`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ label, sort_order: maxOrder + 1, active: true }),
+  }).then(r => r.json().then(d => ({ data: d, error: r.ok ? null : d })));
+  if (error) { document.getElementById('adv-actions-status').textContent = 'Error: ' + (error.message || JSON.stringify(error)); return; }
+  _advActionOptions.push(Array.isArray(data) ? data[0] : data);
+  if (inp) inp.value = '';
+  renderAdvActOptList();
+  document.getElementById('adv-actions-status').textContent = 'Saved.';
+  setTimeout(() => { const s = document.getElementById('adv-actions-status'); if (s) s.textContent = ''; }, 2000);
+}
+
+async function advActOptToggle(id, active) {
+  await fetch(`${SUPABASE_URL}/rest/v1/advance_action_options?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active }),
+  });
+  const o = _advActionOptions.find(x => x.id === id);
+  if (o) o.active = active;
+  renderAdvActOptList();
+}
+
+async function advActOptDelete(id) {
+  await fetch(`${SUPABASE_URL}/rest/v1/advance_action_options?id=eq.${id}`, { method: 'DELETE', headers: cmrrHdr() });
+  _advActionOptions = _advActionOptions.filter(x => x.id !== id);
+  renderAdvActOptList();
+}
+
+function renderAdvActOptList() {
+  const el = document.getElementById('adv-actions-list');
+  if (!el) return;
+  if (!_advActionOptions.length) {
+    el.innerHTML = '<div style="font-size:11.5px;color:var(--txt3);font-style:italic">No options yet.</div>';
+    return;
+  }
+  el.innerHTML = _advActionOptions.map(o =>
+    `<div style="display:flex;align-items:center;gap:.6rem;padding:.3rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#f8fafc;margin-bottom:.35rem">
+      <input type="checkbox" ${o.active ? 'checked' : ''} onchange="advActOptToggle(${o.id}, this.checked)" style="cursor:pointer;accent-color:var(--navy2)">
+      <span style="flex:1;font-size:12.5px;${o.active ? '' : 'color:var(--ink-faint);text-decoration:line-through'}">${escHtml(o.label)}</span>
+      <button onclick="advActOptDelete(${o.id})" style="background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;padding:0 .2rem" title="Delete">×</button>
+    </div>`
+  ).join('');
 }
 
 function _advUpdateSyncInfo(msg, color) {
@@ -7656,8 +7713,8 @@ async function syncAdvances() {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
     const result = await resp.json().catch(() => ({}));
     if (!resp.ok || !result.ok) throw new Error(result.error || 'HTTP ' + resp.status);
-    _advUpdateSyncInfo(`✓ Synced ${result.synced} advance${result.synced !== 1 ? 's' : ''}, ${result.contacts} customer balances`, '#16a34a');
-    _advLoaded = false; _advBalances = {}; _advNativeBal = {};
+    _advUpdateSyncInfo(`✓ Synced ${result.synced} advance${result.synced !== 1 ? 's' : ''}`, '#16a34a');
+    _advLoaded = false;
     await loadAdvances();
   } catch(e) {
     _advUpdateSyncInfo('Error: ' + e.message, 'var(--red)');
@@ -7671,7 +7728,7 @@ async function _syncAdvancesBackground() {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
     if (!resp.ok) return;
     const result = await resp.json().catch(() => ({}));
-    if (result.ok) { _advLoaded = false; _advBalances = {}; _advNativeBal = {}; if (_arActivePanes.has('advances')) loadAdvances(); }
+    if (result.ok) { _advLoaded = false; if (_arActivePanes.has('advances')) loadAdvances(); }
   } catch(e) { console.warn('advances background sync:', e); }
 }
 
