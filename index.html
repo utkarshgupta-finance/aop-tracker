@@ -7795,21 +7795,28 @@ async function renderAdvancesReconcile() {
       invByCustomer[n] = (invByCustomer[n] || 0) + Number(inv.balance_inr || 0);
     }
 
-    // Build reconcile rows: use balances as the "left" side, join AR
-    // Also include customers in AR but not in balances
-    const seen = new Set();
-    const rows = [];
+    // Aggregate balances by name — Zoho may have multiple contacts with the same name
+    // (e.g. a ₹0 stale duplicate + the real contact). Summing matches Customer Balance Summary
+    // which shows one combined row per customer name.
+    const balByName = {}, balCurrency = {}, balSyncAt = {};
     for (const b of balances) {
       const name = b.contact_name || '';
-      seen.add(name);
-      const ledger = Number(b.outstanding_receivable_amount_bcy || 0);
+      balByName[name] = (balByName[name] || 0) + Number(b.outstanding_receivable_amount_bcy || 0);
+      if (!balSyncAt[name] || b.synced_at > balSyncAt[name]) balSyncAt[name] = b.synced_at;
+      if (!balCurrency[name]) balCurrency[name] = b.currency_code;
+    }
+
+    // Build reconcile rows
+    const seenNames = new Set(Object.keys(balByName));
+    const rows = [];
+    for (const [name, ledger] of Object.entries(balByName)) {
       const openAR = invByCustomer[name] || 0;
       if (ledger < 0.01 && openAR < 0.01) continue;
-      rows.push({ name, ledger, openAR, diff: ledger - openAR, currency: b.currency_code, synced_at: b.synced_at });
+      rows.push({ name, ledger, openAR, diff: ledger - openAR, currency: balCurrency[name], synced_at: balSyncAt[name] });
     }
     // Customers in AR invoices but not in balances table
     for (const [name, openAR] of Object.entries(invByCustomer)) {
-      if (!seen.has(name) && openAR > 0.01) {
+      if (!seenNames.has(name) && openAR > 0.01) {
         rows.push({ name, ledger: 0, openAR, diff: -openAR, currency: 'INR', synced_at: null });
       }
     }
