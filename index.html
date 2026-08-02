@@ -7466,17 +7466,27 @@ function renderAdvancesEntry() {
   let rows = [..._advRows].sort((a, b) => (b.unused_amount_inr || 0) - (a.unused_amount_inr || 0));
   if (sq) rows = rows.filter(r => (r.customer_name || '').toLowerCase().includes(sq) || (r.payment_number || '').toLowerCase().includes(sq));
   const total = rows.reduce((s, r) => s + (r.unused_amount_inr || 0), 0);
-  const trs = rows.map(r => `<tr>
-    <td style="${tdS};text-align:left;font-weight:500">${escHtml(r.customer_name || '—')}</td>
-    <td style="${tdS};text-align:left;color:var(--ink-soft)">${escHtml(r.payment_number || '—')}</td>
-    <td style="${tdS};text-align:left;color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmtD(r.payment_date)}</td>
-    <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.amount_inr || 0)}</td>
-    <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:600;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(r.unused_amount_inr || 0)}</td>
-    <td style="${tdS};text-align:left;color:var(--ink-faint);font-size:11px">${escHtml(r.currency_code || 'INR')}${r.currency_code && r.currency_code !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''}</td>
-  </tr>`).join('');
-  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:560px" id="adv-entry-tbl">
+  const trs = rows.map(r => {
+    const bu = arGetBu(r.customer_name);
+    const cl = arGetCollector(r.customer_name);
+    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const clCell = cl ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    return `<tr>
+      <td style="${tdS};text-align:left;font-weight:500">${escHtml(r.customer_name || '—')}</td>
+      <td style="${tdS};text-align:left;white-space:nowrap">${buCell}</td>
+      <td style="${tdS};text-align:left;white-space:nowrap">${clCell}</td>
+      <td style="${tdS};text-align:left;color:var(--ink-soft)">${escHtml(r.payment_number || '—')}</td>
+      <td style="${tdS};text-align:left;color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmtD(r.payment_date)}</td>
+      <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.amount_inr || 0)}</td>
+      <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:600;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(r.unused_amount_inr || 0)}</td>
+      <td style="${tdS};text-align:left;color:var(--ink-faint);font-size:11px">${escHtml(r.currency_code || 'INR')}${r.currency_code && r.currency_code !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px" id="adv-entry-tbl">
     <thead><tr>
       <th style="${thS};text-align:left">Customer</th>
+      <th style="${thS};text-align:left">BU</th>
+      <th style="${thS};text-align:left">Collector</th>
       <th style="${thS};text-align:left">Payment #</th>
       <th style="${thS};text-align:left">Date</th>
       <th style="${thS};text-align:right">Total Paid</th>
@@ -7485,7 +7495,7 @@ function renderAdvancesEntry() {
     </tr></thead>
     <tbody>${trs}</tbody>
     <tfoot><tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
-      <td style="${tdS}" colspan="4">Total Unused (${rows.length} entries)</td>
+      <td style="${tdS}" colspan="6">Total Unused (${rows.length} entries)</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(total)}</td>
       <td style="${tdS}"></td>
     </tr></tfoot>
@@ -7530,8 +7540,14 @@ function renderAdvancesCustomer() {
     const lbCell = ledger >= 0
       ? `<span style="color:#16a34a;font-weight:700">${fmt(ledger)} Dr</span>`
       : `<span style="color:var(--red);font-weight:700">${fmt(Math.abs(ledger))} Cr</span>`;
+    const bu = arGetBu(name);
+    const cl = arGetCollector(name);
+    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const clCell = cl ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr>
       <td style="${tdS};text-align:left;font-weight:600;color:var(--navy2)">${escHtml(name)}</td>
+      <td style="${tdS};text-align:left;white-space:nowrap">${buCell}</td>
+      <td style="${tdS};text-align:left;white-space:nowrap">${clCell}</td>
       <td style="${tdS};text-align:center;font-variant-numeric:tabular-nums">${d.count}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);color:var(--ink-soft);font-variant-numeric:tabular-nums">${fmt(d.total_paid_inr)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:700;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(d.unused_inr)}</td>
@@ -7540,9 +7556,11 @@ function renderAdvancesCustomer() {
       <td style="${tdS};text-align:right;color:var(--ink-faint);font-variant-numeric:tabular-nums">${grandTotal > 0 ? (d.unused_inr / grandTotal * 100).toFixed(1) + '%' : '—'}</td>
     </tr>`;
   }).join('');
-  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">
+  wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:750px">
     <thead><tr>
       <th style="${thS};text-align:left">Customer</th>
+      <th style="${thS};text-align:left">BU</th>
+      <th style="${thS};text-align:left">Collector</th>
       <th style="${thS};text-align:center"># Payments</th>
       <th style="${thS};text-align:right">Total Received</th>
       <th style="${thS};text-align:right">Unused / Advance</th>
@@ -7552,7 +7570,7 @@ function renderAdvancesCustomer() {
     </tr></thead>
     <tbody>${trs}</tbody>
     <tfoot><tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
-      <td style="${tdS}">Total (${customers.length} customers)</td>
+      <td style="${tdS}" colspan="3">Total (${customers.length} customers)</td>
       <td style="${tdS};text-align:center">${customers.reduce((s,[,d])=>s+d.count,0)}</td>
       <td style="${tdS}"></td>
       <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(grandTotal)}</td>
