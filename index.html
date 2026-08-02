@@ -654,9 +654,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button class="ar-stbtn active" id="adv-view-entry"    onclick="advSetView('entry')">By Entry</button>
           <button class="ar-stbtn"        id="adv-view-customer" onclick="advSetView('customer')">By Customer</button>
         </div>
-        <span id="adv-synced-at" style="font-size:11px;color:var(--txt3);margin-left:.25rem"></span>
-        <button onclick="syncAdvances()" id="adv-sync-btn" style="margin-left:auto;font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
-        <span id="adv-sync-status" style="font-size:11.5px;color:var(--txt3)"></span>
+        <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
+          <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
+          <div id="adv-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
+        </div>
       </div>
       <div id="adv-wrap" class="twrap"></div>
     </div>
@@ -7388,12 +7389,7 @@ async function loadAdvances() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _advRows = await r.json();
     _advLoaded = true;
-    // Show last synced timestamp
-    if (_advRows.length) {
-      const latest = _advRows.reduce((a, b) => (a.synced_at > b.synced_at ? a : b)).synced_at;
-      const el = document.getElementById('adv-synced-at');
-      if (el) el.textContent = 'Last synced: ' + new Date(latest).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-    }
+    _advUpdateSyncInfo();
     renderAdvances();
   } catch(e) {
     if (wrap) wrap.innerHTML = `<div style="padding:2rem;color:var(--red)">Error loading advances: ${e.message}</div>`;
@@ -7499,26 +7495,40 @@ function renderAdvancesCustomer() {
   </table></div>`;
 }
 
+function _advUpdateSyncInfo(msg, color) {
+  const el = document.getElementById('adv-sync-info');
+  if (!el) return;
+  if (msg) { el.textContent = msg; el.style.color = color || 'var(--txt3)'; return; }
+  // Default: show last synced time from data
+  if (_advRows.length) {
+    const latest = _advRows.reduce((a, b) => (a.synced_at > b.synced_at ? a : b)).synced_at;
+    el.textContent = 'Last synced: ' + new Date(latest).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    el.style.color = 'var(--txt3)';
+  } else {
+    el.textContent = 'Not yet synced';
+    el.style.color = 'var(--txt3)';
+  }
+}
+
 async function syncAdvances() {
-  const btn    = document.getElementById('adv-sync-btn');
-  const status = document.getElementById('adv-sync-status');
+  const btn = document.getElementById('adv-sync-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  if (status) status.textContent = '';
+  _advUpdateSyncInfo('Contacting Zoho Books…');
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/functions/v1/sync-advances`,
-      { method: 'POST', headers: cmrrHdr() }
-    );
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
+    _advUpdateSyncInfo('Saving to database…');
     const j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || j.log?.slice(-1)?.[0]?.message || 'Sync failed');
-    if (status) { status.textContent = `✓ Synced ${j.synced} advance${j.synced !== 1 ? 's' : ''}`;  status.style.color = '#16a34a'; }
+    if (!r.ok || !j.ok) {
+      const errMsg = j.error || j.log?.slice(-1)?.[0]?.message || 'Sync failed';
+      throw new Error(errMsg);
+    }
+    _advUpdateSyncInfo(`✓ Synced ${j.synced} advance${j.synced !== 1 ? 's' : ''}`, '#16a34a');
     _advLoaded = false;
     await loadAdvances();
   } catch(e) {
-    if (status) { status.textContent = 'Error: ' + e.message; status.style.color = 'var(--red)'; }
+    _advUpdateSyncInfo('Error: ' + e.message, 'var(--red)');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Advances'; }
-    setTimeout(() => { if (status) status.textContent = ''; }, 4000);
   }
 }
 
@@ -7528,7 +7538,6 @@ async function _syncAdvancesBackground() {
     const j = await r.json();
     if (r.ok && j.ok) {
       _advLoaded = false;
-      // Reload if the advances pane is currently visible
       if (_arActivePanes.has('advances')) loadAdvances();
     }
   } catch(e) { console.warn('advances background sync:', e); }
