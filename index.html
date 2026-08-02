@@ -659,6 +659,15 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <label id="adv-excl-label" style="font-size:12px;display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;color:var(--txt3)">
           <input type="checkbox" id="adv-show-excl" onchange="renderAdvances()"> Include excluded
         </label>
+        <div id="adv-entity-filter" style="display:none;font-size:12px;display:none;align-items:center;gap:.6rem;color:var(--txt3)">
+          <span style="font-weight:600;color:var(--txt2)">Entity:</span>
+          <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="adv-entity-in" checked onchange="renderAdvances()"> India
+          </label>
+          <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="adv-entity-uk" onchange="renderAdvances()"> UK
+          </label>
+        </div>
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
           <div id="adv-sync-btn-wrap" style="display:flex;gap:.4rem">
             <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
@@ -7455,8 +7464,10 @@ function advSetView(view) {
   const isRecon = view === 'reconcile';
   const srch = document.getElementById('adv-search');
   const exclLabel = document.getElementById('adv-excl-label');
+  const entityFilter = document.getElementById('adv-entity-filter');
   if (srch) srch.style.display = isRecon ? 'none' : '';
   if (exclLabel) exclLabel.style.display = isRecon ? 'none' : '';
+  if (entityFilter) entityFilter.style.display = isRecon ? 'flex' : 'none';
   // Toggle which sync button is visible
   const advBtn = document.getElementById('adv-sync-btn');
   const balBtn = document.getElementById('adv-balances-btn');
@@ -7778,9 +7789,18 @@ async function renderAdvancesReconcile() {
   if (!wrap) return;
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
   try {
+    const showIN = document.getElementById('adv-entity-in')?.checked !== false;
+    const showUK = document.getElementById('adv-entity-uk')?.checked === true;
+    // Build entity filter for ar_invoices
+    let entityFilter = '';
+    if (showIN && showUK) entityFilter = '';
+    else if (showIN) entityFilter = '&entity=eq.IN';
+    else if (showUK) entityFilter = '&entity=eq.UK';
+    else entityFilter = '&entity=eq.__none__'; // nothing selected → empty result
+
     const [balR, invR] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,currency_code,synced_at&order=contact_name`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr${entityFilter}`, { headers: cmrrHdr() }),
     ]);
     if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
     const allBalances = await balR.json();
@@ -7842,12 +7862,14 @@ async function renderAdvancesReconcile() {
     // Balance sheet AR vs CBS gap (journal entries / Debtor account not in CBS)
     const bsGap = bsARTotal !== null ? bsARTotal - totalLedger : null;
 
+    const entityLabel = showIN && showUK ? 'India + UK' : showUK ? 'UK' : 'India';
+
     wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px" id="adv-recon-tbl">
     <thead><tr>
       <th style="${thS};text-align:center">#</th>
       <th style="${thS};text-align:left">Customer</th>
-      <th style="${thS};text-align:right">Outstanding Receivable</th>
-      <th style="${thS};text-align:right">Open Invoices (AR)</th>
+      <th style="${thS};text-align:right">Outstanding Receivable (Zoho)</th>
+      <th style="${thS};text-align:right">Open Invoices — ${escHtml(entityLabel)}</th>
       <th style="${thS};text-align:right">Difference</th>
     </tr></thead>
     <tbody>
@@ -7878,7 +7900,7 @@ async function renderAdvancesReconcile() {
         <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && bsGap > 0.005 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Outstanding Receivable = Zoho Customer Balance Summary &nbsp;·&nbsp; ${bsGap !== null && bsGap > 0.005 ? `₹${fmt(bsGap)} gap = journal entries &amp; Debtor account not attributable to specific customers` : ''}</td>
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Outstanding Receivable = Zoho Contacts API (cumulative, matches balance sheet) &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong>${bsGap !== null && bsGap > 0.005 ? ` &nbsp;·&nbsp; ₹${fmt(bsGap)} gap = journal entries &amp; Debtor account not attributable to specific customers` : ''}</td>
       </tr>
     </tfoot>
     </table></div>`;
