@@ -7464,7 +7464,7 @@ function renderAdvancesEntry() {
     wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No open customer advances. Click "Sync Advances" to fetch from Zoho Books.</div>';
     return;
   }
-  const fmt  = v => { const a = Math.abs(v); const s = a < 1 ? a.toFixed(2) : Math.round(a).toLocaleString('en-IN'); return (v < 0 ? '-₹' : '₹') + s; };
+  const fmt  = v => { const a = Math.abs(v); const s = a.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return (v < 0 ? '-₹' : '₹') + s; };
   const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap';
   const tdS = 'padding:.45rem .85rem;font-size:12.5px;border-bottom:1px solid #f1f5f9';
