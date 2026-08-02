@@ -7781,7 +7781,7 @@ async function renderAdvancesReconcile() {
     // Fetch both in parallel
     const [balR, invR] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,currency_code,synced_at&order=contact_name`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr&status=neq.paid`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr`, { headers: cmrrHdr() }),
     ]);
     if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
     const balances = await balR.json();
@@ -7791,7 +7791,8 @@ async function renderAdvancesReconcile() {
     const invByCustomer = {};
     for (const inv of invoices) {
       const n = inv.customer_name || '';
-      invByCustomer[n] = (invByCustomer[n] || 0) + (inv.balance_inr || 0);
+      // Note: PostgREST returns numeric columns as strings — always use Number() to parse
+      invByCustomer[n] = (invByCustomer[n] || 0) + Number(inv.balance_inr || 0);
     }
 
     // Build reconcile rows: use balances as the "left" side, join AR
@@ -7801,8 +7802,9 @@ async function renderAdvancesReconcile() {
     for (const b of balances) {
       const name = b.contact_name || '';
       seen.add(name);
-      const ledger = b.outstanding_receivable_amount_bcy || 0;
+      const ledger = Number(b.outstanding_receivable_amount_bcy || 0);
       const openAR = invByCustomer[name] || 0;
+      if (ledger < 0.01 && openAR < 0.01) continue;
       rows.push({ name, ledger, openAR, diff: ledger - openAR, currency: b.currency_code, synced_at: b.synced_at });
     }
     // Customers in AR invoices but not in balances table
