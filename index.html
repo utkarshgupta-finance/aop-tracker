@@ -5252,6 +5252,8 @@ async function _runARSync(url, btnId, statusId, label) {
           status.style.color = '#3b6d11';
           _arInited = false;
           loadAR();
+          // Keep advances in sync with AR — fire silently in background
+          _syncAdvancesBackground();
         } else if (evName === 'error') {
           const detail = ev.detail ? ' — ' + JSON.stringify(ev.detail) : '';
           status.textContent = 'Error: ' + ev.message + detail;
@@ -7518,6 +7520,18 @@ async function syncAdvances() {
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Advances'; }
     setTimeout(() => { if (status) status.textContent = ''; }, 4000);
   }
+}
+
+async function _syncAdvancesBackground() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, { method: 'POST', headers: cmrrHdr() });
+    const j = await r.json();
+    if (r.ok && j.ok) {
+      _advLoaded = false;
+      // Reload if the advances pane is currently visible
+      if (_arActivePanes.has('advances')) loadAdvances();
+    }
+  } catch(e) { console.warn('advances background sync:', e); }
 }
 
 /* ─── AGING BRACKETS ────────────────────────────────────────── */
