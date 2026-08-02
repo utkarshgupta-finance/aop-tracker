@@ -4174,12 +4174,13 @@ async function saveFxFromModal() {
 async function loadAR() {
   const status = document.getElementById('ar-status') || document.getElementById('ar-status-in');
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/ar_invoices?select=*&order=due_date.asc&limit=3000`,
-      { headers: cmrrHdr() }
-    );
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    _arAllRows = await r.json();
+    // Load AR invoices and aging brackets in parallel so the dropdown is ready when renderAR runs
+    const [arResp] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=*&order=due_date.asc&limit=3000`, { headers: cmrrHdr() }),
+      _agingBrackets.length ? Promise.resolve() : loadAgingBrackets(),
+    ]);
+    if (!arResp.ok) throw new Error('HTTP ' + arResp.status);
+    _arAllRows = await arResp.json();
     status.textContent = '';
     renderAR();
     // Fetch disputes in background and re-render
@@ -5151,7 +5152,7 @@ function renderARInvoiceList(rows) {
     else if (days > 0)  sevCls = 'sev-low';
     else if (days === 0) sevCls = 'sev-low';
     const intPopupBtn = r.invoice_id
-      ? `<button onclick="arShowInvInteractions(${JSON.stringify(r.invoice_id)},${JSON.stringify(r.invoice_number||'')})" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
+      ? `<button onclick="arShowInvInteractions(this.dataset.iid,this.dataset.inum)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
       : '';
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
