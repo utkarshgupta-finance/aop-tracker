@@ -7484,6 +7484,8 @@ function renderAdvancesEntry() {
   if (!showExcl) rows = rows.filter(r => !_arExcluded.includes(r.customer_name));
   if (sq) rows = rows.filter(r => (r.customer_name || '').toLowerCase().includes(sq) || (r.payment_number || '').toLowerCase().includes(sq));
   const total = rows.reduce((s, r) => s + (r.unused_amount_inr || 0), 0);
+  const latestSync = _advRows.length ? _advRows.reduce((a, b) => (a.synced_at > b.synced_at ? a : b)).synced_at : null;
+  const syncLabel = latestSync ? 'Data as of: ' + new Date(latestSync).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const trs = rows.map((r, i) => {
     const bu = arGetBu(r.customer_name);
     const cl = arGetCollector(r.customer_name);
@@ -7514,12 +7516,16 @@ function renderAdvancesEntry() {
       <th style="${thS};text-align:left">Currency</th>
     </tr></thead>
     <tbody>${trs}</tbody>
-    <tfoot><tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
-      <td style="${tdS}"></td>
-      <td style="${tdS}" colspan="6">Total Unused (${rows.length} entries)</td>
-      <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(total)}</td>
-      <td style="${tdS}"></td>
-    </tr></tfoot>
+    <tfoot>
+      <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+        <td style="${tdS}"></td>
+        <td style="${tdS}" colspan="5">Total Unused (${rows.length} entries)</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums"></td>
+        <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(total)}</td>
+        <td style="${tdS}"></td>
+      </tr>
+      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="9" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
+    </tfoot>
   </table></div>`;
   makeSortable(wrap.querySelector('table'));
 }
@@ -7554,6 +7560,8 @@ function renderAdvancesCustomer() {
   if (!showExcl) customers = customers.filter(([name]) => !_arExcluded.includes(name));
   if (sq) customers = customers.filter(([name]) => name.toLowerCase().includes(sq));
   const grandTotal = customers.reduce((s, [, d]) => s + d.unused_inr, 0);
+  const latestSync = _advRows.length ? _advRows.reduce((a, b) => (a.synced_at > b.synced_at ? a : b)).synced_at : null;
+  const syncLabel = latestSync ? 'Data as of: ' + new Date(latestSync).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const thS = 'padding:.5rem .85rem;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap';
   const tdS = 'padding:.45rem .85rem;font-size:12.5px;border-bottom:1px solid #f1f5f9';
   const hasBal = Object.keys(_advBalances).length > 0;
@@ -7608,16 +7616,19 @@ function renderAdvancesCustomer() {
       <th style="${thS};text-align:right">% of Total</th>
     </tr></thead>
     <tbody>${trs}</tbody>
-    <tfoot><tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
-      <td style="${tdS}"></td>
-      <td style="${tdS}" colspan="3">Total (${customers.length} customers)</td>
-      <td style="${tdS};text-align:center">${customers.reduce((s,[,d])=>s+d.count,0)}</td>
-      <td style="${tdS}"></td>
-      <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(grandTotal)}</td>
-      <td style="${tdS}"></td>
-      <td style="${tdS}"></td>
-      <td style="${tdS};text-align:right">100%</td>
-    </tr></tfoot>
+    <tfoot>
+      <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+        <td style="${tdS}"></td>
+        <td style="${tdS}" colspan="3">Total (${customers.length} customers)</td>
+        <td style="${tdS};text-align:center">${customers.reduce((s,[,d])=>s+d.count,0)}</td>
+        <td style="${tdS}"></td>
+        <td style="${tdS};text-align:right;font-family:var(--mono);color:#1d4ed8">${fmt(grandTotal)}</td>
+        <td style="${tdS}"></td>
+        <td style="${tdS}"></td>
+        <td style="${tdS};text-align:right">100%</td>
+      </tr>
+      ${syncLabel ? `<tr style="background:#fffbeb"><td colspan="10" style="${tdS};padding:.3rem .85rem;font-size:11px;color:#92400e;font-style:italic">⚠ ${escHtml(syncLabel)} — click Sync Advances to refresh</td></tr>` : ''}
+    </tfoot>
   </table></div>`;
   makeSortable(wrap.querySelector('table'));
 }
