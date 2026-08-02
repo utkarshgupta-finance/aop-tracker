@@ -651,15 +651,19 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div id="ar-pane-advances" style="display:none">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;flex-wrap:wrap">
         <div style="display:flex;gap:.3rem">
-          <button class="ar-stbtn active" id="adv-view-entry"    onclick="advSetView('entry')">By Entry</button>
-          <button class="ar-stbtn"        id="adv-view-customer" onclick="advSetView('customer')">By Customer</button>
+          <button class="ar-stbtn active" id="adv-view-entry"     onclick="advSetView('entry')">By Entry</button>
+          <button class="ar-stbtn"        id="adv-view-customer"  onclick="advSetView('customer')">By Customer</button>
+          <button class="ar-stbtn"        id="adv-view-reconcile" onclick="advSetView('reconcile')">Reconcile</button>
         </div>
-        <input type="text" id="adv-search" class="cust-input" placeholder="Search customers…" oninput="renderAdvances()" style="font-size:12px;min-width:180px;max-width:260px">
-        <label style="font-size:12px;display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;color:var(--txt3)">
+        <input type="text" id="adv-search" class="cust-input" placeholder="Search customers…" oninput="renderAdvances()" style="font-size:12px;min-width:180px;max-width:260px;display:var(--adv-search-show,inline-block)">
+        <label id="adv-excl-label" style="font-size:12px;display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;color:var(--txt3)">
           <input type="checkbox" id="adv-show-excl" onchange="renderAdvances()"> Include excluded
         </label>
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
-          <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
+          <div id="adv-sync-btn-wrap" style="display:flex;gap:.4rem">
+            <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
+            <button onclick="syncBalances()" id="adv-balances-btn" style="font-size:12px;padding:.32rem .9rem;background:#0891b2;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;display:none">🔄 Sync Balances</button>
+          </div>
           <div id="adv-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
         </div>
       </div>
@@ -7446,12 +7450,25 @@ function advSetView(view) {
   _advView = view;
   document.getElementById('adv-view-entry')?.classList.toggle('active', view === 'entry');
   document.getElementById('adv-view-customer')?.classList.toggle('active', view === 'customer');
+  document.getElementById('adv-view-reconcile')?.classList.toggle('active', view === 'reconcile');
+  // Show/hide search + exclusion checkbox (not needed on reconcile view)
+  const isRecon = view === 'reconcile';
+  const srch = document.getElementById('adv-search');
+  const exclLabel = document.getElementById('adv-excl-label');
+  if (srch) srch.style.display = isRecon ? 'none' : '';
+  if (exclLabel) exclLabel.style.display = isRecon ? 'none' : '';
+  // Toggle which sync button is visible
+  const advBtn = document.getElementById('adv-sync-btn');
+  const balBtn = document.getElementById('adv-balances-btn');
+  if (advBtn) advBtn.style.display = isRecon ? 'none' : '';
+  if (balBtn) balBtn.style.display = isRecon ? '' : 'none';
   renderAdvances();
 }
 
 function renderAdvances() {
   if (_advView === 'entry') renderAdvancesEntry();
-  else renderAdvancesCustomer();
+  else if (_advView === 'customer') renderAdvancesCustomer();
+  else renderAdvancesReconcile();
 }
 
 function makeSortable(tbl, { skipLastRow = false } = {}) {
@@ -7528,7 +7545,7 @@ function renderAdvancesEntry() {
       <td style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.amount_inr || 0)}</td>
       <td style="${tdS};text-align:right;font-family:var(--mono);font-weight:600;color:#1d4ed8;font-variant-numeric:tabular-nums">${fmt(r.unused_amount_inr || 0)}</td>
       <td style="${tdS};text-align:left;color:var(--ink-faint);font-size:11px">${escHtml(r.currency_code || 'INR')}${r.currency_code && r.currency_code !== 'INR' ? ' @' + Number(r.exchange_rate).toFixed(4) : ''}</td>
-      <td style="${tdS};text-align:left">${(() => { const opts = _advActionOptions.filter(o => o.active); const cur = _advActions[r.payment_id] || ''; return `<select onchange="setAdvanceAction('${escHtml(r.payment_id)}', this.value)" style="font-size:11.5px;padding:.2rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--surf);color:${cur ? 'var(--ink)' : 'var(--ink-faint)'};cursor:pointer;max-width:130px"><option value="">—</option>${opts.map(o => `<option value="${escHtml(o.label)}" ${cur === o.label ? 'selected' : ''}>${escHtml(o.label)}</option>`).join('')}</select>`; })()}</td>
+      <td data-sort="${_advActions[r.payment_id] || ''}" style="${tdS};text-align:left">${(() => { const opts = _advActionOptions.filter(o => o.active); const cur = _advActions[r.payment_id] || ''; return `<select onchange="setAdvanceAction('${escHtml(r.payment_id)}', this.value)" style="font-size:11.5px;padding:.2rem .4rem;border:1px solid var(--brd);border-radius:4px;background:var(--surf);color:${cur ? 'var(--ink)' : 'var(--ink-faint)'};cursor:pointer;max-width:130px"><option value="">—</option>${opts.map(o => `<option value="${escHtml(o.label)}" ${cur === o.label ? 'selected' : ''}>${escHtml(o.label)}</option>`).join('')}</select>`; })()}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:750px" id="adv-entry-tbl">
@@ -7732,6 +7749,126 @@ async function _syncAdvancesBackground() {
     const result = await resp.json().catch(() => ({}));
     if (result.ok) { _advLoaded = false; if (_arActivePanes.has('advances')) loadAdvances(); }
   } catch(e) { console.warn('advances background sync:', e); }
+}
+
+/* ─── RECONCILE VIEW ─────────────────────────────────────────── */
+let _reconData = null; // { balances: [...], invoiceTotals: {...} }
+
+async function syncBalances() {
+  const btn = document.getElementById('adv-balances-btn');
+  const info = document.getElementById('adv-sync-info');
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+  if (info) { info.textContent = 'Fetching balances from Zoho Books…'; info.style.color = 'var(--txt3)'; }
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, { method: 'POST', headers: cmrrHdr() });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok || !result.ok) throw new Error(result.error || 'HTTP ' + resp.status);
+    if (info) { info.textContent = `✓ Synced ${result.synced} balances`; info.style.color = '#16a34a'; }
+    _reconData = null; // force reload
+    renderAdvancesReconcile();
+  } catch(e) {
+    if (info) { info.textContent = 'Error: ' + e.message; info.style.color = 'var(--red)'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Balances'; }
+  }
+}
+
+async function renderAdvancesReconcile() {
+  const wrap = document.getElementById('adv-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
+  try {
+    // Fetch both in parallel
+    const [balR, invR] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,currency_code,synced_at&order=contact_name`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr&status=neq.paid`, { headers: cmrrHdr() }),
+    ]);
+    if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
+    const balances = await balR.json();
+    const invoices = invR.ok ? await invR.json() : [];
+
+    // Aggregate invoice balances by customer_name
+    const invByCustomer = {};
+    for (const inv of invoices) {
+      const n = inv.customer_name || '';
+      invByCustomer[n] = (invByCustomer[n] || 0) + (inv.balance_inr || 0);
+    }
+
+    // Build reconcile rows: use balances as the "left" side, join AR
+    // Also include customers in AR but not in balances
+    const seen = new Set();
+    const rows = [];
+    for (const b of balances) {
+      const name = b.contact_name || '';
+      seen.add(name);
+      const ledger = b.outstanding_receivable_amount_bcy || 0;
+      const openAR = invByCustomer[name] || 0;
+      rows.push({ name, ledger, openAR, diff: ledger - openAR, currency: b.currency_code, synced_at: b.synced_at });
+    }
+    // Customers in AR invoices but not in balances table
+    for (const [name, openAR] of Object.entries(invByCustomer)) {
+      if (!seen.has(name) && openAR > 0.01) {
+        rows.push({ name, ledger: 0, openAR, diff: -openAR, currency: 'INR', synced_at: null });
+      }
+    }
+    rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)); // biggest discrepancies first
+
+    const fmt = v => Math.abs(v) >= 0.005 ? v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+    const fmtDiff = (v) => {
+      if (Math.abs(v) < 0.005) return '<span style="color:var(--ink-faint)">—</span>';
+      const s = Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return v > 0
+        ? `<span style="color:#b45309">${s} (Ledger&gt;AR)</span>`
+        : `<span style="color:#0891b2">${s} (AR&gt;Ledger)</span>`;
+    };
+    const thS = 'padding:.45rem .7rem;font-size:11px;font-weight:700;border-bottom:2px solid var(--brd2);background:#f5f7fb;white-space:nowrap;cursor:pointer;user-select:none';
+    const tdS = 'padding:.38rem .7rem;font-size:12px;border-bottom:1px solid var(--brd)';
+
+    // Latest balance sync time
+    const latestSync = balances.length ? balances.reduce((a, b) => (a.synced_at > b.synced_at ? a : b)).synced_at : null;
+    const syncLabel = latestSync ? 'Balances last synced: ' + new Date(latestSync).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Balances not yet synced';
+
+    const totalLedger = rows.reduce((s, r) => s + r.ledger, 0);
+    const totalAR     = rows.reduce((s, r) => s + r.openAR, 0);
+    const totalDiff   = totalLedger - totalAR;
+
+    wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:580px" id="adv-recon-tbl">
+    <thead><tr>
+      <th style="${thS};text-align:center">#</th>
+      <th style="${thS};text-align:left">Customer</th>
+      <th style="${thS};text-align:right">Open AR (Invoices)</th>
+      <th style="${thS};text-align:right">Ledger Balance (BCY)</th>
+      <th style="${thS};text-align:right">Difference</th>
+    </tr></thead>
+    <tbody>
+    ${rows.map((r, i) => {
+      const isZero = Math.abs(r.diff) < 0.005;
+      return `<tr style="${isZero ? '' : 'background:#fffbeb'}">
+        <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px">${i + 1}</td>
+        <td style="${tdS};text-align:left;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.name)}">${escHtml(r.name || '—')}</td>
+        <td data-sort="${r.openAR}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.openAR)}</td>
+        <td data-sort="${r.ledger}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.ledger)}</td>
+        <td data-sort="${r.diff}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmtDiff(r.diff)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+    <tfoot>
+      <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+        <td></td>
+        <td style="${tdS}">Total (${rows.length} customers)</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalLedger)}</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono)">${fmtDiff(totalDiff)}</td>
+      </tr>
+      <tr style="background:#f0f9ff">
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Open AR from invoices not marked paid</td>
+      </tr>
+    </tfoot>
+    </table></div>`;
+    makeSortable(document.getElementById('adv-recon-tbl'), { skipLastRow: true });
+  } catch(e) {
+    wrap.innerHTML = `<div style="padding:2rem;color:var(--red)">Error: ${escHtml(e.message)}</div>`;
+  }
 }
 
 /* ─── AGING BRACKETS ────────────────────────────────────────── */
