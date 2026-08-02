@@ -7834,12 +7834,12 @@ async function renderAdvancesReconcile() {
     const totalAR     = rows.reduce((s, r) => s + r.openAR, 0);
     const totalDiff   = totalLedger - totalAR;
 
-    wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:580px" id="adv-recon-tbl">
+    wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px" id="adv-recon-tbl">
     <thead><tr>
       <th style="${thS};text-align:center">#</th>
       <th style="${thS};text-align:left">Customer</th>
-      <th style="${thS};text-align:right">Open AR (Invoices)</th>
-      <th style="${thS};text-align:right">Ledger Balance (BCY)</th>
+      <th style="${thS};text-align:right">Outstanding Receivable</th>
+      <th style="${thS};text-align:right">Open Invoices (AR)</th>
       <th style="${thS};text-align:right">Difference</th>
     </tr></thead>
     <tbody>
@@ -7848,8 +7848,8 @@ async function renderAdvancesReconcile() {
       return `<tr style="${isZero ? '' : 'background:#fffbeb'}">
         <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px">${i + 1}</td>
         <td style="${tdS};text-align:left;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.name)}">${escHtml(r.name || '—')}</td>
+        <td data-sort="${r.ledger}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600">${fmt(r.ledger)}</td>
         <td data-sort="${r.openAR}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.openAR)}</td>
-        <td data-sort="${r.ledger}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.ledger)}</td>
         <td data-sort="${r.diff}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmtDiff(r.diff)}</td>
       </tr>`;
     }).join('')}
@@ -7858,12 +7858,12 @@ async function renderAdvancesReconcile() {
       <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
         <td></td>
         <td style="${tdS}">Total (${rows.length} customers)</td>
-        <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalLedger)}</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmtDiff(totalDiff)}</td>
       </tr>
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Open AR from invoices not marked paid</td>
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Outstanding Receivable = Zoho balance sheet (same as Customer Balance Summary)</td>
       </tr>
     </tfoot>
     </table></div>`;
