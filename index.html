@@ -587,6 +587,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <option value="MRR">MRR</option>
         <option value="NRR">NRR</option>
       </select>
+      <select class="nret-sel" id="ar-f-aging" onchange="renderAR()" style="font-size:12px">
+        <option value="">All Aging</option>
+      </select>
       <input type="text" class="cust-input" id="ar-search" placeholder="Search anything…"
         style="font-size:12px;max-width:220px;padding:.35rem .75rem" oninput="renderAR()">
     </div>
@@ -4286,10 +4289,12 @@ function _arCollectorCapsuleHTML(targetId, allCollectors) {
 }
 
 function renderAR() {
-  const ef = document.getElementById('ar-f-entity')?.value || '';
-  const sf = document.getElementById('ar-f-status')?.value || '';
-  const rf = document.getElementById('ar-f-rev')?.value    || '';
-  const sq = (document.getElementById('ar-search')?.value  || '').toLowerCase();
+  const ef  = document.getElementById('ar-f-entity')?.value || '';
+  const sf  = document.getElementById('ar-f-status')?.value || '';
+  const rf  = document.getElementById('ar-f-rev')?.value    || '';
+  const agf = document.getElementById('ar-f-aging')?.value  || '';
+  const sq  = (document.getElementById('ar-search')?.value  || '').toLowerCase();
+  const agBracket = agf ? _agingBrackets.find(b => b.label === agf) : null;
 
   const nonExcluded = _arAllRows.filter(r =>
     !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase()))
@@ -4328,6 +4333,10 @@ function renderAR() {
     if (!ef || r.entity === ef) {} else return false;
     if (!sf || r.status === sf) {} else return false;
     if (!rf || r.revenue_type === rf) {} else return false;
+    if (agBracket) {
+      const d = arOverdueDays(r.due_date);
+      if (!(d >= agBracket.min_days && (agBracket.max_days === null || d <= agBracket.max_days))) return false;
+    }
     if (sq) {
       const haystack = [
         cn,
@@ -7351,10 +7360,20 @@ async function loadAgingBrackets() {
     );
     if (r.ok) {
       _agingBrackets = await r.json();
+      _populateArAgingFilter();
       // Re-render AR aging views if data is already loaded
       if (_arAllRows.length) { renderARAgingBar(_arAllRows); renderARAgingTable(_arAllRows); }
     }
   } catch(e) { console.warn('loadAgingBrackets:', e); }
+}
+
+function _populateArAgingFilter() {
+  const sel = document.getElementById('ar-f-aging');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Aging</option>' +
+    _agingBrackets.map(b => `<option value="${escHtml(b.label)}">${escHtml(b.label)}</option>`).join('');
+  if (_agingBrackets.some(b => b.label === current)) sel.value = current;
 }
 
 function agingBucketForDays(days) {
