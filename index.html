@@ -7597,7 +7597,7 @@ function cdFilterAndRender() {
   const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90;
   const tblW = CUST_W + INV_W + BU_W + POC_W + daysInMonth * DAY_W;
   const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
-  const dayColgroup = `<colgroup><col style="width:${CUST_W + INV_W + BU_W + POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
+  const dayColgroup = (nDays) => `<colgroup><col style="width:${CUST_W + INV_W + BU_W + POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
 
   const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
@@ -7607,6 +7607,21 @@ function cdFilterAndRender() {
   }).join('');
 
   const dayTotals = new Array(daysInMonth + 1).fill(0);
+
+  // Movement table axis = the month the promises are being MADE in. Viewing
+  // Sep or Oct while it is August shows how those months' promised totals
+  // moved across August's days. For a past month, track within itself.
+  const trackMonth = _cdMonth < curMonth ? _cdMonth : curMonth;
+  const [tyy, tmm] = trackMonth.split('-').map(Number);
+  const trackDays = new Date(tyy, tmm, 0).getDate();
+  const tdstr = d => `${trackMonth}-${String(d).padStart(2, '0')}`;
+  const tIsWeekend = d => { const w = new Date(tyy, tmm - 1, d).getDay(); return w === 0 || w === 6; };
+  const trackDayHead = Array.from({ length: trackDays }, (_, i) => {
+    const day = i + 1;
+    const isToday = tdstr(day) === todayStr;
+    const wk = tIsWeekend(day);
+    return `<th style="${thS}${wk ? ';background:#eef1f6' : ''}${isToday ? ';background:#fde68a;color:#92400e' : ''}" title="${tdstr(day)}">${day}</th>`;
+  }).join('');
 
   let bodyHtml = '';
   if (_cdView === 'customer') {
@@ -7665,8 +7680,8 @@ function cdFilterAndRender() {
   // ── Month-total movement: what the whole month's promised total stood at,
   // as of the end of each calendar day (reconstructed from PTP history) ──
   const asOfTotals = [];
-  for (let day = 1; day <= daysInMonth; day++) {
-    const cutoff = dstr(day) + 'T23:59:59.999Z';
+  for (let day = 1; day <= trackDays; day++) {
+    const cutoff = tdstr(day) + 'T23:59:59.999Z';
     let tot = 0;
     for (const d of monthRows) {
       let cur = null;
@@ -7677,8 +7692,8 @@ function cdFilterAndRender() {
   }
   const asOfCells = asOfTotals.map((v, i) => {
     const day = i + 1;
-    const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-    const isToday = dstr(day) === todayStr;
+    const wk = tIsWeekend(day) ? ';background:#fafbfd' : '';
+    const isToday = tdstr(day) === todayStr;
     return `<td style="${tdS}${wk}${isToday ? ';background:#fef9c3' : ''};font-weight:600">${v > 0 ? fmtFull(v) : ''}</td>`;
   }).join('');
   const deltaCells = asOfTotals.map((v, i) => {
@@ -7708,12 +7723,13 @@ function cdFilterAndRender() {
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance
   </div>
-  <div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin-bottom:.35rem">How ${mLbl(_cdMonth)}'s total promised amount moved, day by day</div>
-  <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
-    ${dayColgroup}
+  <div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} moved during ${mLbl(trackMonth)}</div>
+  <div style="font-size:11px;color:var(--txt3);margin-bottom:.35rem">Each column is a day of ${mLbl(trackMonth)}; the value is the total promised for ${mLbl(_cdMonth)} as it stood at the end of that day.</div>
+  <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${CUST_W + INV_W + BU_W + POC_W + trackDays * DAY_W}px">
+    ${dayColgroup(trackDays)}
     <thead><tr>
-      <th style="${thL}">As of end of day →</th>
-      ${dayHead}
+      <th style="${thL}">As of end of day → (${mLbl(trackMonth)})</th>
+      ${trackDayHead}
     </tr></thead>
     <tbody>
       <tr><td style="${tdL};font-weight:600">Total promised for ${mLbl(_cdMonth)}</td>${asOfCells}</tr>
