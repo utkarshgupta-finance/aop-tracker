@@ -745,6 +745,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div id="ar-reco" class="pane">
     <span class="slabel" style="margin:0 0 .75rem">AR Reco</span>
     <div style="display:flex;align-items:center;gap:.85rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <input type="text" id="arreco-search" class="cust-input" placeholder="Search customer / BU / collector…" oninput="renderAdvancesReconcile()" style="font-size:12px;min-width:220px;max-width:300px">
       <div style="display:flex;align-items:center;gap:.6rem;font-size:12px;color:var(--txt3)">
         <span style="font-weight:600;color:var(--txt2)">Entity:</span>
         <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
@@ -1835,7 +1836,7 @@ let USER_ACCESS     = null;   // { allowed_tabs, allowed_bus, is_admin, display_
 let USER_JWT        = null;   // Bearer token for all API calls
 const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
 const ALL_TABS_CFG = [
-  { id: 'ar',                  label: 'AR',                  abbr: 'AR',  fn: 'showARTab(this)' },
+  { id: 'ar',                  label: 'Open AR',             abbr: 'AR',  fn: 'showARTab(this)' },
   { id: 'ar-reco',             label: 'AR Reco',             abbr: 'RR',  fn: 'showARRecoTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'collector-console',   label: 'Collector Console',   abbr: 'CC',  fn: 'showCollectorConsoleTab(this)',
@@ -3674,7 +3675,7 @@ function showARTab(btn) {
 
 function showARRecoTab(btn) {
   showTab('ar-reco', btn);
-  renderAdvancesReconcile();
+  renderAdvancesReconcile(true);
 }
 
 function showCollectorConsoleTab(btn) {
@@ -7765,7 +7766,6 @@ async function _syncAdvancesBackground() {
 }
 
 /* ─── RECONCILE VIEW ─────────────────────────────────────────── */
-let _reconData = null; // { balances: [...], invoiceTotals: {...} }
 
 async function syncBalances() {
   const btn = document.getElementById('arreco-balances-btn');
@@ -7806,8 +7806,7 @@ async function syncBalances() {
       info.textContent = `✓ 100% — Synced ${result.customers} customers${tied ? ' · matches balance sheet' : ''}`;
       info.style.color = '#16a34a';
     }
-    _reconData = null; // force reload
-    renderAdvancesReconcile();
+    renderAdvancesReconcile(true); // force reload of cached reco data
   } catch(e) {
     if (info) { info.textContent = 'Error: ' + e.message; info.style.color = 'var(--red)'; }
   } finally {
@@ -7816,26 +7815,46 @@ async function syncBalances() {
   }
 }
 
-async function renderAdvancesReconcile() {
+let _arRecoRaw = null;   // cached { balances, invoices, master, bsARTotal }
+let _arRecoRows = [];    // rendered rows, used by the breakup drill-down
+
+async function loadARRecoData(force = false) {
+  if (_arRecoRaw && !force) return _arRecoRaw;
+  const [balR, invR, cmR] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_id,contact_name,outstanding_receivable_amount_bcy,synced_at&order=contact_name`, { headers: cmrrHdr() }),
+    fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,invoice_number,balance_inr,entity,invoice_url`, { headers: cmrrHdr() }),
+    fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master?select=customer_name,bu_name,collector_name`, { headers: cmrrHdr() }),
+  ]);
+  if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
+  const allBalances = await balR.json();
+  const invoices = invR.ok ? await invR.json() : [];
+  const masterRows = cmR.ok ? await cmR.json() : [];
+  const master = {};
+  for (const m of masterRows) master[(m.customer_name || '').toLowerCase()] = { bu: m.bu_name || '', collector: m.collector_name || '' };
+  const bsARRow = allBalances.find(b => b.contact_name === '__BS_AR__');
+  _arRecoRaw = {
+    balances: allBalances.filter(b => b.contact_name !== '__BS_AR__'),
+    invoices, master,
+    bsARTotal: bsARRow ? Number(bsARRow.outstanding_receivable_amount_bcy || 0) : null,
+  };
+  return _arRecoRaw;
+}
+
+function _arRecoEntitySel() {
+  return {
+    showIN: document.getElementById('arreco-entity-in')?.checked !== false,
+    showUK: document.getElementById('arreco-entity-uk')?.checked === true,
+  };
+}
+
+async function renderAdvancesReconcile(force = false) {
   const wrap = document.getElementById('arreco-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
+  if (!_arRecoRaw || force) wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
   try {
-    const showIN = document.getElementById('arreco-entity-in')?.checked !== false;
-    const showUK = document.getElementById('arreco-entity-uk')?.checked === true;
-
-    const [balR, invR] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,currency_code,synced_at&order=contact_name`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr,entity`, { headers: cmrrHdr() }),
-    ]);
-    if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
-    const allBalances = await balR.json();
-    const invoices = invR.ok ? await invR.json() : [];
-
-    // Separate the __BS_AR__ marker row (balance sheet control account total) from customer rows
-    const bsARRow  = allBalances.find(b => b.contact_name === '__BS_AR__');
-    const balances = allBalances.filter(b => b.contact_name !== '__BS_AR__');
-    const bsARTotal = bsARRow ? Number(bsARRow.outstanding_receivable_amount_bcy || 0) : null;
+    const { balances, invoices, master, bsARTotal } = await loadARRecoData(force);
+    const { showIN, showUK } = _arRecoEntitySel();
+    const q = (document.getElementById('arreco-search')?.value || '').trim().toLowerCase();
 
     // Map each customer to its entity(ies) from invoices, and aggregate open
     // invoice balances for the SELECTED entities only.
@@ -7850,18 +7869,18 @@ async function renderAdvancesReconcile() {
       }
     }
 
-    // Aggregate balances by name (sum duplicates, keep latest sync time)
-    const balByName = {}, balSyncAt = {};
+    // Aggregate balances by name (sum duplicates, collect contact ids)
+    const balByName = {}, balIds = {}, balSyncAt = {};
     for (const b of balances) {
       const name = b.contact_name || '';
       balByName[name] = (balByName[name] || 0) + Number(b.outstanding_receivable_amount_bcy || 0);
+      (balIds[name] = balIds[name] || []).push(b.contact_id);
       if (!balSyncAt[name] || b.synced_at > balSyncAt[name]) balSyncAt[name] = b.synced_at;
     }
 
     // Entity selection applies to BOTH columns:
     //  UK only    → only customers mapped to the UK entity
     //  India only → drop customers mapped exclusively to the UK entity
-    //  (balances come from India Zoho Books; UK customers usually have none)
     const inScope = (name) => {
       if (showIN && showUK) return true;
       if (showUK) return ukSet.has(name);
@@ -7870,20 +7889,28 @@ async function renderAdvancesReconcile() {
     };
 
     const seenNames = new Set(Object.keys(balByName));
-    const rows = [];
+    let rows = [];
     for (const [name, ledger] of Object.entries(balByName)) {
       if (!inScope(name)) continue;
       const openAR = invByCustomer[name] || 0;
       // Keep negative (credit) balances — they're part of the balance sheet AR total
       if (Math.abs(ledger) < 0.01 && openAR < 0.01) continue;
-      rows.push({ name, ledger, openAR, diff: ledger - openAR });
+      rows.push({ name, ledger, openAR, diff: ledger - openAR, ids: balIds[name] || [] });
     }
     for (const [name, openAR] of Object.entries(invByCustomer)) {
       if (!seenNames.has(name) && openAR > 0.01 && inScope(name)) {
-        rows.push({ name, ledger: 0, openAR, diff: -openAR });
+        rows.push({ name, ledger: 0, openAR, diff: -openAR, ids: [] });
       }
     }
+    for (const r of rows) {
+      const m = master[r.name.toLowerCase()] || {};
+      r.bu = m.bu || '';
+      r.collector = m.collector || '';
+    }
+    if (q) rows = rows.filter(r =>
+      r.name.toLowerCase().includes(q) || r.bu.toLowerCase().includes(q) || r.collector.toLowerCase().includes(q));
     rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    _arRecoRows = rows;
 
     const fmt = v => Math.abs(v) >= 0.005 ? v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
     const fmtDiff = (v) => {
@@ -7902,18 +7929,19 @@ async function renderAdvancesReconcile() {
     const totalLedger = rows.reduce((s, r) => s + r.ledger, 0);
     const totalAR     = rows.reduce((s, r) => s + r.openAR, 0);
     const totalDiff   = totalLedger - totalAR;
-
-    // Balance sheet AR vs CBS gap (journal entries / Debtor account not in CBS)
     const bsGap = bsARTotal !== null ? bsARTotal - totalLedger : null;
 
     const entityLabel = showIN && showUK ? 'India + UK' : showUK ? 'UK' : showIN ? 'India' : 'None';
-    // BS AR control row is the India Zoho Books total — only meaningful when India is shown
-    const showBsRow = bsARTotal !== null && showIN;
+    // BS AR control row is the India Zoho Books total — only meaningful for the
+    // full unfiltered India view
+    const showBsRow = bsARTotal !== null && showIN && !q;
 
-    wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px" id="adv-recon-tbl">
+    wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:760px" id="adv-recon-tbl">
     <thead><tr>
       <th style="${thS};text-align:center">#</th>
       <th style="${thS};text-align:left">Customer</th>
+      <th style="${thS};text-align:left">BU</th>
+      <th style="${thS};text-align:left">Collector</th>
       <th style="${thS};text-align:right">AR Balance (Balance Sheet)</th>
       <th style="${thS};text-align:right">Open Invoices — ${escHtml(entityLabel)}</th>
       <th style="${thS};text-align:right">Difference</th>
@@ -7921,38 +7949,155 @@ async function renderAdvancesReconcile() {
     <tbody>
     ${rows.map((r, i) => {
       const isZero = Math.abs(r.diff) < 0.005;
+      const diffCell = isZero
+        ? fmtDiff(r.diff)
+        : `<span onclick="arRecoBreakup(${i})" title="Click for breakup of this difference" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${fmtDiff(r.diff)}</span>`;
       return `<tr style="${isZero ? '' : 'background:#fffbeb'}">
         <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px">${i + 1}</td>
         <td style="${tdS};text-align:left;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.name)}">${escHtml(r.name || '—')}</td>
+        <td style="${tdS};text-align:left;font-size:11.5px;color:var(--txt2);white-space:nowrap">${escHtml(r.bu || '—')}</td>
+        <td style="${tdS};text-align:left;font-size:11.5px;color:var(--txt2);white-space:nowrap">${escHtml(r.collector || '—')}</td>
         <td data-sort="${r.ledger}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600">${fmt(r.ledger)}</td>
         <td data-sort="${r.openAR}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmt(r.openAR)}</td>
-        <td data-sort="${r.diff}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${fmtDiff(r.diff)}</td>
+        <td data-sort="${r.diff}" style="${tdS};text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">${diffCell}</td>
       </tr>`;
     }).join('')}
     </tbody>
     <tfoot>
       <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
         <td></td>
-        <td style="${tdS}">AR Ledger Total (${rows.length} customers)</td>
+        <td style="${tdS}" colspan="3">AR Ledger Total (${rows.length} customers${q ? ', filtered' : ''})</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalLedger)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmtDiff(totalDiff)}</td>
       </tr>
       ${showBsRow ? `<tr style="background:${Math.abs(bsGap ?? 0) < 1 ? '#f0fdf4' : '#fef9c3'};border-top:1px solid ${Math.abs(bsGap ?? 0) < 1 ? '#bbf7d0' : '#fde68a'}">
         <td></td>
-        <td style="${tdS};font-size:11px;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'};font-weight:600">Balance Sheet AR (control account)${Math.abs(bsGap ?? 0) < 1 ? ' ✓ matches' : ''}</td>
+        <td style="${tdS};font-size:11px;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'};font-weight:600" colspan="3">Balance Sheet AR (control account)${Math.abs(bsGap ?? 0) < 1 ? ' ✓ matches' : ''}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'}">${fmt(bsARTotal)}</td>
         <td style="${tdS}"></td>
         <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && Math.abs(bsGap) >= 1 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Entity: <strong>${escHtml(entityLabel)}</strong> (applies to both columns)</td>
+        <td colspan="7" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Entity: <strong>${escHtml(entityLabel)}</strong> (applies to both columns) &nbsp;·&nbsp; Click a Difference for its breakup</td>
       </tr>
     </tfoot>
     </table></div>`;
     makeSortable(document.getElementById('adv-recon-tbl'), { skipLastRow: true });
   } catch(e) {
     wrap.innerHTML = `<div style="padding:2rem;color:var(--red)">Error: ${escHtml(e.message)}</div>`;
+  }
+}
+
+/* ─── AR RECO: DIFFERENCE BREAKUP DRILL-DOWN ─────────────────── */
+function _zohoLink(path) { return `https://books.zoho.in/app/60001574931#/${path}`; }
+
+async function arRecoBreakup(idx) {
+  const row = _arRecoRows[idx];
+  if (!row) return;
+  const fmtN = v => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  document.getElementById('arreco-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'arreco-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow:auto';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:880px;width:100%;padding:1.1rem 1.3rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div style="font-weight:700;font-size:15px">${escHtml(row.name)}</div>
+      <div style="display:flex;gap:.7rem;align-items:center">
+        ${row.ids.length ? `<a href="${_zohoLink('contacts/' + row.ids[0])}" target="_blank" rel="noopener" style="font-size:12px;color:#0891b2;font-weight:600;text-decoration:none">Open in Zoho ↗</a>` : ''}
+        <button onclick="document.getElementById('arreco-modal').remove()" style="border:none;background:#eef2f7;border-radius:6px;padding:.25rem .6rem;cursor:pointer;font-size:13px">✕</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:1.4rem;margin-top:.7rem;font-size:12px;flex-wrap:wrap">
+      <div><span style="color:var(--txt3)">AR Balance (BS):</span> <strong style="font-family:var(--mono)">${fmtN(row.ledger)}</strong></div>
+      <div><span style="color:var(--txt3)">Open Invoices (portal):</span> <strong style="font-family:var(--mono)">${fmtN(row.openAR)}</strong></div>
+      <div><span style="color:var(--txt3)">Difference:</span> <strong style="font-family:var(--mono);color:${row.diff > 0 ? '#b45309' : '#0891b2'}">${fmtN(row.diff)}</strong></div>
+    </div>
+    <div id="arreco-modal-body" style="margin-top:.9rem;font-size:12.5px;color:var(--txt3)">Loading breakup from Zoho Books…</div>
+  </div>`;
+  document.body.appendChild(ov);
+  const body = document.getElementById('arreco-modal-body');
+
+  const { showIN, showUK } = _arRecoEntitySel();
+  const portal = (_arRecoRaw?.invoices || [])
+    .filter(i => (i.customer_name || '') === row.name)
+    .filter(i => (i.entity === 'UK' ? showUK : showIN))
+    .filter(i => Number(i.balance_inr || 0) > 0.005);
+
+  if (!row.ids.length) {
+    body.innerHTML = `<div style="padding:.6rem 0;color:#92400e">This customer has no India Zoho Books balance (UK-entity customer) — the AR Balance column is India Books only. Its open portal invoices:</div>
+      ${portal.map(i => `<div style="display:flex;justify-content:space-between;padding:.28rem 0;border-bottom:1px solid var(--brd)">
+        <span>${i.invoice_url ? `<a href="${escHtml(i.invoice_url)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(i.invoice_number || '')}</a>` : escHtml(i.invoice_number || '')} <span style="color:var(--ink-faint);font-size:11px">${i.entity === 'UK' ? 'UK' : 'IN'}</span></span>
+        <span style="font-family:var(--mono)">${fmtN(i.balance_inr)}</span>
+      </div>`).join('') || '<div style="color:var(--ink-faint)">No open invoices.</div>'}`;
+    return;
+  }
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances?breakup=1&customer_ids=${row.ids.join(',')}`, { headers: cmrrHdr() });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'HTTP ' + r.status);
+
+    const pByNum = {}; portal.forEach(i => { pByNum[i.invoice_number] = i; });
+    const zByNum = {}; d.invoices.forEach(i => { zByNum[i.number] = i; });
+
+    const zohoOnly   = d.invoices.filter(i => !pByNum[i.number]);
+    const portalOnly = portal.filter(i => !zByNum[i.invoice_number]);
+    const mismatched = d.invoices
+      .filter(i => pByNum[i.number] && Math.abs(Number(pByNum[i.number].balance_inr || 0) - i.balance_bcy) > 0.5)
+      .map(i => ({ z: i, p: pByNum[i.number] }));
+    const matched = d.invoices.filter(i => pByNum[i.number] && Math.abs(Number(pByNum[i.number].balance_inr || 0) - i.balance_bcy) <= 0.5);
+
+    const zInvTotal = d.invoices.reduce((s, i) => s + i.balance_bcy, 0);
+    const matchedTotal = matched.reduce((s, i) => s + i.balance_bcy, 0);
+    // Items in the AR account that are not open invoices: journals, TDS
+    // entries, debit notes, opening balances (net)
+    const nonInvoice = Math.round((row.ledger - zInvTotal) * 100) / 100;
+
+    const line = (left, right, opts = {}) => `<div style="display:flex;justify-content:space-between;gap:1rem;padding:.28rem 0;border-bottom:1px solid var(--brd);${opts.muted ? 'color:var(--ink-faint);' : ''}">
+      <span style="min-width:0">${left}</span><span style="font-family:var(--mono);white-space:nowrap">${right}</span></div>`;
+    const zl = (mod, id, label) => `<a href="${_zohoLink(mod + '/' + id)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(label)}</a>`;
+    const sec = (title, html, note) => html
+      ? `<div style="margin-top:.9rem"><div style="font-weight:700;font-size:12px;color:var(--txt2);margin-bottom:.2rem">${title}${note ? ` <span style="font-weight:400;color:var(--ink-faint)">${note}</span>` : ''}</div>${html}</div>`
+      : '';
+
+    let html = '';
+    html += sec(`Open in Zoho but missing from portal AR (${zohoOnly.length})`,
+      zohoOnly.map(i => line(`${zl('invoices', i.id, i.number)} <span style="color:var(--ink-faint);font-size:11px">${escHtml(i.date || '')} · ${escHtml(i.status || '')}</span>`, '+' + fmtN(i.balance_bcy))).join(''),
+      '— run Sync AR to pull these in');
+    html += sec(`In portal AR but no longer open in Zoho (${portalOnly.length})`,
+      portalOnly.map(i => line(`${i.invoice_url ? `<a href="${escHtml(i.invoice_url)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(i.invoice_number || '')}</a>` : escHtml(i.invoice_number || '')} <span style="color:var(--ink-faint);font-size:11px">${i.entity === 'UK' ? 'UK entity' : ''}</span>`, '−' + fmtN(i.balance_inr))).join(''),
+      '— paid / credited in Zoho since the last AR sync, or belongs to the other entity');
+    html += sec(`Balance differs between Zoho and portal (${mismatched.length})`,
+      mismatched.map(({ z, p }) => line(`${zl('invoices', z.id, z.number)} <span style="color:var(--ink-faint);font-size:11px">Zoho ${fmtN(z.balance_bcy)} vs portal ${fmtN(p.balance_inr)}</span>`, (z.balance_bcy - Number(p.balance_inr) > 0 ? '+' : '−') + fmtN(Math.abs(z.balance_bcy - Number(p.balance_inr))))).join(''),
+      '— partial payment or credit applied since the last AR sync');
+    if (Math.abs(nonInvoice) >= 0.5) {
+      html += sec('Non-invoice AR items (journals, TDS entries, debit notes — net)',
+        line(`Ledger entries in the AR account that are not open invoices. ${zl('contacts', row.ids[0], 'View customer ledger in Zoho ↗')}`, (nonInvoice > 0 ? '+' : '−') + fmtN(Math.abs(nonInvoice))));
+    }
+    if (matched.length) {
+      html += sec('', line(`${matched.length} invoice${matched.length > 1 ? 's' : ''} match between Zoho and portal`, fmtN(matchedTotal), { muted: true }));
+    }
+
+    const cns = d.creditnotes || [], pays = d.payments || [];
+    if (cns.length || pays.length) {
+      html += sec('Context — customer credits held outside AR (do not reduce the balance sheet AR)',
+        cns.map(c => line(`Open credit note ${zl('creditnotes', c.id, c.number)} <span style="color:var(--ink-faint);font-size:11px">${escHtml(c.date || '')}</span>`, fmtN(c.balance_bcy))).join('') +
+        pays.map(p => line(`Unapplied payment ${zl('paymentsreceived', p.id, p.number || String(p.id))} <span style="color:var(--ink-faint);font-size:11px">${escHtml(p.date || '')}</span>`, fmtN(p.unused_bcy))).join(''));
+    }
+
+    const explained = Math.round(((zInvTotal - portal.reduce((s, i) => s + Number(i.balance_inr || 0), 0)) + nonInvoice) * 100) / 100;
+    const residual = Math.round((row.diff - explained) * 100) / 100;
+    html += `<div style="margin-top:1rem;padding:.5rem .7rem;background:#f0f9ff;border-radius:6px;font-size:12px;display:flex;justify-content:space-between">
+      <span>Breakup total (invoice differences + non-invoice AR items)</span>
+      <span style="font-family:var(--mono);font-weight:700">${fmtN(explained)}${Math.abs(residual) < 1 ? ' ✓' : ` (residual ${fmtN(residual)})`}</span>
+    </div>`;
+
+    body.innerHTML = html || '<div style="color:var(--ink-faint)">No differences found.</div>';
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--red)">Error loading breakup: ${escHtml(e.message)}</div>`;
   }
 }
 
