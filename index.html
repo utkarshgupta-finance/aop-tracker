@@ -2214,10 +2214,7 @@ async function loadSettingsPane() {
   await Promise.all([loadBuList(), loadCollectorList(), loadAppPermissions()]);
   renderBuMasterList();
   renderCollectorMasterList();
-  _cmData = [];
-  _arCustMaster = {};
-  _arCustMasterLoading = false;
-  await loadArCustMaster();
+  await loadArCustMaster(true);
   await renderCustMasterTable();
   if (USER_ACCESS && USER_ACCESS.is_admin) {
     loadUsersPanel();
@@ -2257,9 +2254,10 @@ async function renderCustMasterTable() {
   const buFilter     = document.getElementById('cm-filter-bu')?.value || '';
   const mappedFilter = document.getElementById('cm-filter-mapped')?.value || '';
 
-  const masterKeys = new Set(_cmData.map(r => r.customer_name.toLowerCase()));
+  if (!_arAllRows.length) { try { await loadAR(); } catch(_) {} }
+  const masterKeys = new Set(_cmData.map(r => (r.customer_name || '').toLowerCase().trim()));
   const arCustomers = [...new Set(_arAllRows.map(r => r.customer_name).filter(Boolean))];
-  const unmapped = arCustomers.filter(n => !masterKeys.has(n.toLowerCase()));
+  const unmapped = arCustomers.filter(n => !masterKeys.has(n.toLowerCase().trim()));
 
   let rows = [
     ..._cmData.map(r => ({ name: r.customer_name, bu: r.bu_name || '', collector: r.collector_name || '', inMaster: true })),
@@ -2319,8 +2317,7 @@ async function saveCustMasterCell(el, field) {
       });
     }
     if (status) { status.textContent = '✓ Saved'; setTimeout(() => { if (status.textContent === '✓ Saved') status.textContent = ''; }, 2000); }
-    _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
-    await loadArCustMaster();
+    await loadArCustMaster(true);
     renderCustMasterTable();
   } catch(e) { if (status) status.textContent = 'Error: ' + e.message; }
 }
@@ -2330,8 +2327,7 @@ async function deleteCustMasterRow(name) {
   await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_master?customer_name=eq.${encodeURIComponent(name)}`, {
     method: 'DELETE', headers: cmrrHdr()
   });
-  _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
-  await loadArCustMaster();
+  await loadArCustMaster(true);
   renderCustMasterTable();
 }
 
@@ -2377,8 +2373,7 @@ async function uploadCustMaster(file) {
     });
     if (!r.ok) { const e = await r.text(); throw new Error(e); }
     if (status) status.textContent = `✓ ${rows.length} rows imported`;
-    _cmData = []; _arCustMaster = {}; _arCustMasterLoading = false;
-    await loadArCustMaster();
+    await loadArCustMaster(true);
     renderCustMasterTable();
   } catch(e) { if (status) status.textContent = 'Error: ' + e.message; }
 }
@@ -3755,31 +3750,44 @@ function _applyARSubTabs() {
   if (vtWrap) vtWrap.style.display = _arActivePanes.has('invoices') ? '' : 'none';
 }
 
-async function loadArCustMaster() {
-  if (_arCustMasterLoading || _cmData.length > 0) return;
+let _cmLoadPromise = null;
+async function loadArCustMaster(force = false) {
+  if (!force && _cmData.length > 0) return;
+  if (_cmLoadPromise) return _cmLoadPromise;   // join the in-flight load
   _arCustMasterLoading = true;
-  try {
-    const PAGE = 1000;
-    let offset = 0;
-    _cmData = [];
-    while (true) {
-      const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_customer_master?select=customer_name,bu_name,collector_name&order=customer_name&limit=${PAGE}&offset=${offset}`,
-        { headers: cmrrHdr() }
-      );
-      if (!r.ok) { console.warn('loadArCustMaster: HTTP', r.status); break; }
-      const rows = await r.json();
-      _cmData.push(...rows);
-      if (rows.length < PAGE) break;
-      offset += PAGE;
-    }
-    _arCustMaster = {};
-    for (const row of _cmData) {
-      if (row.customer_name) _arCustMaster[row.customer_name.toLowerCase().trim()] = row;
-    }
-    renderAR();
-  } catch(e) { console.warn('loadArCustMaster:', e); }
-  finally { _arCustMasterLoading = false; }
+  const run = (async () => {
+    try {
+      const PAGE = 1000;
+      let offset = 0;
+      const acc = [];                          // local — never shared mid-load
+      while (true) {
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/ar_customer_master?select=customer_name,bu_name,collector_name&order=customer_name&limit=${PAGE}&offset=${offset}`,
+          { headers: cmrrHdr() }
+        );
+        if (!r.ok) { console.warn('loadArCustMaster: HTTP', r.status); return; }
+        const rows = await r.json();
+        acc.push(...rows);
+        if (rows.length < PAGE) break;
+        offset += PAGE;
+      }
+      const seen = new Set(), uniq = [];
+      for (const row of acc) {
+        const k = (row.customer_name || '').toLowerCase().trim();
+        if (!k || seen.has(k)) continue;
+        seen.add(k); uniq.push(row);
+      }
+      _cmData = uniq;
+      _arCustMaster = {};
+      for (const row of _cmData) _arCustMaster[row.customer_name.toLowerCase().trim()] = row;
+      renderAR();
+    } catch(e) { console.warn('loadArCustMaster:', e); }
+  })();
+  _cmLoadPromise = run;
+  try { await run; } finally {
+    if (_cmLoadPromise === run) _cmLoadPromise = null;
+    _arCustMasterLoading = false;
+  }
 }
 
 function _cmLookup(customerName) {
@@ -7630,10 +7638,11 @@ function cdFilterAndRender() {
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
 
   // Evenly sized day columns via fixed table layout
-  const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90;
-  const tblW = CUST_W + INV_W + BU_W + POC_W + daysInMonth * DAY_W;
-  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
-  const dayColgroup = (nDays) => `<colgroup><col style="width:${CUST_W + INV_W + BU_W + POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
+  const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90, TOT_W = 110;
+  const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W;
+  const tblW = LEAD_W + daysInMonth * DAY_W;
+  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${TOT_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
+  const dayColgroup = (nDays) => `<colgroup><col style="width:${LEAD_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
 
   const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
@@ -7658,6 +7667,7 @@ function cdFilterAndRender() {
     const byCust = {};
     monthRows.forEach(d => { (byCust[d.customerName] = byCust[d.customerName] || []).push(d); });
     bodyHtml = Object.entries(byCust).sort((a, b) => a[0].localeCompare(b[0])).map(([cust, ds]) => {
+      let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
         let curSum = 0, oldSum = 0;
@@ -7666,7 +7676,7 @@ function cdFilterAndRender() {
           if (!c) return;
           if (c.isCurrent) curSum += c.amt; else oldSum += c.amt;
         });
-        if (curSum > 0) dayTotals[day] += curSum;
+        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
         if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '' })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
@@ -7678,6 +7688,7 @@ function cdFilterAndRender() {
         <td style="${tdL};color:var(--txt3)">${ds.length} inv${cdMoveChip(agg)}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].bu || '—')}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].collector || '—')}</td>
+        <td style="${tdS};font-weight:700;background:#f8fafc">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -7685,10 +7696,11 @@ function cdFilterAndRender() {
     bodyHtml = monthRows
       .sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '') || (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''))
       .map(d => {
+        let rowTot = 0;
         const cells = Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
           const c = cellFor(d, day);
-          if (c && c.isCurrent) dayTotals[day] += c.amt;
+          if (c && c.isCurrent) { dayTotals[day] += c.amt; rowTot += c.amt; }
           const wk = isWeekend(day) ? ';background:#fafbfd' : '';
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
@@ -7698,6 +7710,7 @@ function cdFilterAndRender() {
           <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(d.invoiceNumber || '—')}${moved}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.bu || '—')}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.collector || '—')}</td>
+          <td style="${tdS};font-weight:700;background:#f8fafc">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
           ${cells}
         </tr>`;
       }).join('');
@@ -7758,7 +7771,7 @@ function cdFilterAndRender() {
     }).join('');
     const lastKnown = [...totals].reverse().find(v => v !== null);
     const html = `<div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin:0 0 .1rem">Movement during ${mLbl(tm)}${tm === curMonth ? ' <span style="font-weight:400;color:var(--txt3)">(current month)</span>' : ''}</div>
-    <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px;margin-bottom:.9rem"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${CUST_W + INV_W + BU_W + POC_W + nDays * DAY_W}px">
+    <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px;margin-bottom:.9rem"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${LEAD_W + nDays * DAY_W}px">
       ${dayColgroup(nDays)}
       <thead><tr><th style="${thL}">As of end of day → (${mLbl(tm)})</th>${head}</tr></thead>
       <tbody>
@@ -7779,11 +7792,13 @@ function cdFilterAndRender() {
       <th style="${thL}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
       <th style="${thL}">BU</th>
       <th style="${thL}">POC</th>
+      <th style="${thS};background:#eef1f6">Total</th>
       ${dayHead}
     </tr></thead>
     <tbody>${bodyHtml}</tbody>
     <tfoot><tr style="background:#f8fafc">
       <td colspan="4" style="${tdL};font-weight:700">Total promised (current PTPs)</td>
+      <td style="${tdS};font-weight:700;background:#eef7f1;color:#166534">${fmtFull(dayTotals.reduce((a, b) => a + b, 0))}</td>
       ${totCells}
     </tr></tfoot>
   </table></div>
