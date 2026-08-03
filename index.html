@@ -317,14 +317,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-aging-leg-item{display:flex;align-items:center;gap:.3rem;font-size:10px;color:var(--ink-soft);font-family:var(--mono)}
 .ar-aging-leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 /* ── AR modern table ─────────────────────────────────────────── */
-.ar-tbl{width:100%;border-collapse:collapse}
-.ar-tbl thead th{background:#FAFAFB;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);padding:.6rem .9rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.ar-tbl{width:100%;border-collapse:separate;border-spacing:0}
+.ar-tbl thead th{position:sticky;top:0;z-index:3;background:#f6f8fb;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5b6472;padding:.5rem .6rem;border-bottom:1.5px solid var(--brd2);text-align:left;white-space:nowrap}
 .ar-tbl thead th.r{text-align:right}
-.ar-tbl tbody tr{border-bottom:1px solid var(--line);transition:background .1s}
-.ar-tbl tbody tr:hover{background:#FAFBFC}
-.ar-tbl td{padding:.55rem .9rem;vertical-align:middle;text-align:left}
-.ar-tbl .td-cust{font-weight:500;font-size:11.5px;color:var(--ink);max-width:200px;white-space:normal;word-break:break-word;line-height:1.35}
-.ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--action);text-decoration:none}
+.ar-tbl tbody tr{transition:background .1s}
+.ar-tbl tbody tr:nth-child(even) td{background:#fbfcfe}
+.ar-tbl tbody tr:hover td{background:#eef4fb}
+.ar-tbl td{padding:.4rem .6rem;vertical-align:middle;text-align:left;border-bottom:1px solid var(--line);background:#fff}
+/* Customer column: single line + ellipsis, sticky on horizontal scroll */
+.ar-tbl .td-cust{font-weight:600;font-size:12px;color:var(--ink);max-width:230px;min-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-tbl thead th:first-child,.ar-tbl .td-cust{position:sticky;left:0;z-index:1}
+.ar-tbl thead th:first-child{z-index:4}
+.ar-tbl thead th:first-child,.ar-tbl .td-cust{box-shadow:2px 0 0 rgba(15,23,42,.04)}
+.ar-tbl .td-inv a{font-family:var(--mono);font-size:12px;color:var(--action);text-decoration:none;white-space:nowrap}
+.ar-tbl .td-inv{white-space:nowrap}
 .ar-tbl .td-inv a:hover{text-decoration:underline}
 .ar-inv-link{cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--action)}
 .ar-inv-link:hover{text-decoration:underline}
@@ -5045,7 +5051,7 @@ function renderARCustomerView(rows) {
       ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const collectorBadge = collector
-      ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(collector)}</span>`
+      ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(collector)}</span>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const entities = [...new Set(invs.map(r => r.entity).filter(Boolean))];
     const entBadges = entities.map(e => e === 'UK'
@@ -5199,11 +5205,11 @@ function renderARInvoiceList(rows) {
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
     const bu = arGetBu(r.customer_name);
-    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const collectorName = arGetCollector(r.customer_name);
     const collectorCell = collectorName
-      ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(collectorName)}</span>`
+      ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(collectorName)}</span>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const invKey = `${r.invoice_number}||${r.entity}`;
     const tagCapsules = (_arInvTags[invKey] || []).map(t => {
@@ -5236,20 +5242,20 @@ function renderARInvoiceList(rows) {
           : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr class="${sevCls}">
-      <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
+      <td class="td-cust" title="${escHtml(r.customer_name)}">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td style="white-space:nowrap">${buCell}</td>
       <td style="white-space:nowrap">${collectorCell}</td>
       <td class="td-inv">${invLink}${intPopupBtn}</td>
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
-      <td class="td-days">${daysCell}</td>
+      <td class="td-days" style="text-align:right">${daysCell}</td>
       <td style="white-space:nowrap">${ptpCell}</td>
       <td class="td-amt" style="${balStyle}">₹${f(balINR)}${fxBal}</td>
       <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
       <td>${badge}</td>
       <td style="white-space:nowrap">${disputeCell}</td>
-      <td class="td-tags" style="min-width:120px"><div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center">${tagCapsules}${addTagBtn}</div></td>
+      <td class="td-tags" style="min-width:90px"><div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center">${tagCapsules}${addTagBtn}</div></td>
     </tr>`;
   }).join('');
 
@@ -5261,7 +5267,7 @@ function renderARInvoiceList(rows) {
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}
       ${th('Due Date','due_date')}
-      ${th('Due / Overdue','days')}
+      ${th('Overdue','days','r')}
       ${th('PTP','ptp')}
       ${th('Balance (INR)','balance','r')}
       ${th('Total (INR)','total','r')}
@@ -7726,8 +7732,8 @@ function renderAdvancesEntry() {
   const trs = rows.map((r, i) => {
     const bu = arGetBu(r.customer_name);
     const cl = arGetCollector(r.customer_name);
-    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const clCell = cl ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const clCell = cl ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr>
       <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px;min-width:32px">${i + 1}</td>
       <td style="${tdS};text-align:left;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.customer_name || '')}">${escHtml(r.customer_name || '—')}</td>
@@ -7807,8 +7813,8 @@ function renderAdvancesCustomer() {
     const invCount = arInvCount[name] || 0;
     const bu = arGetBu(name);
     const cl = arGetCollector(name);
-    const buCell = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const clCell = cl ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:4px">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const clCell = cl ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr>
       <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px;min-width:32px">${i + 1}</td>
       <td style="${tdS};text-align:left;font-weight:600;color:var(--navy2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(name)}">${escHtml(name)}</td>
@@ -7995,7 +8001,6 @@ async function syncBalances() {
 }
 
 let _arRecoRaw = null;   // cached { balances, invoices, master, bsARTotal }
-let _arRecoRows = [];    // rendered rows, used by the breakup drill-down
 
 async function loadARRecoData(force = false) {
   if (_arRecoRaw && !force) return _arRecoRaw;
@@ -8089,7 +8094,6 @@ async function renderAdvancesReconcile(force = false) {
     if (q) rows = rows.filter(r =>
       r.name.toLowerCase().includes(q) || r.bu.toLowerCase().includes(q) || r.collector.toLowerCase().includes(q));
     rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-    _arRecoRows = rows;
 
     const fmt = v => Math.abs(v) >= 0.005 ? v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
     const fmtDiff = (v) => {
@@ -8128,9 +8132,7 @@ async function renderAdvancesReconcile(force = false) {
     <tbody>
     ${rows.map((r, i) => {
       const isZero = Math.abs(r.diff) < 0.005;
-      const diffCell = isZero
-        ? fmtDiff(r.diff)
-        : `<span onclick="arRecoBreakup(${i})" title="Click for breakup of this difference" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${fmtDiff(r.diff)}</span>`;
+      const diffCell = fmtDiff(r.diff);
       return `<tr style="${isZero ? '' : 'background:#fffbeb'}">
         <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px">${i + 1}</td>
         <td style="${tdS};text-align:left;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.name)}">${escHtml(r.name || '—')}</td>
@@ -8158,125 +8160,13 @@ async function renderAdvancesReconcile(force = false) {
         <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && Math.abs(bsGap) >= 1 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="7" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Entity: <strong>${escHtml(entityLabel)}</strong> (applies to both columns) &nbsp;·&nbsp; Click a Difference for its breakup</td>
+        <td colspan="7" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Entity: <strong>${escHtml(entityLabel)}</strong> (applies to both columns)</td>
       </tr>
     </tfoot>
     </table></div>`;
     makeSortable(document.getElementById('adv-recon-tbl'), { skipLastRow: true });
   } catch(e) {
     wrap.innerHTML = `<div style="padding:2rem;color:var(--red)">Error: ${escHtml(e.message)}</div>`;
-  }
-}
-
-/* ─── AR RECO: DIFFERENCE BREAKUP DRILL-DOWN ─────────────────── */
-function _zohoLink(path) { return `https://books.zoho.in/app/60001574931#/${path}`; }
-
-async function arRecoBreakup(idx) {
-  const row = _arRecoRows[idx];
-  if (!row) return;
-  const fmtN = v => Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  document.getElementById('arreco-modal')?.remove();
-  const ov = document.createElement('div');
-  ov.id = 'arreco-modal';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow:auto';
-  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
-  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:880px;width:100%;padding:1.1rem 1.3rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
-      <div style="font-weight:700;font-size:15px">${escHtml(row.name)}</div>
-      <div style="display:flex;gap:.7rem;align-items:center">
-        ${row.ids.length ? `<a href="${_zohoLink('contacts/' + row.ids[0])}" target="_blank" rel="noopener" style="font-size:12px;color:#0891b2;font-weight:600;text-decoration:none">Open in Zoho ↗</a>` : ''}
-        <button onclick="document.getElementById('arreco-modal').remove()" style="border:none;background:#eef2f7;border-radius:6px;padding:.25rem .6rem;cursor:pointer;font-size:13px">✕</button>
-      </div>
-    </div>
-    <div style="display:flex;gap:1.4rem;margin-top:.7rem;font-size:12px;flex-wrap:wrap">
-      <div><span style="color:var(--txt3)">AR Balance (BS):</span> <strong style="font-family:var(--mono)">${fmtN(row.ledger)}</strong></div>
-      <div><span style="color:var(--txt3)">Open Invoices (portal):</span> <strong style="font-family:var(--mono)">${fmtN(row.openAR)}</strong></div>
-      <div><span style="color:var(--txt3)">Difference:</span> <strong style="font-family:var(--mono);color:${row.diff > 0 ? '#b45309' : '#0891b2'}">${fmtN(row.diff)}</strong></div>
-    </div>
-    <div id="arreco-modal-body" style="margin-top:.9rem;font-size:12.5px;color:var(--txt3)">Loading breakup from Zoho Books…</div>
-  </div>`;
-  document.body.appendChild(ov);
-  const body = document.getElementById('arreco-modal-body');
-
-  const { showIN, showUK } = _arRecoEntitySel();
-  const portal = (_arRecoRaw?.invoices || [])
-    .filter(i => (i.customer_name || '') === row.name)
-    .filter(i => (i.entity === 'UK' ? showUK : showIN))
-    .filter(i => Number(i.balance_inr || 0) > 0.005);
-
-  if (!row.ids.length) {
-    body.innerHTML = `<div style="padding:.6rem 0;color:#92400e">This customer has no India Zoho Books balance (UK-entity customer) — the AR Balance column is India Books only. Its open portal invoices:</div>
-      ${portal.map(i => `<div style="display:flex;justify-content:space-between;padding:.28rem 0;border-bottom:1px solid var(--brd)">
-        <span>${i.invoice_url ? `<a href="${escHtml(i.invoice_url)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(i.invoice_number || '')}</a>` : escHtml(i.invoice_number || '')} <span style="color:var(--ink-faint);font-size:11px">${i.entity === 'UK' ? 'UK' : 'IN'}</span></span>
-        <span style="font-family:var(--mono)">${fmtN(i.balance_inr)}</span>
-      </div>`).join('') || '<div style="color:var(--ink-faint)">No open invoices.</div>'}`;
-    return;
-  }
-
-  try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances?breakup=1&customer_ids=${row.ids.join(',')}`, { headers: cmrrHdr() });
-    const d = await r.json();
-    if (!r.ok || !d.ok) throw new Error(d.error || 'HTTP ' + r.status);
-
-    const pByNum = {}; portal.forEach(i => { pByNum[i.invoice_number] = i; });
-    const zByNum = {}; d.invoices.forEach(i => { zByNum[i.number] = i; });
-
-    const zohoOnly   = d.invoices.filter(i => !pByNum[i.number]);
-    const portalOnly = portal.filter(i => !zByNum[i.invoice_number]);
-    const mismatched = d.invoices
-      .filter(i => pByNum[i.number] && Math.abs(Number(pByNum[i.number].balance_inr || 0) - i.balance_bcy) > 0.5)
-      .map(i => ({ z: i, p: pByNum[i.number] }));
-    const matched = d.invoices.filter(i => pByNum[i.number] && Math.abs(Number(pByNum[i.number].balance_inr || 0) - i.balance_bcy) <= 0.5);
-
-    const zInvTotal = d.invoices.reduce((s, i) => s + i.balance_bcy, 0);
-    const matchedTotal = matched.reduce((s, i) => s + i.balance_bcy, 0);
-    // Items in the AR account that are not open invoices: journals, TDS
-    // entries, debit notes, opening balances (net)
-    const nonInvoice = Math.round((row.ledger - zInvTotal) * 100) / 100;
-
-    const line = (left, right, opts = {}) => `<div style="display:flex;justify-content:space-between;gap:1rem;padding:.28rem 0;border-bottom:1px solid var(--brd);${opts.muted ? 'color:var(--ink-faint);' : ''}">
-      <span style="min-width:0">${left}</span><span style="font-family:var(--mono);white-space:nowrap">${right}</span></div>`;
-    const zl = (mod, id, label) => `<a href="${_zohoLink(mod + '/' + id)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(label)}</a>`;
-    const sec = (title, html, note) => html
-      ? `<div style="margin-top:.9rem"><div style="font-weight:700;font-size:12px;color:var(--txt2);margin-bottom:.2rem">${title}${note ? ` <span style="font-weight:400;color:var(--ink-faint)">${note}</span>` : ''}</div>${html}</div>`
-      : '';
-
-    let html = '';
-    html += sec(`Open in Zoho but missing from portal AR (${zohoOnly.length})`,
-      zohoOnly.map(i => line(`${zl('invoices', i.id, i.number)} <span style="color:var(--ink-faint);font-size:11px">${escHtml(i.date || '')} · ${escHtml(i.status || '')}</span>`, '+' + fmtN(i.balance_bcy))).join(''),
-      '— run Sync AR to pull these in');
-    html += sec(`In portal AR but no longer open in Zoho (${portalOnly.length})`,
-      portalOnly.map(i => line(`${i.invoice_url ? `<a href="${escHtml(i.invoice_url)}" target="_blank" rel="noopener" style="color:#0891b2">${escHtml(i.invoice_number || '')}</a>` : escHtml(i.invoice_number || '')} <span style="color:var(--ink-faint);font-size:11px">${i.entity === 'UK' ? 'UK entity' : ''}</span>`, '−' + fmtN(i.balance_inr))).join(''),
-      '— paid / credited in Zoho since the last AR sync, or belongs to the other entity');
-    html += sec(`Balance differs between Zoho and portal (${mismatched.length})`,
-      mismatched.map(({ z, p }) => line(`${zl('invoices', z.id, z.number)} <span style="color:var(--ink-faint);font-size:11px">Zoho ${fmtN(z.balance_bcy)} vs portal ${fmtN(p.balance_inr)}</span>`, (z.balance_bcy - Number(p.balance_inr) > 0 ? '+' : '−') + fmtN(Math.abs(z.balance_bcy - Number(p.balance_inr))))).join(''),
-      '— partial payment or credit applied since the last AR sync');
-    if (Math.abs(nonInvoice) >= 0.5) {
-      html += sec('Non-invoice AR items (journals, TDS entries, debit notes — net)',
-        line(`Ledger entries in the AR account that are not open invoices. ${zl('contacts', row.ids[0], 'View customer ledger in Zoho ↗')}`, (nonInvoice > 0 ? '+' : '−') + fmtN(Math.abs(nonInvoice))));
-    }
-    if (matched.length) {
-      html += sec('', line(`${matched.length} invoice${matched.length > 1 ? 's' : ''} match between Zoho and portal`, fmtN(matchedTotal), { muted: true }));
-    }
-
-    const cns = d.creditnotes || [], pays = d.payments || [];
-    if (cns.length || pays.length) {
-      html += sec('Context — customer credits held outside AR (do not reduce the balance sheet AR)',
-        cns.map(c => line(`Open credit note ${zl('creditnotes', c.id, c.number)} <span style="color:var(--ink-faint);font-size:11px">${escHtml(c.date || '')}</span>`, fmtN(c.balance_bcy))).join('') +
-        pays.map(p => line(`Unapplied payment ${zl('paymentsreceived', p.id, p.number || String(p.id))} <span style="color:var(--ink-faint);font-size:11px">${escHtml(p.date || '')}</span>`, fmtN(p.unused_bcy))).join(''));
-    }
-
-    const explained = Math.round(((zInvTotal - portal.reduce((s, i) => s + Number(i.balance_inr || 0), 0)) + nonInvoice) * 100) / 100;
-    const residual = Math.round((row.diff - explained) * 100) / 100;
-    html += `<div style="margin-top:1rem;padding:.5rem .7rem;background:#f0f9ff;border-radius:6px;font-size:12px;display:flex;justify-content:space-between">
-      <span>Breakup total (invoice differences + non-invoice AR items)</span>
-      <span style="font-family:var(--mono);font-weight:700">${fmtN(explained)}${Math.abs(residual) < 1 ? ' ✓' : ` (residual ${fmtN(residual)})`}</span>
-    </div>`;
-
-    body.innerHTML = html || '<div style="color:var(--ink-faint)">No differences found.</div>';
-  } catch (e) {
-    body.innerHTML = `<div style="color:var(--red)">Error loading breakup: ${escHtml(e.message)}</div>`;
   }
 }
 
