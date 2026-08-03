@@ -8188,7 +8188,9 @@ async function loadAgingBrackets() {
       _agingBrackets = await r.json();
       _populateArAgingFilter();
       // Re-render AR aging views if data is already loaded
-      if (_arAllRows.length) { renderARAgingBar(_arAllRows); renderARAgingTable(_arAllRows); }
+      // Re-render through renderAR so the aging views use the same filtered
+      // row set as the KPI cards (exclusions, role, BU/collector filters)
+      if (_arAllRows.length) renderAR();
     }
   } catch(e) { console.warn('loadAgingBrackets:', e); }
 }
