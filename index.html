@@ -653,25 +653,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div style="display:flex;gap:.3rem">
           <button class="ar-stbtn active" id="adv-view-entry"     onclick="advSetView('entry')">By Entry</button>
           <button class="ar-stbtn"        id="adv-view-customer"  onclick="advSetView('customer')">By Customer</button>
-          <button class="ar-stbtn"        id="adv-view-reconcile" onclick="advSetView('reconcile')">Reconcile</button>
         </div>
         <input type="text" id="adv-search" class="cust-input" placeholder="Search customers…" oninput="renderAdvances()" style="font-size:12px;min-width:180px;max-width:260px;display:var(--adv-search-show,inline-block)">
         <label id="adv-excl-label" style="font-size:12px;display:flex;align-items:center;gap:.3rem;cursor:pointer;white-space:nowrap;color:var(--txt3)">
           <input type="checkbox" id="adv-show-excl" onchange="renderAdvances()"> Include excluded
         </label>
-        <div id="adv-entity-filter" style="display:none;font-size:12px;display:none;align-items:center;gap:.6rem;color:var(--txt3)">
-          <span style="font-weight:600;color:var(--txt2)">Entity:</span>
-          <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
-            <input type="checkbox" id="adv-entity-in" checked onchange="renderAdvances()"> India
-          </label>
-          <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
-            <input type="checkbox" id="adv-entity-uk" onchange="renderAdvances()"> UK
-          </label>
-        </div>
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
           <div id="adv-sync-btn-wrap" style="display:flex;gap:.4rem">
             <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
-            <button onclick="syncBalances()" id="adv-balances-btn" style="font-size:12px;padding:.32rem .9rem;background:#0891b2;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;display:none">🔄 Sync Balances</button>
           </div>
           <div id="adv-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
         </div>
@@ -751,6 +740,26 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <button class="rbtn" onclick="downloadUKARTemplate()" style="font-size:12px;padding:.28rem .8rem">⬇ Download Template</button>
       </div>
     </div>
+  </div>
+  <!-- ── AR Reco Pane ─────────────────────────────────────────── -->
+  <div id="ar-reco" class="pane">
+    <span class="slabel" style="margin:0 0 .75rem">AR Reco</span>
+    <div style="display:flex;align-items:center;gap:.85rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:.6rem;font-size:12px;color:var(--txt3)">
+        <span style="font-weight:600;color:var(--txt2)">Entity:</span>
+        <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="arreco-entity-in" checked onchange="renderAdvancesReconcile()"> India
+        </label>
+        <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="arreco-entity-uk" onchange="renderAdvancesReconcile()"> UK
+        </label>
+      </div>
+      <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
+        <button onclick="syncBalances()" id="arreco-balances-btn" style="font-size:12px;padding:.32rem .9rem;background:#0891b2;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Balances</button>
+        <div id="arreco-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
+      </div>
+    </div>
+    <div id="arreco-wrap" class="twrap"></div>
   </div>
   <!-- ── Collections Analysis Pane ───────────────────────────── -->
   <div id="collections-analysis" class="pane">
@@ -1827,6 +1836,8 @@ let USER_JWT        = null;   // Bearer token for all API calls
 const USER_ADMIN_URL = `${SUPABASE_URL}/functions/v1/user-admin`;
 const ALL_TABS_CFG = [
   { id: 'ar',                  label: 'AR',                  abbr: 'AR',  fn: 'showARTab(this)' },
+  { id: 'ar-reco',             label: 'AR Reco',             abbr: 'RR',  fn: 'showARRecoTab(this)',
+    roles: ['admin-edit','admin-view','admin'] },
   { id: 'collector-console',   label: 'Collector Console',   abbr: 'CC',  fn: 'showCollectorConsoleTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'collections-analysis',label: 'Collections Analysis', abbr: 'CA', fn: 'showCollectionsTab(this)',
@@ -1970,6 +1981,7 @@ function renderNav() {
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     document.getElementById('bottom-nav')?.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets(); }
+    if (activeId === 'ar-reco') renderAdvancesReconcile();
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
     if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
@@ -3658,6 +3670,11 @@ function showARTab(btn) {
   showTab('ar', btn);
   if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); loadAgingBrackets(); }
   loadArCustMaster();
+}
+
+function showARRecoTab(btn) {
+  showTab('ar-reco', btn);
+  renderAdvancesReconcile();
 }
 
 function showCollectorConsoleTab(btn) {
@@ -7459,27 +7476,12 @@ function advSetView(view) {
   _advView = view;
   document.getElementById('adv-view-entry')?.classList.toggle('active', view === 'entry');
   document.getElementById('adv-view-customer')?.classList.toggle('active', view === 'customer');
-  document.getElementById('adv-view-reconcile')?.classList.toggle('active', view === 'reconcile');
-  // Show/hide search + exclusion checkbox (not needed on reconcile view)
-  const isRecon = view === 'reconcile';
-  const srch = document.getElementById('adv-search');
-  const exclLabel = document.getElementById('adv-excl-label');
-  const entityFilter = document.getElementById('adv-entity-filter');
-  if (srch) srch.style.display = isRecon ? 'none' : '';
-  if (exclLabel) exclLabel.style.display = isRecon ? 'none' : '';
-  if (entityFilter) entityFilter.style.display = isRecon ? 'flex' : 'none';
-  // Toggle which sync button is visible
-  const advBtn = document.getElementById('adv-sync-btn');
-  const balBtn = document.getElementById('adv-balances-btn');
-  if (advBtn) advBtn.style.display = isRecon ? 'none' : '';
-  if (balBtn) balBtn.style.display = isRecon ? '' : 'none';
   renderAdvances();
 }
 
 function renderAdvances() {
-  if (_advView === 'entry') renderAdvancesEntry();
-  else if (_advView === 'customer') renderAdvancesCustomer();
-  else renderAdvancesReconcile();
+  if (_advView === 'customer') renderAdvancesCustomer();
+  else renderAdvancesEntry();
 }
 
 function makeSortable(tbl, { skipLastRow = false } = {}) {
@@ -7766,8 +7768,8 @@ async function _syncAdvancesBackground() {
 let _reconData = null; // { balances: [...], invoiceTotals: {...} }
 
 async function syncBalances() {
-  const btn = document.getElementById('adv-balances-btn');
-  const info = document.getElementById('adv-sync-info');
+  const btn = document.getElementById('arreco-balances-btn');
+  const info = document.getElementById('arreco-sync-info');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
   if (info) { info.textContent = 'Syncing… 0%'; info.style.color = 'var(--txt3)'; }
 
@@ -7815,22 +7817,16 @@ async function syncBalances() {
 }
 
 async function renderAdvancesReconcile() {
-  const wrap = document.getElementById('adv-wrap');
+  const wrap = document.getElementById('arreco-wrap');
   if (!wrap) return;
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading…</div>';
   try {
-    const showIN = document.getElementById('adv-entity-in')?.checked !== false;
-    const showUK = document.getElementById('adv-entity-uk')?.checked === true;
-    // Build entity filter for ar_invoices
-    let entityFilter = '';
-    if (showIN && showUK) entityFilter = '';
-    else if (showIN) entityFilter = '&entity=eq.IN';
-    else if (showUK) entityFilter = '&entity=eq.UK';
-    else entityFilter = '&entity=eq.__none__'; // nothing selected → empty result
+    const showIN = document.getElementById('arreco-entity-in')?.checked !== false;
+    const showUK = document.getElementById('arreco-entity-uk')?.checked === true;
 
     const [balR, invR] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/customer_statement_balances?select=contact_name,outstanding_receivable_amount_bcy,currency_code,synced_at&order=contact_name`, { headers: cmrrHdr() }),
-      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr${entityFilter}`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?select=customer_name,balance_inr,entity`, { headers: cmrrHdr() }),
     ]);
     if (!balR.ok) throw new Error('Balances fetch failed: HTTP ' + balR.status);
     const allBalances = await balR.json();
@@ -7841,15 +7837,20 @@ async function renderAdvancesReconcile() {
     const balances = allBalances.filter(b => b.contact_name !== '__BS_AR__');
     const bsARTotal = bsARRow ? Number(bsARRow.outstanding_receivable_amount_bcy || 0) : null;
 
-    // Aggregate invoice balances by customer_name
+    // Map each customer to its entity(ies) from invoices, and aggregate open
+    // invoice balances for the SELECTED entities only.
     // PostgREST returns numeric as strings — always use Number()
-    const invByCustomer = {};
+    const invByCustomer = {}, inSet = new Set(), ukSet = new Set();
     for (const inv of invoices) {
       const n = inv.customer_name || '';
-      invByCustomer[n] = (invByCustomer[n] || 0) + Number(inv.balance_inr || 0);
+      const ent = inv.entity === 'UK' ? 'UK' : 'IN';
+      (ent === 'UK' ? ukSet : inSet).add(n);
+      if ((ent === 'IN' && showIN) || (ent === 'UK' && showUK)) {
+        invByCustomer[n] = (invByCustomer[n] || 0) + Number(inv.balance_inr || 0);
+      }
     }
 
-    // Aggregate CBS balances by name (sum duplicates, keep latest sync time)
+    // Aggregate balances by name (sum duplicates, keep latest sync time)
     const balByName = {}, balSyncAt = {};
     for (const b of balances) {
       const name = b.contact_name || '';
@@ -7857,16 +7858,28 @@ async function renderAdvancesReconcile() {
       if (!balSyncAt[name] || b.synced_at > balSyncAt[name]) balSyncAt[name] = b.synced_at;
     }
 
+    // Entity selection applies to BOTH columns:
+    //  UK only    → only customers mapped to the UK entity
+    //  India only → drop customers mapped exclusively to the UK entity
+    //  (balances come from India Zoho Books; UK customers usually have none)
+    const inScope = (name) => {
+      if (showIN && showUK) return true;
+      if (showUK) return ukSet.has(name);
+      if (showIN) return !(ukSet.has(name) && !inSet.has(name));
+      return false;
+    };
+
     const seenNames = new Set(Object.keys(balByName));
     const rows = [];
     for (const [name, ledger] of Object.entries(balByName)) {
+      if (!inScope(name)) continue;
       const openAR = invByCustomer[name] || 0;
       // Keep negative (credit) balances — they're part of the balance sheet AR total
       if (Math.abs(ledger) < 0.01 && openAR < 0.01) continue;
       rows.push({ name, ledger, openAR, diff: ledger - openAR });
     }
     for (const [name, openAR] of Object.entries(invByCustomer)) {
-      if (!seenNames.has(name) && openAR > 0.01) {
+      if (!seenNames.has(name) && openAR > 0.01 && inScope(name)) {
         rows.push({ name, ledger: 0, openAR, diff: -openAR });
       }
     }
@@ -7893,7 +7906,9 @@ async function renderAdvancesReconcile() {
     // Balance sheet AR vs CBS gap (journal entries / Debtor account not in CBS)
     const bsGap = bsARTotal !== null ? bsARTotal - totalLedger : null;
 
-    const entityLabel = showIN && showUK ? 'India + UK' : showUK ? 'UK' : 'India';
+    const entityLabel = showIN && showUK ? 'India + UK' : showUK ? 'UK' : showIN ? 'India' : 'None';
+    // BS AR control row is the India Zoho Books total — only meaningful when India is shown
+    const showBsRow = bsARTotal !== null && showIN;
 
     wrap.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px" id="adv-recon-tbl">
     <thead><tr>
@@ -7923,7 +7938,7 @@ async function renderAdvancesReconcile() {
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmtDiff(totalDiff)}</td>
       </tr>
-      ${bsARTotal !== null ? `<tr style="background:${Math.abs(bsGap ?? 0) < 1 ? '#f0fdf4' : '#fef9c3'};border-top:1px solid ${Math.abs(bsGap ?? 0) < 1 ? '#bbf7d0' : '#fde68a'}">
+      ${showBsRow ? `<tr style="background:${Math.abs(bsGap ?? 0) < 1 ? '#f0fdf4' : '#fef9c3'};border-top:1px solid ${Math.abs(bsGap ?? 0) < 1 ? '#bbf7d0' : '#fde68a'}">
         <td></td>
         <td style="${tdS};font-size:11px;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'};font-weight:600">Balance Sheet AR (control account)${Math.abs(bsGap ?? 0) < 1 ? ' ✓ matches' : ''}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'}">${fmt(bsARTotal)}</td>
@@ -7931,7 +7946,7 @@ async function renderAdvancesReconcile() {
         <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && Math.abs(bsGap) >= 1 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong></td>
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Entity: <strong>${escHtml(entityLabel)}</strong> (applies to both columns)</td>
       </tr>
     </tfoot>
     </table></div>`;
