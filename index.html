@@ -1625,6 +1625,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div class="ar-view-tog" style="margin-left:0">
           <button id="cd-vt-invoice"  class="ar-vtbtn active" onclick="cdSetView('invoice')">Invoice View</button>
           <button id="cd-vt-customer" class="ar-vtbtn"        onclick="cdSetView('customer')">Customer View</button>
+          <button id="cd-vt-collector" class="ar-vtbtn"       onclick="cdSetView('collector')">Collector View</button>
         </div>
       </div>
     </div>
@@ -6775,6 +6776,14 @@ async function ccSubmit() {
   const errMsg = ccValidate();
   if (errMsg) { errEl.textContent = errMsg; return; }
   errEl.textContent = '';
+  if (isConn && _ccState.outcome === 'payment_committed') {
+    const ptpVal = document.getElementById('cc-promised-date').value;
+    if (ptpVal) {
+      const [py, pm, pd] = ptpVal.split('-').map(Number);
+      const dow = new Date(py, pm - 1, pd).getDay();
+      if ((dow === 0 || dow === 6) && !confirm(`This PTP date falls on a ${dow === 0 ? 'Sunday' : 'Saturday'}. Are you sure?`)) return;
+    }
+  }
   const submitBtnId = isConn ? 'cc-submit-conn' : 'cc-submit-nc';
   const btn = document.getElementById(submitBtnId);
   if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
@@ -7309,6 +7318,12 @@ function arEditPtp(invoiceId, invoiceNumber, customerName) {
   document.getElementById('ptp-edit-save').addEventListener('click', () => {
     const v = document.getElementById('ptp-edit-date').value;
     if (!v) { document.getElementById('ptp-edit-err').textContent = 'Pick a date (or use Remove PTP).'; return; }
+    const [py, pm, pd] = v.split('-').map(Number);
+    const dow = new Date(py, pm - 1, pd).getDay();
+    if (dow === 0 || dow === 6) {
+      const dayName = dow === 0 ? 'Sunday' : 'Saturday';
+      if (!confirm(`This PTP date falls on a ${dayName}. Are you sure?`)) return;
+    }
     save(v);
   });
   document.getElementById('ptp-edit-clear')?.addEventListener('click', () => save(null));
@@ -7795,7 +7810,48 @@ function cdFilterAndRender() {
     for (let m = lo; m <= hi; m = monthAdd(m, 1)) { trackMonths.push(m); if (trackMonths.length > 24) break; } }
 
   let bodyHtml = '';
-  if (_cdView === 'customer') {
+  if (_cdView === 'collector') {
+    const byCol = {};
+    monthRows.forEach(d => { const col = d.collector || '—'; (byCol[col] = byCol[col] || []).push(d); });
+    const colTot = {};
+    for (const [col, ds] of Object.entries(byCol)) colTot[col] = ds.reduce((s, d) => s + rowTotalFor(d), 0);
+    bodyHtml = Object.entries(byCol).sort((a, b) => {
+      if (_cdSortTotal) {
+        const diff = colTot[a[0]] - colTot[b[0]];
+        if (Math.abs(diff) > 0.005) return _cdSortTotal === 'asc' ? diff : -diff;
+      }
+      return a[0].localeCompare(b[0]);
+    }).map(([col, ds]) => {
+      let rowTot = 0;
+      const cells = Array.from({ length: daysInMonth }, (_, i) => {
+        const day = i + 1;
+        let curSum = 0, oldSum = 0, colSum = 0, partSum = 0, paidSum = 0;
+        ds.forEach(d => {
+          const c = cellFor(d, day);
+          if (!c) return;
+          if (c.isCurrent) { curSum += c.amt; colSum += Math.min(c.paid, c.amt); if (c.partial) partSum += c.amt; if (c.partial) paidSum += c.paid; } else oldSum += c.amt;
+        });
+        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; dayCollected[day] += colSum; }
+        const wk = isWeekend(day) ? ';background:#fafbfd' : '';
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', collected: colSum >= curSum - 0.5, partial: partSum > 0 && colSum < curSum - 0.5, paid: paidSum })}</td>`;
+        if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
+        return `<td style="${tdS}${wk}"></td>`;
+      }).join('');
+      const agg = ds.reduce((acc, d) => { const s = cdMoveStats(d); acc.pushed += s.pushed; acc.pulled += s.pulled; acc.amtUp += s.amtUp; acc.amtDown += s.amtDown; return acc; }, { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 });
+      const allDone = ds.every(d => moneyFor(d).full);
+      const custSet = [...new Set(ds.map(d => d.customerName))];
+      const colOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
+      const bus = [...new Set(ds.map(d => d.bu).filter(Boolean))];
+      return `<tr>
+        <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(col)}">${escHtml(col)}</td>
+        <td style="${tdL};color:var(--txt3);${frz(1)}">${custSet.length} cust<span style="font-family:var(--mono);color:${colOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${colOutstanding < 0.5 ? '✓ nil' : fmtFull(colOutstanding)}</span>${cdMoveChip(agg)}</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(bus.join(', ') || '—')}</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${ds.length} inv</td>
+        <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+  } else if (_cdView === 'customer') {
     const byCust = {};
     monthRows.forEach(d => { (byCust[d.customerName] = byCust[d.customerName] || []).push(d); });
     const custTot = {};
@@ -7939,10 +7995,10 @@ function cdFilterAndRender() {
   content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
     ${colgroup}
     <thead><tr>
-      <th style="${thL};${frz(0, '#f6f8fb', 6)}">Customer</th>
-      <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
+      <th style="${thL};${frz(0, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Collector (POC)' : 'Customer'}</th>
+      <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Customers' : (_cdView === 'customer' ? 'Invoices' : 'Invoice #')}</th>
       <th style="${thL};${frz(2, '#f6f8fb', 6)}">BU</th>
-      <th style="${thL};${frz(3, '#f6f8fb', 6)}">POC</th>
+      <th style="${thL};${frz(3, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Invoices' : 'POC'}</th>
       <th onclick="cdToggleTotalSort()" title="Sort by total" style="${thS};${frz(4, '#eef1f6', 6)}${frzEdge};cursor:pointer;user-select:none">Total${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
       ${dayHead}
     </tr></thead>
@@ -7981,6 +8037,7 @@ function cdSetView(v) {
   _cdView = v;
   document.getElementById('cd-vt-invoice')?.classList.toggle('active', v === 'invoice');
   document.getElementById('cd-vt-customer')?.classList.toggle('active', v === 'customer');
+  document.getElementById('cd-vt-collector')?.classList.toggle('active', v === 'collector');
   cdFilterAndRender();
 }
 
