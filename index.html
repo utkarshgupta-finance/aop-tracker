@@ -7506,7 +7506,8 @@ function cdFilterAndRender() {
   const buF   = document.getElementById('cd-bu-filter')?.value || '';
   const statF = document.getElementById('cd-status-filter')?.value || '';
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = today.toISOString().slice(0,10);
+  const _p2 = n => String(n).padStart(2, '0');
+  const todayStr = `${today.getFullYear()}-${_p2(today.getMonth() + 1)}-${_p2(today.getDate())}`;
 
   const filtered = _cdAllData.filter(d => {
     if (buF && d.bu !== buF) return false;
@@ -7688,11 +7689,14 @@ function cdFilterAndRender() {
     const totals = [];
     for (let day = 1; day <= nDays; day++) {
       if (ds(day) > todayStr) { totals.push(null); continue; }
-      const cutoff = ds(day) + 'T23:59:59.999Z';
+      const cutoffMs = new Date(ds(day) + 'T23:59:59.999+05:30').getTime();
       let tot = 0;
       for (const d of monthRows) {
         let cur = null;
-        for (const h of d.ptpHistory) { if ((h.loggedAt || '') <= cutoff) cur = h; }
+        for (const h of d.ptpHistory) {
+          const t = Date.parse(h.loggedAt || '');
+          if (!isNaN(t) && t <= cutoffMs) cur = h;
+        }
         if (cur && (cur.date || '').startsWith(_cdMonth)) tot += entryAmt(d, cur);
       }
       totals.push(tot);
