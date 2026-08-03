@@ -6177,6 +6177,11 @@ function ccResetForm() {
   document.getElementById('cc-err').textContent      = '';
   document.getElementById('cc-err-nc').textContent   = '';
   document.querySelectorAll('.cc-opt-btn').forEach(b => b.classList.remove('selected'));
+  // Restore submit buttons so the next interaction can be logged immediately
+  ['cc-submit-conn', 'cc-submit-nc'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = false; b.textContent = 'Submit'; }
+  });
 }
 
 /* ── Customer dropdown ───────────────────────────────────── */
@@ -6832,7 +6837,14 @@ async function ccSubmit() {
     setTimeout(() => toast.remove(), 3200);
   } catch(e) {
     errEl.textContent = 'Error: ' + (e.message || 'submission failed');
-    if (btn) { btn.disabled = false; btn.textContent = 'Submit'; }
+  } finally {
+    // Always restore both submit buttons — the success path previously left
+    // the button disabled on "Submitting…", blocking the next interaction
+    // until a full page refresh.
+    ['cc-submit-conn', 'cc-submit-nc'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) { b.disabled = false; b.textContent = 'Submit'; }
+    });
   }
 }
 
