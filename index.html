@@ -1747,7 +1747,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </div>
         <div>
           <label class="cc-label">Phone</label>
-          <input type="tel" id="ctc-modal-phone" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="+91 98765 43210">
+          <div style="display:flex;gap:.35rem;margin-top:.25rem">
+            <select id="ctc-modal-cc" class="nret-sel" style="font-size:12.5px;padding:.35rem .4rem;flex:0 0 128px"></select>
+            <input type="tel" id="ctc-modal-phone" class="cust-input" style="flex:1;min-width:0;font-size:12.5px;padding:.35rem .6rem" placeholder="98765 43210">
+          </div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:.5rem;margin-top:.1rem">
@@ -2401,6 +2404,47 @@ function updateCmStats() {
     (unmapped ? `<span class="cm-unmapped" style="padding:.2rem .65rem;border-radius:20px">${unmapped} unmapped in AR</span>` : '');
 }
 
+/* ─── PHONE COUNTRY CODES ───────────────────────────────────── */
+// India first (default); the rest are the markets this AR book covers.
+const CTC_DIAL_CODES = [
+  ['+91','India'],['+44','UK'],['+1','US / Canada'],['+971','UAE'],['+966','Saudi Arabia'],
+  ['+965','Kuwait'],['+974','Qatar'],['+973','Bahrain'],['+968','Oman'],['+20','Egypt'],
+  ['+234','Nigeria'],['+254','Kenya'],['+255','Tanzania'],['+256','Uganda'],['+27','South Africa'],
+  ['+233','Ghana'],['+212','Morocco'],['+94','Sri Lanka'],['+880','Bangladesh'],['+977','Nepal'],
+  ['+975','Bhutan'],['+960','Maldives'],['+92','Pakistan'],['+95','Myanmar'],['+66','Thailand'],
+  ['+60','Malaysia'],['+65','Singapore'],['+62','Indonesia'],['+63','Philippines'],['+84','Vietnam'],
+  ['+855','Cambodia'],['+856','Laos'],['+86','China'],['+852','Hong Kong'],['+81','Japan'],
+  ['+82','South Korea'],['+61','Australia'],['+64','New Zealand'],['+49','Germany'],['+33','France'],
+  ['+39','Italy'],['+34','Spain'],['+31','Netherlands'],['+41','Switzerland'],['+46','Sweden'],
+  ['+353','Ireland'],['+7','Russia / Kazakhstan'],['+90','Turkey'],['+55','Brazil'],['+52','Mexico'],
+];
+const CTC_DEFAULT_CC = '+91';
+
+function ctcFillCcDropdown(selected) {
+  const sel = document.getElementById('ctc-modal-cc');
+  if (!sel) return;
+  if (!sel.options.length) {
+    sel.innerHTML = CTC_DIAL_CODES.map(([code, name]) =>
+      `<option value="${code}">${code} ${escHtml(name)}</option>`).join('');
+  }
+  sel.value = CTC_DIAL_CODES.some(([c]) => c === selected) ? selected : CTC_DEFAULT_CC;
+}
+
+// Split a stored phone into dial code + local number. Longest code wins so
+// +91 isn't mistaken for +9, and unknown/blank codes fall back to +91.
+function ctcSplitPhone(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return { cc: CTC_DEFAULT_CC, rest: '' };
+  if (s.startsWith('+')) {
+    const compact = s.replace(/[\s-]/g, '');
+    const match = CTC_DIAL_CODES.map(([c]) => c).filter(c => compact.startsWith(c))
+      .sort((a, b) => b.length - a.length)[0];
+    if (match) return { cc: match, rest: compact.slice(match.length) };
+    return { cc: CTC_DEFAULT_CC, rest: s };
+  }
+  return { cc: CTC_DEFAULT_CC, rest: s };
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -2569,11 +2613,14 @@ function openContactModal(id) {
     document.getElementById('ctc-modal-name').value  = c.name  || '';
     document.getElementById('ctc-modal-role').value  = c.role  || '';
     document.getElementById('ctc-modal-email').value = c.email || '';
-    document.getElementById('ctc-modal-phone').value = c.phone || '';
+    { const p = ctcSplitPhone(c.phone);
+      ctcFillCcDropdown(p.cc);
+      document.getElementById('ctc-modal-phone').value = p.rest; }
     document.getElementById('ctc-modal-active').checked = c.is_active !== false;
   } else {
     custSel.value = '';
     catSel.value  = '';
+    ctcFillCcDropdown(CTC_DEFAULT_CC);
     ['ctc-modal-name','ctc-modal-role','ctc-modal-email','ctc-modal-phone'].forEach(id => {
       document.getElementById(id).value = '';
     });
@@ -2593,7 +2640,11 @@ async function saveContact() {
   const name          = document.getElementById('ctc-modal-name').value.trim();
   const role          = document.getElementById('ctc-modal-role').value.trim() || null;
   const email         = document.getElementById('ctc-modal-email').value.trim() || null;
-  const phone         = document.getElementById('ctc-modal-phone').value.trim() || null;
+  const phoneLocal    = document.getElementById('ctc-modal-phone').value.trim();
+  const phoneCc       = document.getElementById('ctc-modal-cc')?.value || CTC_DEFAULT_CC;
+  const phone         = phoneLocal
+    ? (phoneLocal.startsWith('+') ? phoneLocal : `${phoneCc} ${phoneLocal}`)
+    : null;
   const category      = document.getElementById('ctc-modal-category')?.value || null;
   const is_active     = document.getElementById('ctc-modal-active').checked;
   const errEl         = document.getElementById('ctc-modal-err');
@@ -7384,7 +7435,7 @@ async function loadConfirmedDates() {
     const openIds = new Set();
     {
       const ivr = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_invoices?select=invoice_id,invoice_number,customer_name,balance_inr&limit=5000`,
+        `${SUPABASE_URL}/rest/v1/ar_invoices?select=invoice_id,invoice_number,customer_name,balance_inr,total_inr,status&limit=5000`,
         { headers: cmrrHdr() }
       );
       if (ivr.ok) for (const inv of await ivr.json()) { invoiceInfoMap[inv.invoice_id] = inv; openIds.add(inv.invoice_id); }
@@ -7417,6 +7468,8 @@ async function loadConfirmedDates() {
             bu: arGetBu(custName) || '',
             collector: arGetCollector(custName) || collName,
             balance: Number(invInfo.balance_inr || 0),
+            total:   Number(invInfo.total_inr   || 0),
+            status:  invInfo.status || '',
             ptpHistory: []
           };
         }
@@ -7458,12 +7511,16 @@ async function loadConfirmedDates() {
           if (!ev.new_date) continue;
           if (!invoicePtpMap[ev.invoice_id]) {
             const custName = ev.customer_name || '';
+            const inf = invoiceInfoMap[ev.invoice_id] || {};
             invoicePtpMap[ev.invoice_id] = {
               invoiceId: ev.invoice_id,
-              invoiceNumber: ev.invoice_number || ev.invoice_id,
+              invoiceNumber: inf.invoice_number || ev.invoice_number || ev.invoice_id,
               customerName: custName,
               bu: arGetBu(custName) || '',
               collector: arGetCollector(custName) || '',
+              balance: Number(inf.balance_inr || 0),
+              total:   Number(inf.total_inr   || 0),
+              status:  inf.status || '',
               ptpHistory: []
             };
           }
@@ -7506,6 +7563,15 @@ async function loadConfirmedDates() {
         if (!d.customerName) d.customerName = s.customer_name || '';
         if (!Number(d.balance || 0)) d.balance = Number(s.balance_inr || 0);
       }
+    }
+
+    // Partly-collected invoices stay open in Zoho with a reduced balance, so
+    // they are not "closed" — flag them and remember how much came in.
+    for (const d of Object.values(invoicePtpMap)) {
+      if (d.closed) continue;
+      const tot = Number(d.total || 0), bal = Number(d.balance || 0);
+      d.partial = (d.status === 'partially_paid') || (tot > 0 && bal > 0 && tot > bal + 0.5);
+      d.paidSoFar = d.partial ? Math.max(0, tot - bal) : 0;
     }
 
     _cdAllData = Object.values(invoicePtpMap).filter(d => d.ptpHistory.length > 0);
@@ -7579,6 +7645,7 @@ function cdFilterAndRender() {
       { label: 'Due Today', val: todayCount, color: 'var(--amber)' },
       { label: 'Upcoming', val: upcomingCount, color: '#16a34a' },
       { label: 'Collected', val: collectedCount, color: '#16a34a' },
+      { label: 'Part-paid', val: filtered.filter(d => d.partial).length, color: '#1d4ed8' },
       { label: 'Date Moved', val: movedCount, color: '#6366f1' },
     ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
       <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
@@ -7642,9 +7709,9 @@ function cdFilterAndRender() {
       `Amount increased: ${s.amtUp}`,
       `Amount decreased: ${s.amtDown}`,
     ].join('\n');
-    const label = moves ? `${moves}×` : '₹';
+    const label = moves ? `${moves}x` : 'AMT';
     const bg = s.pushed ? '#f5f3ff' : '#eef7f1', fg = s.pushed ? '#7c3aed' : '#0a6e4c';
-    return ` <span title="${escHtml(tip)}" style="font-size:9px;background:${bg};color:${fg};padding:.05rem .3rem;border-radius:8px;font-weight:700;cursor:help">${label}</span>`;
+    return ` <span title="${escHtml(tip)}" style="font-family:var(--sans);font-size:9px;background:${bg};color:${fg};padding:.05rem .3rem;border-radius:8px;font-weight:700;cursor:help">${label}</span>`;
   };
   const cellFor = (d, day) => {
     const ds = dstr(day);
@@ -7654,7 +7721,7 @@ function cdFilterAndRender() {
     const isCurrent = lastEntry.date === ds;
     const amt = entryAmt(d, isCurrent ? lastEntry : hits[hits.length - 1]);
     const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
-    return { isCurrent, amt, who, collected: !!d.closed };
+    return { isCurrent, amt, who, collected: !!d.closed, partial: !!d.partial, paid: Number(d.paidSoFar || 0) };
   };
 
   const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .2rem;border-bottom:1.5px solid var(--brd2);text-align:right;white-space:nowrap;z-index:2';
@@ -7663,13 +7730,18 @@ function cdFilterAndRender() {
   const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   const badge = (c) => c.isCurrent
     ? (c.collected
-      ? `<span title="${escHtml('Collected — invoice closed · ₹' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
-      : `<span title="${escHtml('Current PTP — ₹' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`)
+      ? `<span title="${escHtml('Collected — invoice closed · ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
+      : (c.partial
+        ? `<span title="${escHtml('Part-paid — ' + fmtFull(c.paid) + ' received, ' + fmtFull(c.amt) + ' still outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
+        : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`))
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
 
   // Evenly sized day columns via fixed table layout
   const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90, TOT_W = 110;
   const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W;
+  const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W];
+  const frz = (i, bg, z) => `position:sticky;left:${LX[i]}px;background:${bg || '#fff'};z-index:${z || 1}`;
+  const frzEdge = ';box-shadow:2px 0 0 rgba(15,23,42,.10)';
   const tblW = LEAD_W + daysInMonth * DAY_W;
   const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${TOT_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
   const dayColgroup = (nDays) => `<colgroup><col style="width:${LEAD_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
@@ -7701,25 +7773,26 @@ function cdFilterAndRender() {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldSum = 0, colSum = 0;
+        let curSum = 0, oldSum = 0, colSum = 0, partSum = 0, paidSum = 0;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; if (c.collected) colSum += c.amt; } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; if (c.collected) colSum += c.amt; if (c.partial) { partSum += c.amt; paidSum += c.paid; } } else oldSum += c.amt;
         });
         if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; dayCollected[day] += colSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', collected: colSum >= curSum - 0.5 })}</td>`;
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', collected: colSum >= curSum - 0.5, partial: partSum > 0 && colSum < curSum - 0.5, paid: paidSum })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
       const agg = ds.reduce((acc, d) => { const s = cdMoveStats(d); acc.pushed += s.pushed; acc.pulled += s.pulled; acc.amtUp += s.amtUp; acc.amtDown += s.amtDown; return acc; }, { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 });
+      const allDone = ds.every(d => d.closed);
       return `<tr>
-        <td style="${tdL};font-weight:600" title="${escHtml(cust)}">${escHtml(cust)}</td>
-        <td style="${tdL};color:var(--txt3)">${ds.length} inv${cdMoveChip(agg)}</td>
-        <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].bu || '—')}</td>
-        <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].collector || '—')}</td>
-        <td style="${tdS};font-weight:700;background:${ds.every(d => d.closed) ? '#eefdf3' : '#f8fafc'};color:${ds.every(d => d.closed) ? '#166534' : 'inherit'}">${rowTot > 0 ? (ds.every(d => d.closed) ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+        <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(cust)}">${escHtml(cust)}</td>
+        <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv${cdMoveChip(agg)}</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(ds[0].bu || '—')}</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(ds[0].collector || '—')}</td>
+        <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -7736,12 +7809,13 @@ function cdFilterAndRender() {
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
         const moved = cdMoveChip(cdMoveStats(d));
+        const totBg = d.closed ? '#eefdf3' : (d.partial ? '#eff6ff' : '#f8fafc');
         return `<tr>
-          <td style="${tdL};font-weight:600" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(d.invoiceNumber || '—')}${moved}</td>
-          <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.bu || '—')}</td>
-          <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.collector || '—')}</td>
-          <td style="${tdS};font-weight:700;background:${d.closed ? '#eefdf3' : '#f8fafc'};color:${d.closed ? '#166534' : 'inherit'}">${rowTot > 0 ? (d.closed ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+          <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}${moved}</td>
+          <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(d.bu || '—')}</td>
+          <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(d.collector || '—')}</td>
+          <td style="${tdS};font-weight:700;${frz(4, totBg)}${frzEdge};color:${d.closed ? '#166534' : (d.partial ? '#1d4ed8' : 'inherit')}">${rowTot > 0 ? (d.closed ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
           ${cells}
         </tr>`;
       }).join('');
@@ -7804,10 +7878,10 @@ function cdFilterAndRender() {
     const html = `<div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin:0 0 .1rem">Movement during ${mLbl(tm)}${tm === curMonth ? ' <span style="font-weight:400;color:var(--txt3)">(current month)</span>' : ''}</div>
     <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px;margin-bottom:.9rem"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${LEAD_W + nDays * DAY_W}px">
       ${dayColgroup(nDays)}
-      <thead><tr><th style="${thL}">As of end of day → (${mLbl(tm)})</th>${head}</tr></thead>
+      <thead><tr><th style="${thL};${frz(0, '#f6f8fb', 6)}${frzEdge}">As of end of day → (${mLbl(tm)})</th>${head}</tr></thead>
       <tbody>
-        <tr><td style="${tdL};font-weight:600">Total promised for ${mLbl(_cdMonth)}</td>${valCells}</tr>
-        <tr><td style="${tdL};color:var(--txt3)">Change vs previous day</td>${dltCells}</tr>
+        <tr><td style="${tdL};font-weight:600;${frz(0)}${frzEdge}">Total promised for ${mLbl(_cdMonth)}</td>${valCells}</tr>
+        <tr><td style="${tdL};color:var(--txt3);${frz(0)}${frzEdge}">Change vs previous day</td>${dltCells}</tr>
       </tbody>
     </table></div>`;
     return { html, carry: lastKnown === undefined ? prevCarry : lastKnown };
@@ -7819,28 +7893,29 @@ function cdFilterAndRender() {
   content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
     ${colgroup}
     <thead><tr>
-      <th style="${thL}">Customer</th>
-      <th style="${thL}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
-      <th style="${thL}">BU</th>
-      <th style="${thL}">POC</th>
-      <th style="${thS};background:#eef1f6">Total</th>
+      <th style="${thL};${frz(0, '#f6f8fb', 6)}">Customer</th>
+      <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
+      <th style="${thL};${frz(2, '#f6f8fb', 6)}">BU</th>
+      <th style="${thL};${frz(3, '#f6f8fb', 6)}">POC</th>
+      <th style="${thS};${frz(4, '#eef1f6', 6)}${frzEdge}">Total</th>
       ${dayHead}
     </tr></thead>
     <tbody>${bodyHtml}</tbody>
     <tfoot><tr style="background:#f8fafc">
-      <td colspan="4" style="${tdL};font-weight:700">Total promised (current PTPs)</td>
-      <td style="${tdS};font-weight:700;background:#eef7f1;color:#166534">${fmtFull(dayTotals.reduce((a, b) => a + b, 0))}</td>
+      <td colspan="4" style="${tdL};font-weight:700;${frz(0, '#f8fafc', 2)}">Total promised (current PTPs)</td>
+      <td style="${tdS};font-weight:700;${frz(4, '#eef7f1', 2)}${frzEdge};color:#166534">${fmtFull(dayTotals.reduce((a, b) => a + b, 0))}</td>
       ${totCells}
     </tr>
     <tr style="background:#f6fdf8">
-      <td colspan="4" style="${tdL};color:#166534">of which collected (invoice closed)</td>
-      <td style="${tdS};font-weight:700;color:#166534">${fmtFull(dayCollected.reduce((a, b) => a + b, 0))}</td>
+      <td colspan="4" style="${tdL};color:#166534;${frz(0, '#f6fdf8', 2)}">of which collected (invoice closed)</td>
+      <td style="${tdS};font-weight:700;${frz(4, '#f6fdf8', 2)}${frzEdge};color:#166534">${fmtFull(dayCollected.reduce((a, b) => a + b, 0))}</td>
       ${Array.from({ length: daysInMonth }, (_, i) => { const v = dayCollected[i + 1]; return `<td style="${tdS};color:#166534">${v > 0 ? fmtFull(v) : ''}</td>`; }).join('')}
     </tr></tfoot>
   </table></div>
   <div style="font-size:11px;color:var(--txt3);margin:.5rem 0 1rem">
     <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#bbf7d0;border-radius:3px;vertical-align:-2px"></span> ✓ collected (invoice closed) &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border-radius:3px;vertical-align:-2px"></span> part-paid — cell shows the amount still outstanding &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance &nbsp;·&nbsp;
     <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700;font-size:9px">N×</span> date moved N times — hover for pushed / pulled / amount up / amount down
