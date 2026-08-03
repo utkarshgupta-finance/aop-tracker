@@ -4624,64 +4624,57 @@ function arSnapSetTab(tab) {
 async function arTakeSnapshot() {
   const btn    = document.getElementById('ar-snap-take-btn');
   const status = document.getElementById('ar-snap-status');
-  if (!_arAllRows.length) { alert('No AR data loaded yet. Please wait for invoices to load first.'); return; }
-  const today = new Date().toISOString().slice(0, 10);
-  if (!confirm(`Take snapshot of ${_arAllRows.length} invoices for ${today}? Any existing snapshot for today will be replaced.`)) return;
+  // Snapshot is built SERVER-SIDE from the whole ar_invoices table via a
+  // security-definer RPC. It must never be assembled from the browser's rows:
+  // a collector (or any filtered view) would otherwise overwrite the day's
+  // snapshot with only the invoices visible to them.
+  if (!confirm(`Take today's AR snapshot? This replaces any snapshot already saved for today.`)) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  if (status) status.textContent = '';
+  if (status) { status.textContent = ''; status.style.color = ''; }
   try {
-    // Delete existing today's snapshot first
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?snapshot_date=eq.${today}`,
-      { method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' } }
-    );
-    // Ensure dispute map is loaded so we can stamp dispute_type on each row
-    await _loadARDisputeMap();
-    // Insert in batches of 200
-    const BATCH = 200;
-    let inserted = 0;
-    for (let i = 0; i < _arAllRows.length; i += BATCH) {
-      const chunk = _arAllRows.slice(i, i + BATCH).map(r => ({
-        snapshot_date:  today,
-        received_at:    new Date().toISOString(),
-        entity:         r.entity         || null,
-        invoice_id:     r.invoice_id     || null,
-        invoice_number: r.invoice_number || null,
-        customer_name:  r.customer_name  || null,
-        invoice_date:   r.invoice_date   || null,
-        due_date:       r.due_date       || null,
-        status:         r.status         || null,
-        total:          r.total          ?? null,
-        balance:        r.balance        ?? null,
-        currency_code:  r.currency_code  || null,
-        exchange_rate:  r.exchange_rate  ?? null,
-        total_inr:      r.total_inr      ?? null,
-        balance_inr:    r.balance_inr    ?? null,
-        dispute_type:   (r.invoice_id && _arInvDisputeMap[r.invoice_id]?.dispute_type) || null,
-      }));
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoice_snapshots`, {
+    const call = async (force) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/take_ar_snapshot`, {
         method: 'POST',
-        headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify(chunk),
+        headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + await r.text());
-      inserted += chunk.length;
-      if (status) status.textContent = `Saving… ${inserted}/${_arAllRows.length}`;
+      const txt = (await r.text()).replace(/^"|"$/g, '');
+      if (!r.ok) throw new Error(txt || 'HTTP ' + r.status);
+      return txt;
+    };
+    let msg = await call(false);
+    // Guard tripped (live table much smaller than the last snapshot — usually a
+    // sync in flight). Let the user decide rather than silently overwriting.
+    if (msg.startsWith('skipped:')) {
+      if (!confirm(msg + '\n\nOverwrite today\'s snapshot anyway?')) {
+        if (status) { status.textContent = 'Snapshot not changed.'; status.style.color = 'var(--txt3)'; }
+        return;
+      }
+      msg = await call(true);
     }
-    if (status) { status.textContent = `✓ Snapshot saved — ${inserted} invoices`; status.style.color = '#16a34a'; }
-    setTimeout(() => { if (status) { status.textContent = ''; status.style.color = ''; } }, 4000);
+    if (status) {
+      status.textContent = msg.startsWith('ok:') ? '✓ ' + msg.slice(3).trim() : msg;
+      status.style.color = msg.startsWith('ok:') ? '#16a34a' : 'var(--amber)';
+    }
+    setTimeout(() => { if (status) { status.textContent = ''; status.style.color = ''; } }, 5000);
     _arSnapRows = []; // force reload
     loadARSnapshots();
   } catch(e) {
     if (status) { status.textContent = 'Error: ' + e.message; status.style.color = 'var(--red)'; }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📸 Take Today\'s Snapshot'; }
+    if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udcf8 Take Today\'s Snapshot'; }
   }
 }
 
 async function loadARSnapshots() {
   const wrap   = document.getElementById('ar-daily-wrap');
   const status = document.getElementById('ar-snap-status');
+  // Taking a snapshot rewrites a day of shared history — admins only
+  const takeBtn = document.getElementById('ar-snap-take-btn');
+  if (takeBtn) {
+    const role = USER_ACCESS?.role || '';
+    takeBtn.style.display = (USER_ACCESS?.is_admin || role === 'admin-edit') ? '' : 'none';
+  }
   const days   = parseInt(document.getElementById('ar-snap-days')?.value || '30');
   if (!wrap) return;
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading snapshots…</div>';
