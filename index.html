@@ -317,6 +317,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .ar-aging-leg-item{display:flex;align-items:center;gap:.3rem;font-size:10px;color:var(--ink-soft);font-family:var(--mono)}
 .ar-aging-leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 /* ── AR modern table ─────────────────────────────────────────── */
+/* BU / Collector capsule filter rows — shared label gutter keeps chips aligned */
+.ar-cap-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.ar-cap-lbl{flex:0 0 68px;font-size:9.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap}
 .ar-tbl{width:100%;border-collapse:separate;border-spacing:0}
 .ar-tbl thead th{position:sticky;top:0;z-index:3;background:#f6f8fb;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5b6472;padding:.5rem .6rem;border-bottom:1.5px solid var(--brd2);text-align:left;white-space:nowrap}
 .ar-tbl thead th.r{text-align:right}
@@ -599,12 +602,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <input type="text" class="cust-input" id="ar-search" placeholder="Search anything…"
         style="font-size:12px;max-width:220px;padding:.35rem .75rem" oninput="renderAR()">
     </div>
-    <!-- BU + Collector capsule filters — single row -->
-    <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.85rem;flex-wrap:wrap">
-      <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap">BU</span>
-      <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"></div>
-      <div id="ar-collector-filter-wrap" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
-        <span style="font-size:9.5px;font-weight:600;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap;margin-left:.5rem">Collector</span>
+    <!-- BU + Collector capsule filters — two aligned labeled rows -->
+    <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.85rem">
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">BU</span>
+        <div id="ar-bu-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"></div>
+      </div>
+      <div class="ar-cap-row" id="ar-collector-filter-wrap">
+        <span class="ar-cap-lbl">Collector</span>
         <div id="ar-collector-row" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center"></div>
       </div>
     </div>
