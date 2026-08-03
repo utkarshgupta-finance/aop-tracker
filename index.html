@@ -7769,12 +7769,31 @@ async function syncBalances() {
   const btn = document.getElementById('adv-balances-btn');
   const info = document.getElementById('adv-sync-info');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  if (info) { info.textContent = 'Fetching balances from Zoho Books…'; info.style.color = 'var(--txt3)'; }
-  try {
-    const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, { method: 'POST', headers: cmrrHdr() });
+  if (info) { info.textContent = 'Rebuilding AR ledger from Zoho Books…'; info.style.color = 'var(--txt3)'; }
+  const call = async (action) => {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
     const result = await resp.json().catch(() => ({}));
     if (!resp.ok || !result.ok) throw new Error(result.error || 'HTTP ' + resp.status);
-    if (info) { info.textContent = `✓ Synced ${result.synced} balances`; info.style.color = '#16a34a'; }
+    return result;
+  };
+  try {
+    // Full AR ledger rebuild runs in chunks (Zoho ledger has 100k+ lines,
+    // one edge-function call can't fetch them all) — loop until done.
+    await call('start');
+    let result, chunk = 0;
+    do {
+      chunk++;
+      result = await call('chunk');
+      if (!result.done && info) {
+        info.textContent = `Syncing… ${((result.next_page - 1) * 1000).toLocaleString('en-IN')} ledger entries processed`;
+      }
+      if (chunk > 20) throw new Error('Sync did not finish after 20 chunks');
+    } while (!result.done);
+    if (info) { info.textContent = `✓ Synced ${result.customers} customer AR balances`; info.style.color = '#16a34a'; }
     _reconData = null; // force reload
     renderAdvancesReconcile();
   } catch(e) {
@@ -7831,7 +7850,8 @@ async function renderAdvancesReconcile() {
     const rows = [];
     for (const [name, ledger] of Object.entries(balByName)) {
       const openAR = invByCustomer[name] || 0;
-      if (ledger < 0.01 && openAR < 0.01) continue;
+      // Keep negative (credit) balances — they're part of the balance sheet AR total
+      if (Math.abs(ledger) < 0.01 && openAR < 0.01) continue;
       rows.push({ name, ledger, openAR, diff: ledger - openAR });
     }
     for (const [name, openAR] of Object.entries(invByCustomer)) {
@@ -7868,7 +7888,7 @@ async function renderAdvancesReconcile() {
     <thead><tr>
       <th style="${thS};text-align:center">#</th>
       <th style="${thS};text-align:left">Customer</th>
-      <th style="${thS};text-align:right">Outstanding Receivable (Zoho)</th>
+      <th style="${thS};text-align:right">AR Balance (Balance Sheet)</th>
       <th style="${thS};text-align:right">Open Invoices — ${escHtml(entityLabel)}</th>
       <th style="${thS};text-align:right">Difference</th>
     </tr></thead>
@@ -7887,20 +7907,20 @@ async function renderAdvancesReconcile() {
     <tfoot>
       <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
         <td></td>
-        <td style="${tdS}">Customer Balance Summary (${rows.length} customers)</td>
+        <td style="${tdS}">AR Ledger Total (${rows.length} customers)</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalLedger)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmt(totalAR)}</td>
         <td style="${tdS};text-align:right;font-family:var(--mono)">${fmtDiff(totalDiff)}</td>
       </tr>
-      ${bsARTotal !== null ? `<tr style="background:#fef9c3;border-top:1px solid #fde68a">
+      ${bsARTotal !== null ? `<tr style="background:${Math.abs(bsGap ?? 0) < 1 ? '#f0fdf4' : '#fef9c3'};border-top:1px solid ${Math.abs(bsGap ?? 0) < 1 ? '#bbf7d0' : '#fde68a'}">
         <td></td>
-        <td style="${tdS};font-size:11px;color:#92400e;font-weight:600">Balance Sheet AR (Accounts Receivable account)</td>
-        <td style="${tdS};text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;color:#92400e">${fmt(bsARTotal)}</td>
+        <td style="${tdS};font-size:11px;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'};font-weight:600">Balance Sheet AR (control account)${Math.abs(bsGap ?? 0) < 1 ? ' ✓ matches' : ''}</td>
+        <td style="${tdS};text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;color:${Math.abs(bsGap ?? 0) < 1 ? '#166534' : '#92400e'}">${fmt(bsARTotal)}</td>
         <td style="${tdS}"></td>
-        <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && bsGap > 0.005 ? fmt(bsGap) + ' unattributed' : ''}</td>
+        <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && Math.abs(bsGap) >= 1 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; Outstanding Receivable = Zoho Contacts API (cumulative, matches balance sheet) &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong>${bsGap !== null && bsGap > 0.005 ? ` &nbsp;·&nbsp; ₹${fmt(bsGap)} gap = journal entries &amp; Debtor account not attributable to specific customers` : ''}</td>
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance = Accounts Receivable ledger per customer (invoices − payments − credit notes ± journals), same as the balance sheet drill-down &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong></td>
       </tr>
     </tfoot>
     </table></div>`;
