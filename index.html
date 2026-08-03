@@ -7580,6 +7580,36 @@ function cdFilterAndRender() {
 
   // Per invoice/day: current (latest) promise vs superseded ones
   const entryAmt = (d, h) => Number(h.amount || 0) || Number(d.balance || 0);
+
+  // Movement stats from consecutive PTP entries: dates pushed out vs pulled
+  // in, and amount raised vs cut. Re-logging the same date/amount counts as
+  // neither, so the chip reflects real movement only.
+  const cdMoveStats = (d) => {
+    const s = { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 };
+    const h = d.ptpHistory || [];
+    for (let i = 1; i < h.length; i++) {
+      const p = h[i - 1], c = h[i];
+      if ((c.date || '') > (p.date || '')) s.pushed++;
+      else if ((c.date || '') < (p.date || '')) s.pulled++;
+      const pa = entryAmt(d, p), ca = entryAmt(d, c);
+      if (ca > pa + 0.5) s.amtUp++;
+      else if (ca < pa - 0.5) s.amtDown++;
+    }
+    return s;
+  };
+  const cdMoveChip = (s) => {
+    const moves = s.pushed + s.pulled;
+    if (!moves && !s.amtUp && !s.amtDown) return '';
+    const tip = [
+      `Pushed to a later date: ${s.pushed}`,
+      `Pulled to an earlier date: ${s.pulled}`,
+      `Amount increased: ${s.amtUp}`,
+      `Amount decreased: ${s.amtDown}`,
+    ].join('\n');
+    const label = moves ? `${moves}×` : '₹';
+    const bg = s.pushed ? '#f5f3ff' : '#eef7f1', fg = s.pushed ? '#7c3aed' : '#0a6e4c';
+    return ` <span title="${escHtml(tip)}" style="font-size:9px;background:${bg};color:${fg};padding:.05rem .3rem;border-radius:8px;font-weight:700;cursor:help">${label}</span>`;
+  };
   const cellFor = (d, day) => {
     const ds = dstr(day);
     const hits = d.ptpHistory.filter(h => h.date === ds);
@@ -7642,9 +7672,10 @@ function cdFilterAndRender() {
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
+      const agg = ds.reduce((acc, d) => { const s = cdMoveStats(d); acc.pushed += s.pushed; acc.pulled += s.pulled; acc.amtUp += s.amtUp; acc.amtDown += s.amtDown; return acc; }, { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 });
       return `<tr>
         <td style="${tdL};font-weight:600" title="${escHtml(cust)}">${escHtml(cust)}</td>
-        <td style="${tdL};color:var(--txt3)">${ds.length} inv</td>
+        <td style="${tdL};color:var(--txt3)">${ds.length} inv${cdMoveChip(agg)}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].bu || '—')}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].collector || '—')}</td>
         ${cells}
@@ -7661,7 +7692,7 @@ function cdFilterAndRender() {
           const wk = isWeekend(day) ? ';background:#fafbfd' : '';
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
-        const moved = d.ptpHistory.length > 1 ? ` <span title="PTP moved ${d.ptpHistory.length - 1}×" style="font-size:9px;background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700">${d.ptpHistory.length - 1}×</span>` : '';
+        const moved = cdMoveChip(cdMoveStats(d));
         return `<tr>
           <td style="${tdL};font-weight:600" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
           <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(d.invoiceNumber || '—')}${moved}</td>
@@ -7759,7 +7790,8 @@ function cdFilterAndRender() {
   <div style="font-size:11px;color:var(--txt3);margin:.5rem 0 1rem">
     <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
-    amounts = committed amount, else invoice balance
+    amounts = committed amount, else invoice balance &nbsp;·&nbsp;
+    <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700;font-size:9px">N×</span> date moved N times — hover for pushed / pulled / amount up / amount down
   </div>
   <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
   <div style="font-size:11px;color:var(--txt3);margin-bottom:.5rem">One table per month in which that promise can change — each column is a day of that month, showing the total promised for ${mLbl(_cdMonth)} as at the end of that day. Future days are blank.</div>
