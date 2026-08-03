@@ -1623,7 +1623,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
       <div>
         <span class="slabel" style="margin:0">Confirmed Dates</span>
-        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">Promise-to-Pay tracking by invoice</div>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">PTP calendar — track how promises move across dates</div>
       </div>
       <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
         <input type="text" id="cd-search" class="cust-input" style="font-size:12px;width:200px" placeholder="Search invoice / customer…" oninput="cdFilterAndRender()">
@@ -1638,6 +1638,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <option value="kept">Kept</option>
         </select>
         <button onclick="loadConfirmedDates()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.7rem;flex-wrap:wrap">
+      <div id="cd-month-row" style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center"></div>
+      <div class="ar-view-tog" style="margin-left:auto">
+        <button id="cd-vt-invoice"  class="ar-vtbtn active" onclick="cdSetView('invoice')">Invoice View</button>
+        <button id="cd-vt-customer" class="ar-vtbtn"        onclick="cdSetView('customer')">Customer View</button>
       </div>
     </div>
     <div id="cd-summary" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
@@ -7297,6 +7304,8 @@ function renderPtpEventItem(e) {
 /* ─── CONFIRMED DATES (PTP) TAB ─────────────────────────────── */
 let _cdInited = false;
 let _cdAllData = []; // array of { invoiceId, invoiceNumber, customerName, bu, collector, ptpHistory: [{date, amount, loggedAt, collectorName, interactionId}] }
+let _cdMonth = null;      // 'YYYY-MM' — selected month tab
+let _cdView  = 'invoice'; // 'invoice' | 'customer'
 
 function showConfirmedDatesTab(btn) {
   showTab('confirmed-dates', btn);
@@ -7354,7 +7363,7 @@ async function loadConfirmedDates() {
     for (let start = 0; start < allInvIds.length; start += 100) {
       const chunk = allInvIds.slice(start, start + 100);
       const ivr = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number,customer_name`,
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number,customer_name,balance_inr`,
         { headers: cmrrHdr() }
       );
       if (ivr.ok) (await ivr.json()).forEach(inv => { invoiceInfoMap[inv.invoice_id] = inv; });
@@ -7386,6 +7395,7 @@ async function loadConfirmedDates() {
             customerName: custName,
             bu: arGetBu(custName) || '',
             collector: arGetCollector(custName) || collName,
+            balance: Number(invInfo.balance_inr || 0),
             ptpHistory: []
           };
         }
@@ -7526,66 +7536,145 @@ function cdFilterAndRender() {
     </div>`).join('');
   }
 
-  if (!filtered.length) {
-    content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No results match the current filters.</div>';
+  // ── Month day-grid: rows = invoices/customers, columns = each day of the
+  // selected month; a PTP appears in the month/day its PROMISED date falls
+  // on. Superseded promises show struck-through so slippage is visible. ──
+  const months = [...new Set(_cdAllData.flatMap(d => d.ptpHistory.map(h => (h.date || '').slice(0, 7))).filter(Boolean))].sort();
+  const curMonth = todayStr.slice(0, 7);
+  if (!months.includes(curMonth)) { months.push(curMonth); months.sort(); }
+  if (!_cdMonth || !months.includes(_cdMonth)) _cdMonth = months.includes(curMonth) ? curMonth : months[months.length - 1];
+
+  const monthRow = document.getElementById('cd-month-row');
+  if (monthRow) {
+    const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    monthRow.innerHTML = months.map(m =>
+      `<button class="chip${m === _cdMonth ? ' active' : ''}" onclick="cdSetMonth('${m}')">${mLbl(m)}</button>`).join('');
+  }
+
+  const [yy, mm] = _cdMonth.split('-').map(Number);
+  const daysInMonth = new Date(yy, mm, 0).getDate();
+  const dstr = d => `${_cdMonth}-${String(d).padStart(2, '0')}`;
+  const isWeekend = d => { const w = new Date(yy, mm - 1, d).getDay(); return w === 0 || w === 6; };
+  const cdAmt = v => v >= 1e7 ? (v / 1e7).toFixed(1) + 'Cr' : v >= 1e5 ? (v / 1e5).toFixed(1) + 'L' : v >= 1e3 ? Math.round(v / 1e3) + 'k' : String(Math.round(v));
+
+  // Rows in this month = invoices with any PTP (past or current) promised in it
+  const monthRows = filtered.filter(d => d.ptpHistory.some(h => (h.date || '').startsWith(_cdMonth)));
+  if (!monthRows.length) {
+    content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No PTPs promised in this month for the current filters.</div>';
     return;
   }
 
-  content.innerHTML = filtered.map(d => cdRenderInvoiceCard(d, todayStr)).join('');
-}
+  // Per invoice/day: current (latest) promise vs superseded ones
+  const entryAmt = (d, h) => Number(h.amount || 0) || Number(d.balance || 0);
+  const cellFor = (d, day) => {
+    const ds = dstr(day);
+    const hits = d.ptpHistory.filter(h => h.date === ds);
+    if (!hits.length) return null;
+    const lastIdx = d.ptpHistory.length - 1;
+    const isCurrent = d.ptpHistory[lastIdx].date === ds;
+    const amt = entryAmt(d, d.ptpHistory[lastIdx].date === ds ? d.ptpHistory[lastIdx] : hits[hits.length - 1]);
+    const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
+    return { isCurrent, amt, who };
+  };
 
-function cdRenderInvoiceCard(d, todayStr) {
-  const lastPtp = d.ptpHistory[d.ptpHistory.length - 1];
-  const currentDate = lastPtp?.date || '';
-  const inv = _arAllRows.find(r => r.invoice_id === d.invoiceId);
-  const isPaid = inv && (inv.balance === 0 || inv.status === 'paid');
-  let statusLabel = '', statusColor = '', statusBg = '';
-  if (isPaid) { statusLabel = 'Kept'; statusColor = '#166534'; statusBg = '#dcfce7'; }
-  else if (currentDate < todayStr) { statusLabel = 'Overdue PTP'; statusColor = 'var(--red)'; statusBg = 'var(--red-bg)'; }
-  else if (currentDate === todayStr) { statusLabel = 'Due Today'; statusColor = '#b45309'; statusBg = '#fef3c7'; }
-  else { statusLabel = 'Upcoming'; statusColor = '#16a34a'; statusBg = '#f0fdf4'; }
+  const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .3rem;border-bottom:1.5px solid var(--brd2);text-align:center;white-space:nowrap;z-index:2';
+  const thL = thS.replace('text-align:center', 'text-align:left') + ';padding-left:.6rem';
+  const tdS = 'padding:.28rem .3rem;border-bottom:1px solid var(--line);text-align:center;font-size:10.5px';
+  const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap';
+  const badge = (c) => c.isCurrent
+    ? `<span title="${escHtml('Current PTP — ' + (c.amt ? '₹' + f(c.amt) : '') + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;min-width:26px;padding:.12rem .25rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700;font-family:var(--mono)">${c.amt ? cdAmt(c.amt) : '✓'}</span>`
+    : `<span title="${escHtml('Moved — promise shifted to a later date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;min-width:26px;padding:.12rem .25rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through;font-family:var(--mono)">${c.amt ? cdAmt(c.amt) : '•'}</span>`;
 
-  const buChip = d.bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(d.bu)}</span>` : '';
-  const collChip = d.collector ? `<span style="font-size:11px;font-weight:600;background:#d1fae5;color:#065f46;padding:.1rem .4rem;border-radius:4px">${escHtml(d.collector)}</span>` : '';
-  const invBal = inv ? `<span style="font-size:11px;color:var(--txt3);font-family:var(--mono)">₹${f(arInr(inv))}</span>` : '';
-
-  // PTP history timeline
-  const histHtml = d.ptpHistory.map((entry, idx) => {
-    const isLast = idx === d.ptpHistory.length - 1;
-    const logDt = new Date(entry.loggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const ptpDays = Math.floor((new Date(entry.date) - new Date(todayStr)) / 86400000);
-    const ptpRelative = ptpDays === 0 ? 'today' : ptpDays > 0 ? `in ${ptpDays}d` : `${-ptpDays}d ago`;
-    return `<div style="display:flex;align-items:flex-start;gap:.6rem;padding:.4rem 0;${idx > 0 ? 'border-top:1px dashed var(--brd)' : ''}">
-      <div style="flex-shrink:0;margin-top:.2rem">
-        <div style="width:8px;height:8px;border-radius:50%;background:${isLast ? '#2563eb' : '#cbd5e1'};border:1.5px solid ${isLast ? '#1d4ed8' : '#94a3b8'}"></div>
-        ${idx < d.ptpHistory.length - 1 ? `<div style="width:1px;height:calc(100% + .4rem);background:#e2e8f0;margin:2px auto 0"></div>` : ''}
-      </div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-          <span style="font-size:13px;font-weight:${isLast?'700':'500'};color:${isLast?'var(--ink)':'var(--txt2)'};font-variant-numeric:tabular-nums">${entry.date}</span>
-          <span style="font-size:11px;color:var(--txt3)">${ptpRelative}</span>
-          ${entry.amount ? `<span style="font-size:11px;color:#16a34a;font-weight:600;font-family:var(--mono)">₹${f(entry.amount)}</span>` : ''}
-          ${isLast ? `<span style="font-size:10px;padding:.1rem .4rem;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:600">${statusLabel}</span>` : '<span style="font-size:10px;color:var(--ink-faint)">← moved</span>'}
-        </div>
-        <div style="font-size:11px;color:var(--txt3);margin-top:.1rem">
-          Logged ${logDt}${entry.collectorName ? ` · ${escHtml(entry.collectorName)}` : ''}
-        </div>
-      </div>
-    </div>`;
+  const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const isToday = dstr(day) === todayStr;
+    const wk = isWeekend(day);
+    return `<th style="${thS}${wk ? ';background:#eef1f6' : ''}${isToday ? ';background:#fde68a;color:#92400e' : ''}" title="${dstr(day)}">${day}</th>`;
   }).join('');
 
-  const moved = d.ptpHistory.length > 1 ? `<span style="font-size:11px;background:#f5f3ff;color:#7c3aed;padding:.1rem .45rem;border-radius:20px;font-weight:600">Moved ${d.ptpHistory.length - 1}×</span>` : '';
+  const dayTotals = new Array(daysInMonth + 1).fill(0);
 
-  return `<div style="border:1px solid var(--brd);border-radius:8px;overflow:hidden;margin-bottom:.65rem;background:#fff">
-    <div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .85rem;background:#f0f4fa;border-bottom:1px solid var(--brd);flex-wrap:wrap">
-      <span style="font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--ink)">${escHtml(d.invoiceNumber || '—')}</span>
-      <span style="font-size:13px;font-weight:600;color:var(--ink);flex:1">${escHtml(d.customerName)}</span>
-      ${buChip}${collChip}${invBal}${moved}
-    </div>
-    <div style="padding:.55rem .85rem">
-      ${histHtml}
-    </div>
+  let bodyHtml = '';
+  if (_cdView === 'customer') {
+    const byCust = {};
+    monthRows.forEach(d => { (byCust[d.customerName] = byCust[d.customerName] || []).push(d); });
+    bodyHtml = Object.entries(byCust).sort((a, b) => a[0].localeCompare(b[0])).map(([cust, ds]) => {
+      const cells = Array.from({ length: daysInMonth }, (_, i) => {
+        const day = i + 1;
+        let curSum = 0, oldCount = 0;
+        ds.forEach(d => {
+          const c = cellFor(d, day);
+          if (!c) return;
+          if (c.isCurrent) curSum += c.amt; else oldCount++;
+        });
+        if (curSum > 0) dayTotals[day] += curSum;
+        const wk = isWeekend(day) ? ';background:#fafbfd' : '';
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '' })}</td>`;
+        if (oldCount)   return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: 0, who: '' })}</td>`;
+        return `<td style="${tdS}${wk}"></td>`;
+      }).join('');
+      return `<tr>
+        <td style="${tdL};font-weight:600;max-width:190px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(cust)}">${escHtml(cust)}</td>
+        <td style="${tdL};color:var(--txt3)">${ds.length} inv</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].bu || '—')}</td>
+        <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].collector || '—')}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+  } else {
+    bodyHtml = monthRows
+      .sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '') || (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''))
+      .map(d => {
+        const cells = Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1;
+          const c = cellFor(d, day);
+          if (c && c.isCurrent) dayTotals[day] += c.amt;
+          const wk = isWeekend(day) ? ';background:#fafbfd' : '';
+          return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
+        }).join('');
+        const moved = d.ptpHistory.length > 1 ? ` <span title="PTP moved ${d.ptpHistory.length - 1}×" style="font-size:9px;background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700">${d.ptpHistory.length - 1}×</span>` : '';
+        return `<tr>
+          <td style="${tdL};font-weight:600;max-width:190px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(d.invoiceNumber || '—')}${moved}</td>
+          <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.bu || '—')}</td>
+          <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.collector || '—')}</td>
+          ${cells}
+        </tr>`;
+      }).join('');
+  }
+
+  const totCells = Array.from({ length: daysInMonth }, (_, i) => {
+    const v = dayTotals[i + 1];
+    return `<td style="${tdS};font-weight:700;font-family:var(--mono);color:${v > 0 ? '#166534' : 'var(--ink-faint)'}">${v > 0 ? cdAmt(v) : ''}</td>`;
+  }).join('');
+
+  content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;min-width:${560 + daysInMonth * 36}px;width:100%">
+    <thead><tr>
+      <th style="${thL}">Customer</th>
+      <th style="${thL}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
+      <th style="${thL}">BU</th>
+      <th style="${thL}">POC</th>
+      ${dayHead}
+    </tr></thead>
+    <tbody>${bodyHtml}</tbody>
+    <tfoot><tr style="background:#f8fafc">
+      <td colspan="4" style="${tdL};font-weight:700">Total promised (current PTPs)</td>
+      ${totCells}
+    </tr></tfoot>
+  </table></div>
+  <div style="font-size:11px;color:var(--txt3);margin-top:.5rem">
+    <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">moved</s> promise later shifted &nbsp;·&nbsp;
+    amounts = committed amount, else invoice balance
   </div>`;
+}
+
+function cdSetMonth(m) { _cdMonth = m; cdFilterAndRender(); }
+function cdSetView(v) {
+  _cdView = v;
+  document.getElementById('cd-vt-invoice')?.classList.toggle('active', v === 'invoice');
+  document.getElementById('cd-vt-customer')?.classList.toggle('active', v === 'customer');
+  cdFilterAndRender();
 }
 
 /* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
