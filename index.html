@@ -2010,6 +2010,8 @@ function renderNav() {
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
     if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
+    if (activeId === 'confirmed-dates') cdInit();
+    if (activeId === 'disputed-invoices' && !_diInited) { _diInited = true; loadDisputedInvoices(); }
     if (activeId === 'settings') loadSettingsPane();
   }
 }
@@ -7315,15 +7317,18 @@ let _cdAllData = []; // array of { invoiceId, invoiceNumber, customerName, bu, c
 let _cdMonth = null;      // 'YYYY-MM' — selected month tab
 let _cdView  = 'invoice'; // 'invoice' | 'customer'
 
-function showConfirmedDatesTab(btn) {
-  showTab('confirmed-dates', btn);
+async function cdInit() {
   if (!_cdInited) {
     _cdInited = true;
-    loadArCustMaster();
-    loadConfirmedDates();
-  } else {
-    loadConfirmedDates();
+    // await the master so BU / POC resolve on the first paint
+    try { await loadArCustMaster(); } catch(_) {}
   }
+  await loadConfirmedDates();
+}
+
+function showConfirmedDatesTab(btn) {
+  showTab('confirmed-dates', btn);
+  cdInit();
 }
 
 async function loadConfirmedDates() {
@@ -7608,20 +7613,14 @@ function cdFilterAndRender() {
 
   const dayTotals = new Array(daysInMonth + 1).fill(0);
 
-  // Movement table axis = the month the promises are being MADE in. Viewing
-  // Sep or Oct while it is August shows how those months' promised totals
-  // moved across August's days. For a past month, track within itself.
-  const trackMonth = _cdMonth < curMonth ? _cdMonth : curMonth;
-  const [tyy, tmm] = trackMonth.split('-').map(Number);
-  const trackDays = new Date(tyy, tmm, 0).getDate();
-  const tdstr = d => `${trackMonth}-${String(d).padStart(2, '0')}`;
-  const tIsWeekend = d => { const w = new Date(tyy, tmm - 1, d).getDay(); return w === 0 || w === 6; };
-  const trackDayHead = Array.from({ length: trackDays }, (_, i) => {
-    const day = i + 1;
-    const isToday = tdstr(day) === todayStr;
-    const wk = tIsWeekend(day);
-    return `<th style="${thS}${wk ? ';background:#eef1f6' : ''}${isToday ? ';background:#fde68a;color:#92400e' : ''}" title="${tdstr(day)}">${day}</th>`;
-  }).join('');
+  // One movement table per calendar month between today's month and the
+  // selected month (inclusive). Viewing Oct in August gives Aug, Sep and Oct
+  // tables — the promised total for Oct can move in any of those months.
+  const monthAdd = (m, k) => { const [a, b] = m.split('-').map(Number); const d = new Date(a, b - 1 + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const trackMonths = [];
+  { const lo = _cdMonth < curMonth ? _cdMonth : curMonth;
+    const hi = _cdMonth < curMonth ? curMonth : _cdMonth;
+    for (let m = lo; m <= hi; m = monthAdd(m, 1)) { trackMonths.push(m); if (trackMonths.length > 24) break; } }
 
   let bodyHtml = '';
   if (_cdView === 'customer') {
@@ -7677,31 +7676,66 @@ function cdFilterAndRender() {
     return `<td style="${tdS};font-weight:700;color:${v > 0 ? '#166534' : 'var(--ink-faint)'}">${v > 0 ? fmtFull(v) : ''}</td>`;
   }).join('');
 
-  // ── Month-total movement: what the whole month's promised total stood at,
-  // as of the end of each calendar day (reconstructed from PTP history) ──
-  const asOfTotals = [];
-  for (let day = 1; day <= trackDays; day++) {
-    const cutoff = tdstr(day) + 'T23:59:59.999Z';
-    let tot = 0;
-    for (const d of monthRows) {
-      let cur = null;
-      for (const h of d.ptpHistory) { if ((h.loggedAt || '') <= cutoff) cur = h; }
-      if (cur && (cur.date || '').startsWith(_cdMonth)) tot += entryAmt(d, cur);
+  // ── Movement tables: what the selected month's promised total stood at as of
+  // the end of each day of a given tracking month (rebuilt from PTP history).
+  // Days after today are left blank — they haven't happened yet. Carries the
+  // running total in from the previous tracking month so deltas are continuous.
+  const movementTable = (tm, prevCarry) => {
+    const [a, b] = tm.split('-').map(Number);
+    const nDays = new Date(a, b, 0).getDate();
+    const ds = d => `${tm}-${String(d).padStart(2, '0')}`;
+    const wkEnd = d => { const w = new Date(a, b - 1, d).getDay(); return w === 0 || w === 6; };
+    const totals = [];
+    for (let day = 1; day <= nDays; day++) {
+      if (ds(day) > todayStr) { totals.push(null); continue; }
+      const cutoff = ds(day) + 'T23:59:59.999Z';
+      let tot = 0;
+      for (const d of monthRows) {
+        let cur = null;
+        for (const h of d.ptpHistory) { if ((h.loggedAt || '') <= cutoff) cur = h; }
+        if (cur && (cur.date || '').startsWith(_cdMonth)) tot += entryAmt(d, cur);
+      }
+      totals.push(tot);
     }
-    asOfTotals.push(tot);
-  }
-  const asOfCells = asOfTotals.map((v, i) => {
-    const day = i + 1;
-    const wk = tIsWeekend(day) ? ';background:#fafbfd' : '';
-    const isToday = tdstr(day) === todayStr;
-    return `<td style="${tdS}${wk}${isToday ? ';background:#fef9c3' : ''};font-weight:600">${v > 0 ? fmtFull(v) : ''}</td>`;
-  }).join('');
-  const deltaCells = asOfTotals.map((v, i) => {
-    if (i === 0) return `<td style="${tdS}"></td>`;
-    const dl = v - asOfTotals[i - 1];
-    if (Math.abs(dl) < 1) return `<td style="${tdS};color:var(--ink-faint)"></td>`;
-    return `<td style="${tdS};font-weight:600;color:${dl > 0 ? '#166534' : 'var(--red)'}">${dl > 0 ? '▲' : '▼'} ${fmtFull(Math.abs(dl))}</td>`;
-  }).join('');
+    const head = Array.from({ length: nDays }, (_, i) => {
+      const day = i + 1;
+      const isToday = ds(day) === todayStr;
+      return `<th style="${thS}${wkEnd(day) ? ';background:#eef1f6' : ''}${isToday ? ';background:#fde68a;color:#92400e' : ''}" title="${ds(day)}">${day}</th>`;
+    }).join('');
+    const valCells = totals.map((v, i) => {
+      const day = i + 1;
+      const wk = wkEnd(day) ? ';background:#fafbfd' : '';
+      const isToday = ds(day) === todayStr;
+      const future = ds(day) > todayStr ? ';color:var(--ink-faint)' : '';
+      return `<td style="${tdS}${wk}${isToday ? ';background:#fef9c3' : ''}${future};font-weight:600">${v === null ? '' : (v > 0 ? fmtFull(v) : '0')}</td>`;
+    }).join('');
+    let prev = prevCarry;
+    const dltCells = totals.map((v, i) => {
+      const day = i + 1;
+      const wk = wkEnd(day) ? ';background:#fafbfd' : '';
+      if (v === null) return `<td style="${tdS}${wk}"></td>`;
+      const base = prev;
+      prev = v;
+      if (base === null) return `<td style="${tdS}${wk};color:var(--ink-faint)"></td>`;
+      const dl = v - base;
+      if (Math.abs(dl) < 1) return `<td style="${tdS}${wk};color:var(--ink-faint)">—</td>`;
+      return `<td style="${tdS}${wk};font-weight:600;color:${dl > 0 ? '#166534' : 'var(--red)'}">${dl > 0 ? '▲' : '▼'} ${fmtFull(Math.abs(dl))}</td>`;
+    }).join('');
+    const lastKnown = [...totals].reverse().find(v => v !== null);
+    const html = `<div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin:0 0 .1rem">Movement during ${mLbl(tm)}${tm === curMonth ? ' <span style="font-weight:400;color:var(--txt3)">(current month)</span>' : ''}</div>
+    <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px;margin-bottom:.9rem"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${CUST_W + INV_W + BU_W + POC_W + nDays * DAY_W}px">
+      ${dayColgroup(nDays)}
+      <thead><tr><th style="${thL}">As of end of day → (${mLbl(tm)})</th>${head}</tr></thead>
+      <tbody>
+        <tr><td style="${tdL};font-weight:600">Total promised for ${mLbl(_cdMonth)}</td>${valCells}</tr>
+        <tr><td style="${tdL};color:var(--txt3)">Change vs previous day</td>${dltCells}</tr>
+      </tbody>
+    </table></div>`;
+    return { html, carry: lastKnown === undefined ? prevCarry : lastKnown };
+  };
+
+  let carry = null;
+  const movementHtml = trackMonths.map(tm => { const t = movementTable(tm, carry); carry = t.carry; return t.html; }).join('');
 
   content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
     ${colgroup}
@@ -7723,19 +7757,9 @@ function cdFilterAndRender() {
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance
   </div>
-  <div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} moved during ${mLbl(trackMonth)}</div>
-  <div style="font-size:11px;color:var(--txt3);margin-bottom:.35rem">Each column is a day of ${mLbl(trackMonth)}; the value is the total promised for ${mLbl(_cdMonth)} as it stood at the end of that day.</div>
-  <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${CUST_W + INV_W + BU_W + POC_W + trackDays * DAY_W}px">
-    ${dayColgroup(trackDays)}
-    <thead><tr>
-      <th style="${thL}">As of end of day → (${mLbl(trackMonth)})</th>
-      ${trackDayHead}
-    </tr></thead>
-    <tbody>
-      <tr><td style="${tdL};font-weight:600">Total promised for ${mLbl(_cdMonth)}</td>${asOfCells}</tr>
-      <tr><td style="${tdL};color:var(--txt3)">Change vs previous day</td>${deltaCells}</tr>
-    </tbody>
-  </table></div>`;
+  <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
+  <div style="font-size:11px;color:var(--txt3);margin-bottom:.5rem">One table per month in which that promise can change — each column is a day of that month, showing the total promised for ${mLbl(_cdMonth)} as at the end of that day. Future days are blank.</div>
+  ${movementHtml}`;
 }
 
 function cdSetMonth(m) { _cdMonth = m; cdFilterAndRender(); }
