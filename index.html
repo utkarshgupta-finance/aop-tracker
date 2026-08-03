@@ -1308,31 +1308,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
               <option value="">— Select contact —</option>
             </select>
-            <div id="cc-new-contact-form" style="display:none;margin-top:.65rem;border:1px solid var(--brd);border-radius:8px;padding:.85rem 1rem;background:var(--surf2)">
-              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.7rem">New Contact</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .65rem;margin-bottom:.55rem">
-                <div>
-                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Full Name <span style="color:var(--red)">*</span></div>
-                  <input type="text"  id="cc-new-contact-name"  class="cc-input" placeholder="e.g. Priya Sharma">
-                </div>
-                <div>
-                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Designation</div>
-                  <input type="text"  id="cc-new-contact-role"  class="cc-input" placeholder="e.g. Finance Manager">
-                </div>
-                <div>
-                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Email</div>
-                  <input type="email" id="cc-new-contact-email" class="cc-input" placeholder="email@company.com">
-                </div>
-                <div>
-                  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">Phone</div>
-                  <input type="tel"   id="cc-new-contact-phone" class="cc-input" placeholder="+91 98765 43210">
-                </div>
-              </div>
-              <div style="display:flex;gap:.5rem">
-                <button type="button" class="cc-add-btn"    onclick="ccSaveNewContact()">Save contact</button>
-                <button type="button" class="cc-cancel-btn" onclick="ccCancelNewContact()">Cancel</button>
-              </div>
-            </div>
             <!-- Mini contacts list for current customer -->
             <div id="cc-contacts-mini-wrap" style="display:none;margin-top:.75rem">
               <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.45rem">All Contacts for this Customer</div>
@@ -1748,8 +1723,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div>
           <label class="cc-label">Phone</label>
           <div style="display:flex;gap:.35rem;margin-top:.25rem">
-            <select id="ctc-modal-cc" class="nret-sel" style="font-size:12.5px;padding:.35rem .4rem;flex:0 0 128px"></select>
-            <input type="tel" id="ctc-modal-phone" class="cust-input" style="flex:1;min-width:0;font-size:12.5px;padding:.35rem .6rem" placeholder="98765 43210">
+            <select id="ctc-modal-cc" class="nret-sel" title="Country code" style="font-size:12px;padding:.35rem .25rem;flex:0 0 86px"></select>
+            <input type="tel" id="ctc-modal-phone" class="cust-input" style="flex:1 1 auto;min-width:0;font-size:12.5px;padding:.35rem .6rem" placeholder="98765 43210">
           </div>
         </div>
       </div>
@@ -2407,16 +2382,19 @@ function updateCmStats() {
 /* ─── PHONE COUNTRY CODES ───────────────────────────────────── */
 // India first (default); the rest are the markets this AR book covers.
 const CTC_DIAL_CODES = [
-  ['+91','India'],['+44','UK'],['+1','US / Canada'],['+971','UAE'],['+966','Saudi Arabia'],
-  ['+965','Kuwait'],['+974','Qatar'],['+973','Bahrain'],['+968','Oman'],['+20','Egypt'],
-  ['+234','Nigeria'],['+254','Kenya'],['+255','Tanzania'],['+256','Uganda'],['+27','South Africa'],
-  ['+233','Ghana'],['+212','Morocco'],['+94','Sri Lanka'],['+880','Bangladesh'],['+977','Nepal'],
-  ['+975','Bhutan'],['+960','Maldives'],['+92','Pakistan'],['+95','Myanmar'],['+66','Thailand'],
-  ['+60','Malaysia'],['+65','Singapore'],['+62','Indonesia'],['+63','Philippines'],['+84','Vietnam'],
-  ['+855','Cambodia'],['+856','Laos'],['+86','China'],['+852','Hong Kong'],['+81','Japan'],
-  ['+82','South Korea'],['+61','Australia'],['+64','New Zealand'],['+49','Germany'],['+33','France'],
-  ['+39','Italy'],['+34','Spain'],['+31','Netherlands'],['+41','Switzerland'],['+46','Sweden'],
-  ['+353','Ireland'],['+7','Russia / Kazakhstan'],['+90','Turkey'],['+55','Brazil'],['+52','Mexico'],
+  ['+91','India','IN'],['+44','United Kingdom','GB'],['+1','US / Canada','US'],['+971','UAE','AE'],
+  ['+966','Saudi Arabia','SA'],['+965','Kuwait','KW'],['+974','Qatar','QA'],['+973','Bahrain','BH'],
+  ['+968','Oman','OM'],['+20','Egypt','EG'],['+234','Nigeria','NG'],['+254','Kenya','KE'],
+  ['+255','Tanzania','TZ'],['+256','Uganda','UG'],['+27','South Africa','ZA'],['+233','Ghana','GH'],
+  ['+212','Morocco','MA'],['+94','Sri Lanka','LK'],['+880','Bangladesh','BD'],['+977','Nepal','NP'],
+  ['+975','Bhutan','BT'],['+960','Maldives','MV'],['+92','Pakistan','PK'],['+95','Myanmar','MM'],
+  ['+66','Thailand','TH'],['+60','Malaysia','MY'],['+65','Singapore','SG'],['+62','Indonesia','ID'],
+  ['+63','Philippines','PH'],['+84','Vietnam','VN'],['+855','Cambodia','KH'],['+856','Laos','LA'],
+  ['+86','China','CN'],['+852','Hong Kong','HK'],['+81','Japan','JP'],['+82','South Korea','KR'],
+  ['+61','Australia','AU'],['+64','New Zealand','NZ'],['+49','Germany','DE'],['+33','France','FR'],
+  ['+39','Italy','IT'],['+34','Spain','ES'],['+31','Netherlands','NL'],['+41','Switzerland','CH'],
+  ['+46','Sweden','SE'],['+353','Ireland','IE'],['+7','Russia / Kazakhstan','RU'],['+90','Turkey','TR'],
+  ['+55','Brazil','BR'],['+52','Mexico','MX'],
 ];
 const CTC_DEFAULT_CC = '+91';
 
@@ -2424,8 +2402,8 @@ function ctcFillCcDropdown(selected) {
   const sel = document.getElementById('ctc-modal-cc');
   if (!sel) return;
   if (!sel.options.length) {
-    sel.innerHTML = CTC_DIAL_CODES.map(([code, name]) =>
-      `<option value="${code}">${code} ${escHtml(name)}</option>`).join('');
+    sel.innerHTML = CTC_DIAL_CODES.map(([code, name, iso]) =>
+      `<option value="${code}" title="${escHtml(name)}">${code} ${escHtml(iso)}</option>`).join('');
   }
   sel.value = CTC_DIAL_CODES.some(([c]) => c === selected) ? selected : CTC_DEFAULT_CC;
 }
@@ -2584,20 +2562,29 @@ function renderContactsTable() {
   }).join('');
 }
 
-function openContactModal(id) {
+// Single contact form used by the Contacts tab and by Log Interaction.
+// opts.lockCustomer pins the customer (Log Interaction); opts.onSaved fires
+// with the saved row so the caller can select it.
+let _ctcModalOpts = {};
+function openContactModal(id, opts) {
   _ctcEditId = id || null;
+  _ctcModalOpts = opts || {};
   const modal = document.getElementById('ctc-modal-ov');
   document.getElementById('ctc-modal-title').textContent = id ? 'Edit Contact' : 'Add Contact';
   document.getElementById('ctc-modal-err').textContent = '';
 
-  // Populate customer dropdown
+  // Populate customer dropdown (locked to one customer when asked)
   const custSel = document.getElementById('ctc-modal-customer');
-  const customers = [...new Set([
-    ..._ctcContacts.map(c => c.customer_name),
+  const lock = _ctcModalOpts.lockCustomer || '';
+  const customers = lock ? [lock] : [...new Set([
+    ...(_ctcContacts || []).map(c => c.customer_name),
     ..._cmData.map(c => c.customer_name)
   ].filter(Boolean))].sort();
-  custSel.innerHTML = '<option value="">— Select customer —</option>'
+  custSel.innerHTML = (lock ? '' : '<option value="">— Select customer —</option>')
     + customers.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  custSel.disabled = !!lock;
+  custSel.style.background = lock ? 'var(--surf2)' : '';
+  if (lock) custSel.value = lock;
 
   // Populate category dropdown
   const catSel = document.getElementById('ctc-modal-category');
@@ -2606,7 +2593,8 @@ function openContactModal(id) {
     + activeCategories.map(c => `<option value="${escHtml(c.value)}">${escHtml(c.label)}</option>`).join('');
 
   if (id) {
-    const c = _ctcContacts.find(x => x.id === id);
+    const c = (_ctcContacts || []).find(x => x.id === id)
+           || (_ccState?.contacts || []).find(x => x.id === id);
     if (!c) return;
     custSel.value   = c.customer_name || '';
     catSel.value    = c.category || '';
@@ -2618,7 +2606,7 @@ function openContactModal(id) {
       document.getElementById('ctc-modal-phone').value = p.rest; }
     document.getElementById('ctc-modal-active').checked = c.is_active !== false;
   } else {
-    custSel.value = '';
+    if (!lock) custSel.value = '';
     catSel.value  = '';
     ctcFillCcDropdown(CTC_DEFAULT_CC);
     ['ctc-modal-name','ctc-modal-role','ctc-modal-email','ctc-modal-phone'].forEach(id => {
@@ -2682,15 +2670,36 @@ async function saveContact() {
   }
 
   const [saved] = await r.json();
-  if (_ctcEditId) {
-    const idx = _ctcContacts.findIndex(c => c.id === _ctcEditId);
-    if (idx >= 0) _ctcContacts[idx] = saved;
-  } else {
-    _ctcContacts.push(saved);
-  }
-  _populateCtcCustomerFilter();
-  renderContactsTable();
+  ctcSyncStores(saved);
+  const cb = _ctcModalOpts.onSaved;
   closeContactModal();
+  if (typeof cb === 'function') cb(saved);
+}
+
+// Keep the Contacts tab and the Log Interaction contact list in step, whichever
+// screen the edit came from.
+function ctcSyncStores(saved, deletedId) {
+  if (deletedId) {
+    if (Array.isArray(_ctcContacts)) {
+      const i = _ctcContacts.findIndex(c => c.id === deletedId);
+      if (i >= 0) _ctcContacts.splice(i, 1);
+    }
+    if (_ccState && Array.isArray(_ccState.contacts)) {
+      const j = _ccState.contacts.findIndex(c => c.id === deletedId);
+      if (j >= 0) _ccState.contacts.splice(j, 1);
+    }
+  } else if (saved) {
+    if (Array.isArray(_ctcContacts)) {
+      const i = _ctcContacts.findIndex(c => c.id === saved.id);
+      if (i >= 0) _ctcContacts[i] = saved; else _ctcContacts.push(saved);
+    }
+    if (_ccState && Array.isArray(_ccState.contacts) && saved.customer_name === _ccState.customerName) {
+      const j = _ccState.contacts.findIndex(c => c.id === saved.id);
+      if (j >= 0) _ccState.contacts[j] = saved; else _ccState.contacts.push(saved);
+    }
+  }
+  try { if (document.getElementById('ctc-tbody')) { _populateCtcCustomerFilter(); renderContactsTable(); } } catch(_) {}
+  try { if (document.getElementById('cc-contact-sel')) { ccRenderContactSelect(); ccRenderContactsMini(); } } catch(_) {}
 }
 
 function initiateDeleteContact(id) {
@@ -2709,9 +2718,7 @@ async function deleteContact(id) {
   });
   if (r.ok) {
     _ctcPendingDeleteId = null;
-    _ctcContacts = _ctcContacts.filter(c => c.id !== id);
-    _populateCtcCustomerFilter();
-    renderContactsTable();
+    ctcSyncStores(null, id);
   } else {
     _ctcPendingDeleteId = null;
     renderContactsTable();
@@ -2726,9 +2733,10 @@ async function toggleContactActive(id, newVal) {
     body: JSON.stringify({ is_active: newVal }),
   });
   if (r.ok) {
+    const [saved] = await r.json().catch(() => [null]);
     const idx = _ctcContacts.findIndex(c => c.id === id);
-    if (idx >= 0) _ctcContacts[idx].is_active = newVal;
-    renderContactsTable();
+    const merged = saved || (idx >= 0 ? { ..._ctcContacts[idx], is_active: newVal } : null);
+    if (merged) ctcSyncStores(merged);
   }
 }
 
@@ -6215,7 +6223,6 @@ function ccResetForm() {
   _ccState = ccMakeState();
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
                 'cc-promised-amount','cc-promised-date','cc-esc-who','cc-esc-what',
-                'cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone',
                 'cc-dispute-desc','cc-dispute-amount'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
@@ -6237,7 +6244,6 @@ function ccResetForm() {
   document.getElementById('cc-partial-amount').style.display  = 'none';
   document.getElementById('cc-esc-fields').style.display      = 'none';
   document.getElementById('cc-esc-prompt').style.display      = '';
-  document.getElementById('cc-new-contact-form').style.display = 'none';
   const miniWrap = document.getElementById('cc-contacts-mini-wrap');
   if (miniWrap) { miniWrap.style.display = 'none'; document.getElementById('cc-contacts-mini-list').innerHTML = ''; }
   document.getElementById('cc-fu-hint').textContent  = '';
@@ -6481,10 +6487,10 @@ async function ccMiniToggleActive(id, newVal) {
     body: JSON.stringify({ is_active: newVal }),
   });
   if (r.ok) {
+    const [saved] = await r.json().catch(() => [null]);
     const idx = _ccState.contacts.findIndex(c => c.id === id);
-    if (idx >= 0) _ccState.contacts[idx].is_active = newVal;
-    ccRenderContactSelect();
-    ccRenderContactsMini();
+    const merged = saved || (idx >= 0 ? { ..._ccState.contacts[idx], is_active: newVal } : null);
+    if (merged) ctcSyncStores(merged);
   }
 }
 
@@ -6504,39 +6510,15 @@ async function ccMiniDeleteContact(id) {
   });
   _ccPendingDeleteId = null;
   if (r.ok) {
-    _ccState.contacts = _ccState.contacts.filter(c => c.id !== id);
     if (_ccState.contactId === id) { _ccState.contactId = null; document.getElementById('cc-contact-sel').value = ''; }
-    ccRenderContactSelect();
-    ccRenderContactsMini();
+    ctcSyncStores(null, id);
   } else {
     ccRenderContactsMini();
   }
 }
 
 function ccMiniEditContact(id) {
-  const c = _ccState.contacts.find(x => x.id === id);
-  if (!c) return;
-  const newName  = prompt('Full Name:', c.name || '');
-  if (newName === null) return;
-  const newRole  = prompt('Designation:', c.role || '');
-  if (newRole === null) return;
-  const newEmail = prompt('Email:', c.email || '');
-  if (newEmail === null) return;
-  const newPhone = prompt('Phone:', c.phone || '');
-  if (newPhone === null) return;
-  fetch(`${SUPABASE_URL}/rest/v1/contacts?id=eq.${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ name: newName.trim(), role: newRole.trim() || null, email: newEmail.trim() || null, phone: newPhone.trim() || null }),
-  }).then(async r => {
-    if (r.ok) {
-      const [saved] = await r.json();
-      const idx = _ccState.contacts.findIndex(c => c.id === id);
-      if (idx >= 0) _ccState.contacts[idx] = { ..._ccState.contacts[idx], ...saved };
-      ccRenderContactSelect();
-      ccRenderContactsMini();
-    }
-  });
+  openContactModal(id, { lockCustomer: _ccState.customerName });
 }
 
 function ccRenderContactSelect() {
@@ -6551,47 +6533,24 @@ function ccRenderContactSelect() {
 }
 
 function ccContactChanged() {
-  const val = document.getElementById('cc-contact-sel').value;
+  const sel = document.getElementById('cc-contact-sel');
+  const val = sel.value;
   if (val === '__new__') {
-    document.getElementById('cc-new-contact-form').style.display = 'flex';
+    sel.value = '';
     _ccState.contactId = null;
+    if (!_ccState.customerName) { alert('Select a customer first.'); return; }
+    // Same form as the Contacts tab, with this customer fixed
+    openContactModal(null, {
+      lockCustomer: _ccState.customerName,
+      onSaved: (saved) => {
+        const s = document.getElementById('cc-contact-sel');
+        if (s) s.value = saved.id;
+        _ccState.contactId = saved.id;
+      },
+    });
   } else {
-    document.getElementById('cc-new-contact-form').style.display = 'none';
     _ccState.contactId = val || null;
   }
-}
-
-async function ccSaveNewContact() {
-  const name  = document.getElementById('cc-new-contact-name').value.trim();
-  const role  = document.getElementById('cc-new-contact-role').value.trim();
-  const email = document.getElementById('cc-new-contact-email').value.trim();
-  const phone = document.getElementById('cc-new-contact-phone').value.trim();
-  if (!name) { document.getElementById('cc-new-contact-name').focus(); return; }
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-    method: 'POST',
-    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ customer_name: _ccState.customerName, name, role: role || null, email: email || null, phone: phone || null, is_active: true }),
-  });
-  if (r.ok) {
-    const [contact] = await r.json();
-    _ccState.contacts.push(contact);
-    ccRenderContactSelect();
-    document.getElementById('cc-contact-sel').value = contact.id;
-    _ccState.contactId = contact.id;
-  }
-  document.getElementById('cc-new-contact-form').style.display = 'none';
-  ['cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-}
-
-function ccCancelNewContact() {
-  document.getElementById('cc-new-contact-form').style.display = 'none';
-  document.getElementById('cc-contact-sel').value = '';
-  _ccState.contactId = null;
-  ['cc-new-contact-name','cc-new-contact-role','cc-new-contact-email','cc-new-contact-phone'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
 }
 
 /* ── Connection status ───────────────────────────────────── */
