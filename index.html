@@ -1640,11 +1640,17 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <button onclick="loadConfirmedDates()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.7rem;flex-wrap:wrap">
-      <div id="cd-month-row" style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center"></div>
-      <div class="ar-view-tog" style="margin-left:auto">
-        <button id="cd-vt-invoice"  class="ar-vtbtn active" onclick="cdSetView('invoice')">Invoice View</button>
-        <button id="cd-vt-customer" class="ar-vtbtn"        onclick="cdSetView('customer')">Customer View</button>
+    <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.7rem">
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">Month</span>
+        <div id="cd-month-row" style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center"></div>
+      </div>
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">View</span>
+        <div class="ar-view-tog" style="margin-left:0">
+          <button id="cd-vt-invoice"  class="ar-vtbtn active" onclick="cdSetView('invoice')">Invoice View</button>
+          <button id="cd-vt-customer" class="ar-vtbtn"        onclick="cdSetView('customer')">Customer View</button>
+        </div>
       </div>
     </div>
     <div id="cd-summary" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
