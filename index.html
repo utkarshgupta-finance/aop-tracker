@@ -7336,6 +7336,21 @@ let _cdMonth = null;      // 'YYYY-MM' — selected month tab
 let _cdView  = 'invoice'; // 'invoice' | 'customer'
 let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month start }
 let _cdSortTotal = null;  // null = by name, else 'desc' | 'asc' on the Total column
+let _cdBank = {};         // 'YYYY-MM' → { invoice_id: cash received in bank } | null while loading
+
+// Cash received in bank for a month, per invoice — from Zoho customer payments
+// via the bank-collections edge function. CN / TDS / JV closures are excluded
+// by construction. Loads lazily per month, then re-renders.
+async function cdLoadBank(month) {
+  if (_cdBank[month] !== undefined) return;
+  _cdBank[month] = null; // loading marker
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/bank-collections?month=${month}`, { headers: cmrrHdr() });
+    const j = await r.json().catch(() => ({}));
+    _cdBank[month] = (r.ok && j.ok) ? (j.data || {}) : {};
+  } catch(_) { _cdBank[month] = {}; }
+  cdFilterAndRender();
+}
 
 async function cdInit() {
   if (!_cdInited) {
@@ -7651,16 +7666,22 @@ function cdFilterAndRender() {
     if (!last || !(last.date || '').startsWith(_cdMonth)) return 0;
     return entryAmt(d, last);
   };
-  // Money state for the selected month
+  // Money state for the selected month. "collected" is CASH RECEIVED IN BANK
+  // during the month (from customer payments) — closures via credit notes,
+  // TDS mapping or journal vouchers are deliberately not counted as collected.
+  const bankMap = _cdBank[_cdMonth];          // undefined = not requested, null = loading
+  if (bankMap === undefined) cdLoadBank(_cdMonth);
+  const bankLoading = _cdBank[_cdMonth] == null;
   const moneyFor = (d) => {
     const opening = openingFor(d);
     const outstanding = d.closed ? 0 : Number(d.balance || 0);
-    const collected = Math.max(0, opening - outstanding);
+    const collected = bankMap ? Number(bankMap[d.invoiceId] || 0) : 0;
     return {
       opening, outstanding, collected,
       full: d.closed || outstanding < 0.5,
       part: !d.closed && outstanding >= 0.5 && collected > 0.5,
     };
+  };
 
   // Summary strip
   const summary = document.getElementById('cd-summary');
@@ -7690,11 +7711,6 @@ function cdFilterAndRender() {
     content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No PTPs promised in this month for the current filters.</div>';
     return;
   }
-
-  // Per invoice/day: current (latest) promise vs superseded ones
-  // Opening balance for the selected month: an invoice raised during the month
-  // starts at its own total, otherwise take the balance carried in on the 1st.
-  };
 
   // Movement stats from consecutive PTP entries: dates pushed out vs pulled
   // in, and amount raised vs cut. Re-logging the same date/amount counts as
@@ -7743,9 +7759,9 @@ function cdFilterAndRender() {
   const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   const badge = (c) => c.isCurrent
     ? (c.collected
-      ? `<span title="${escHtml('Collected — invoice closed · ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
+      ? `<span title="${escHtml('Invoice closed · ' + fmtFull(c.paid) + ' received in bank this month' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
       : (c.partial
-        ? `<span title="${escHtml('Part-paid this month — ' + fmtFull(c.paid) + ' received, ' + fmtFull(c.amt) + ' outstanding (expected = balance at month start)' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
+        ? `<span title="${escHtml('Part-paid — ' + fmtFull(c.paid) + ' received in bank this month, ' + fmtFull(c.amt) + ' outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
         : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`))
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
 
@@ -7937,14 +7953,14 @@ function cdFilterAndRender() {
       ${totCells}
     </tr>
     <tr style="background:#f6fdf8">
-      <td colspan="4" style="${tdL};color:#166534;${frz(0, '#f6fdf8', 2)}">of which collected (invoice closed)</td>
+      <td colspan="4" style="${tdL};color:#166534;${frz(0, '#f6fdf8', 2)}">of which collected in bank${bankLoading ? ' <span style="color:var(--ink-faint)">(loading…)</span>' : ''} <span style="font-weight:400;color:var(--txt3)">— excludes CN / TDS / JV closures</span></td>
       <td style="${tdS};font-weight:700;${frz(4, '#f6fdf8', 2)}${frzEdge};color:#166534">${fmtFull(dayCollected.reduce((a, b) => a + b, 0))}</td>
       ${Array.from({ length: daysInMonth }, (_, i) => { const v = dayCollected[i + 1]; return `<td style="${tdS};color:#166534">${v > 0 ? fmtFull(v) : ''}</td>`; }).join('')}
     </tr></tfoot>
   </table></div>
   <div style="font-size:11px;color:var(--txt3);margin:.5rem 0 1rem">
     <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
-    <span style="display:inline-block;width:12px;height:12px;background:#bbf7d0;border-radius:3px;vertical-align:-2px"></span> ✓ collected (invoice closed) &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#bbf7d0;border-radius:3px;vertical-align:-2px"></span> ✓ invoice closed &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border-radius:3px;vertical-align:-2px"></span> part-paid — cell shows the amount still outstanding &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance &nbsp;·&nbsp;
