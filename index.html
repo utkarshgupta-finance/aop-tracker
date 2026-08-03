@@ -7545,8 +7545,8 @@ function cdFilterAndRender() {
   if (!_cdMonth || !months.includes(_cdMonth)) _cdMonth = months.includes(curMonth) ? curMonth : months[months.length - 1];
 
   const monthRow = document.getElementById('cd-month-row');
+  const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
   if (monthRow) {
-    const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
     monthRow.innerHTML = months.map(m =>
       `<button class="chip${m === _cdMonth ? ' active' : ''}" onclick="cdSetMonth('${m}')">${mLbl(m)}</button>`).join('');
   }
@@ -7555,7 +7555,7 @@ function cdFilterAndRender() {
   const daysInMonth = new Date(yy, mm, 0).getDate();
   const dstr = d => `${_cdMonth}-${String(d).padStart(2, '0')}`;
   const isWeekend = d => { const w = new Date(yy, mm - 1, d).getDay(); return w === 0 || w === 6; };
-  const cdAmt = v => v >= 1e7 ? (v / 1e7).toFixed(1) + 'Cr' : v >= 1e5 ? (v / 1e5).toFixed(1) + 'L' : v >= 1e3 ? Math.round(v / 1e3) + 'k' : String(Math.round(v));
+  const fmtFull = v => Math.round(v).toLocaleString('en-IN');
 
   // Rows in this month = invoices with any PTP (past or current) promised in it
   const monthRows = filtered.filter(d => d.ptpHistory.some(h => (h.date || '').startsWith(_cdMonth)));
@@ -7570,20 +7570,26 @@ function cdFilterAndRender() {
     const ds = dstr(day);
     const hits = d.ptpHistory.filter(h => h.date === ds);
     if (!hits.length) return null;
-    const lastIdx = d.ptpHistory.length - 1;
-    const isCurrent = d.ptpHistory[lastIdx].date === ds;
-    const amt = entryAmt(d, d.ptpHistory[lastIdx].date === ds ? d.ptpHistory[lastIdx] : hits[hits.length - 1]);
+    const lastEntry = d.ptpHistory[d.ptpHistory.length - 1];
+    const isCurrent = lastEntry.date === ds;
+    const amt = entryAmt(d, isCurrent ? lastEntry : hits[hits.length - 1]);
     const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
     return { isCurrent, amt, who };
   };
 
-  const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .3rem;border-bottom:1.5px solid var(--brd2);text-align:center;white-space:nowrap;z-index:2';
-  const thL = thS.replace('text-align:center', 'text-align:left') + ';padding-left:.6rem';
-  const tdS = 'padding:.28rem .3rem;border-bottom:1px solid var(--line);text-align:center;font-size:10.5px';
-  const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap';
+  const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .2rem;border-bottom:1.5px solid var(--brd2);text-align:right;white-space:nowrap;z-index:2';
+  const thL = thS.replace('text-align:right', 'text-align:left') + ';padding-left:.6rem';
+  const tdS = 'padding:.28rem .35rem;border-bottom:1px solid var(--line);text-align:right;font-size:10.5px;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap';
+  const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   const badge = (c) => c.isCurrent
-    ? `<span title="${escHtml('Current PTP — ' + (c.amt ? '₹' + f(c.amt) : '') + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;min-width:26px;padding:.12rem .25rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700;font-family:var(--mono)">${c.amt ? cdAmt(c.amt) : '✓'}</span>`
-    : `<span title="${escHtml('Moved — promise shifted to a later date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;min-width:26px;padding:.12rem .25rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through;font-family:var(--mono)">${c.amt ? cdAmt(c.amt) : '•'}</span>`;
+    ? `<span title="${escHtml('Current PTP — ₹' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`
+    : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
+
+  // Evenly sized day columns via fixed table layout
+  const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90;
+  const tblW = CUST_W + INV_W + BU_W + POC_W + daysInMonth * DAY_W;
+  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
+  const dayColgroup = `<colgroup><col style="width:${CUST_W + INV_W + BU_W + POC_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
 
   const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
@@ -7601,20 +7607,20 @@ function cdFilterAndRender() {
     bodyHtml = Object.entries(byCust).sort((a, b) => a[0].localeCompare(b[0])).map(([cust, ds]) => {
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldCount = 0;
+        let curSum = 0, oldSum = 0;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) curSum += c.amt; else oldCount++;
+          if (c.isCurrent) curSum += c.amt; else oldSum += c.amt;
         });
         if (curSum > 0) dayTotals[day] += curSum;
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
         if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '' })}</td>`;
-        if (oldCount)   return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: 0, who: '' })}</td>`;
+        if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
       return `<tr>
-        <td style="${tdL};font-weight:600;max-width:190px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(cust)}">${escHtml(cust)}</td>
+        <td style="${tdL};font-weight:600" title="${escHtml(cust)}">${escHtml(cust)}</td>
         <td style="${tdL};color:var(--txt3)">${ds.length} inv</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].bu || '—')}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(ds[0].collector || '—')}</td>
@@ -7634,7 +7640,7 @@ function cdFilterAndRender() {
         }).join('');
         const moved = d.ptpHistory.length > 1 ? ` <span title="PTP moved ${d.ptpHistory.length - 1}×" style="font-size:9px;background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700">${d.ptpHistory.length - 1}×</span>` : '';
         return `<tr>
-          <td style="${tdL};font-weight:600;max-width:190px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
+          <td style="${tdL};font-weight:600" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
           <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(d.invoiceNumber || '—')}${moved}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.bu || '—')}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2)">${escHtml(d.collector || '—')}</td>
@@ -7645,10 +7651,37 @@ function cdFilterAndRender() {
 
   const totCells = Array.from({ length: daysInMonth }, (_, i) => {
     const v = dayTotals[i + 1];
-    return `<td style="${tdS};font-weight:700;font-family:var(--mono);color:${v > 0 ? '#166534' : 'var(--ink-faint)'}">${v > 0 ? cdAmt(v) : ''}</td>`;
+    return `<td style="${tdS};font-weight:700;color:${v > 0 ? '#166534' : 'var(--ink-faint)'}">${v > 0 ? fmtFull(v) : ''}</td>`;
   }).join('');
 
-  content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;min-width:${560 + daysInMonth * 36}px;width:100%">
+  // ── Month-total movement: what the whole month's promised total stood at,
+  // as of the end of each calendar day (reconstructed from PTP history) ──
+  const asOfTotals = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const cutoff = dstr(day) + 'T23:59:59.999Z';
+    let tot = 0;
+    for (const d of monthRows) {
+      let cur = null;
+      for (const h of d.ptpHistory) { if ((h.loggedAt || '') <= cutoff) cur = h; }
+      if (cur && (cur.date || '').startsWith(_cdMonth)) tot += entryAmt(d, cur);
+    }
+    asOfTotals.push(tot);
+  }
+  const asOfCells = asOfTotals.map((v, i) => {
+    const day = i + 1;
+    const wk = isWeekend(day) ? ';background:#fafbfd' : '';
+    const isToday = dstr(day) === todayStr;
+    return `<td style="${tdS}${wk}${isToday ? ';background:#fef9c3' : ''};font-weight:600">${v > 0 ? fmtFull(v) : ''}</td>`;
+  }).join('');
+  const deltaCells = asOfTotals.map((v, i) => {
+    if (i === 0) return `<td style="${tdS}"></td>`;
+    const dl = v - asOfTotals[i - 1];
+    if (Math.abs(dl) < 1) return `<td style="${tdS};color:var(--ink-faint)"></td>`;
+    return `<td style="${tdS};font-weight:600;color:${dl > 0 ? '#166534' : 'var(--red)'}">${dl > 0 ? '▲' : '▼'} ${fmtFull(Math.abs(dl))}</td>`;
+  }).join('');
+
+  content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
+    ${colgroup}
     <thead><tr>
       <th style="${thL}">Customer</th>
       <th style="${thL}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
@@ -7662,11 +7695,23 @@ function cdFilterAndRender() {
       ${totCells}
     </tr></tfoot>
   </table></div>
-  <div style="font-size:11px;color:var(--txt3);margin-top:.5rem">
+  <div style="font-size:11px;color:var(--txt3);margin:.5rem 0 1rem">
     <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
-    <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">moved</s> promise later shifted &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance
-  </div>`;
+  </div>
+  <div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin-bottom:.35rem">How ${mLbl(_cdMonth)}'s total promised amount moved, day by day</div>
+  <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
+    ${dayColgroup}
+    <thead><tr>
+      <th style="${thL}">As of end of day →</th>
+      ${dayHead}
+    </tr></thead>
+    <tbody>
+      <tr><td style="${tdL};font-weight:600">Total promised for ${mLbl(_cdMonth)}</td>${asOfCells}</tr>
+      <tr><td style="${tdL};color:var(--txt3)">Change vs previous day</td>${deltaCells}</tr>
+    </tbody>
+  </table></div>`;
 }
 
 function cdSetMonth(m) { _cdMonth = m; cdFilterAndRender(); }
