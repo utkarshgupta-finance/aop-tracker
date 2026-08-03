@@ -7335,6 +7335,7 @@ let _cdAllData = []; // array of { invoiceId, invoiceNumber, customerName, bu, c
 let _cdMonth = null;      // 'YYYY-MM' — selected month tab
 let _cdView  = 'invoice'; // 'invoice' | 'customer'
 let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month start }
+let _cdSortTotal = null;  // null = by name, else 'desc' | 'asc' on the Total column
 
 async function cdInit() {
   if (!_cdInited) {
@@ -7645,6 +7646,11 @@ function cdFilterAndRender() {
   };
   // A promise amount wins; otherwise the month's opening balance is expected.
   const entryAmt = (d, h) => Number(h.amount || 0) || openingFor(d);
+  const rowTotalFor = (d) => {
+    const last = d.ptpHistory[d.ptpHistory.length - 1];
+    if (!last || !(last.date || '').startsWith(_cdMonth)) return 0;
+    return entryAmt(d, last);
+  };
   // Money state for the selected month
   const moneyFor = (d) => {
     const opening = openingFor(d);
@@ -7776,7 +7782,15 @@ function cdFilterAndRender() {
   if (_cdView === 'customer') {
     const byCust = {};
     monthRows.forEach(d => { (byCust[d.customerName] = byCust[d.customerName] || []).push(d); });
-    bodyHtml = Object.entries(byCust).sort((a, b) => a[0].localeCompare(b[0])).map(([cust, ds]) => {
+    const custTot = {};
+    for (const [cust, ds] of Object.entries(byCust)) custTot[cust] = ds.reduce((s, d) => s + rowTotalFor(d), 0);
+    bodyHtml = Object.entries(byCust).sort((a, b) => {
+      if (_cdSortTotal) {
+        const diff = custTot[a[0]] - custTot[b[0]];
+        if (Math.abs(diff) > 0.005) return _cdSortTotal === 'asc' ? diff : -diff;
+      }
+      return a[0].localeCompare(b[0]);
+    }).map(([cust, ds]) => {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
@@ -7806,7 +7820,14 @@ function cdFilterAndRender() {
     }).join('');
   } else {
     bodyHtml = monthRows
-      .sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '') || (a.invoiceNumber || '').localeCompare(b.invoiceNumber || ''))
+      .slice()
+      .sort((a, b) => {
+        if (_cdSortTotal) {
+          const diff = rowTotalFor(a) - rowTotalFor(b);
+          if (Math.abs(diff) > 0.005) return _cdSortTotal === 'asc' ? diff : -diff;
+        }
+        return (a.customerName || '').localeCompare(b.customerName || '') || (a.invoiceNumber || '').localeCompare(b.invoiceNumber || '');
+      })
       .map(d => {
         let rowTot = 0;
         const cells = Array.from({ length: daysInMonth }, (_, i) => {
@@ -7906,7 +7927,7 @@ function cdFilterAndRender() {
       <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'customer' ? 'Invoices' : 'Invoice #'}</th>
       <th style="${thL};${frz(2, '#f6f8fb', 6)}">BU</th>
       <th style="${thL};${frz(3, '#f6f8fb', 6)}">POC</th>
-      <th style="${thS};${frz(4, '#eef1f6', 6)}${frzEdge}">Total</th>
+      <th onclick="cdToggleTotalSort()" title="Sort by total" style="${thS};${frz(4, '#eef1f6', 6)}${frzEdge};cursor:pointer;user-select:none">Total${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
       ${dayHead}
     </tr></thead>
     <tbody>${bodyHtml}</tbody>
@@ -7932,6 +7953,11 @@ function cdFilterAndRender() {
   <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
   <div style="font-size:11px;color:var(--txt3);margin-bottom:.5rem">One table per month in which that promise can change — each column is a day of that month, showing the total promised for ${mLbl(_cdMonth)} as at the end of that day. Future days are blank.</div>
   ${movementHtml}`;
+}
+
+function cdToggleTotalSort() {
+  _cdSortTotal = _cdSortTotal === 'desc' ? 'asc' : _cdSortTotal === 'asc' ? null : 'desc';
+  cdFilterAndRender();
 }
 
 function cdSetMonth(m) { _cdMonth = m; cdFilterAndRender(); }
