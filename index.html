@@ -7769,36 +7769,47 @@ async function syncBalances() {
   const btn = document.getElementById('adv-balances-btn');
   const info = document.getElementById('adv-sync-info');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  if (info) { info.textContent = 'Rebuilding AR ledger from Zoho Books…'; info.style.color = 'var(--txt3)'; }
-  const call = async (action) => {
+  if (info) { info.textContent = 'Syncing… 0%'; info.style.color = 'var(--txt3)'; }
+
+  // The edge function writes live progress to ar_ledger_sync_state (id=3);
+  // poll it while the sync request is in flight to show real % progress.
+  let polling = true;
+  (async () => {
+    while (polling) {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_ledger_sync_state?id=eq.3&select=agg`, { headers: cmrrHdr() });
+        if (r.ok) {
+          const rows = await r.json();
+          const agg = rows[0] && rows[0].agg;
+          if (agg && polling && info && agg.pct >= 0) {
+            info.textContent = `Syncing… ${agg.pct}% — ${agg.msg || ''}`;
+          }
+        }
+      } catch(_) { /* keep polling */ }
+      await new Promise(res => setTimeout(res, 1200));
+    }
+  })();
+
+  try {
     const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, {
       method: 'POST',
       headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({}),
     });
     const result = await resp.json().catch(() => ({}));
     if (!resp.ok || !result.ok) throw new Error(result.error || 'HTTP ' + resp.status);
-    return result;
-  };
-  try {
-    // Full AR ledger rebuild runs in chunks (Zoho ledger has 100k+ lines,
-    // one edge-function call can't fetch them all) — loop until done.
-    await call('start');
-    let result, chunk = 0;
-    do {
-      chunk++;
-      result = await call('chunk');
-      if (!result.done && info) {
-        info.textContent = `Syncing… ${((result.next_page - 1) * 1000).toLocaleString('en-IN')} ledger entries processed`;
-      }
-      if (chunk > 20) throw new Error('Sync did not finish after 20 chunks');
-    } while (!result.done);
-    if (info) { info.textContent = `✓ Synced ${result.customers} customer AR balances`; info.style.color = '#16a34a'; }
+    polling = false;
+    if (info) {
+      const tied = result.gap !== null && Math.abs(result.gap) < 1;
+      info.textContent = `✓ 100% — Synced ${result.customers} customers${tied ? ' · matches balance sheet' : ''}`;
+      info.style.color = '#16a34a';
+    }
     _reconData = null; // force reload
     renderAdvancesReconcile();
   } catch(e) {
     if (info) { info.textContent = 'Error: ' + e.message; info.style.color = 'var(--red)'; }
   } finally {
+    polling = false;
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Sync Balances'; }
   }
 }
@@ -7920,7 +7931,7 @@ async function renderAdvancesReconcile() {
         <td style="${tdS};text-align:right;font-size:11px;color:#92400e">${bsGap !== null && Math.abs(bsGap) >= 1 ? fmt(bsGap) + ' unattributed' : ''}</td>
       </tr>` : ''}
       <tr style="background:#f0f9ff">
-        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance = Accounts Receivable ledger per customer (invoices − payments − credit notes ± journals), same as the balance sheet drill-down &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong></td>
+        <td colspan="5" style="${tdS};font-size:11px;color:var(--txt3);text-align:right">${syncLabel} &nbsp;·&nbsp; AR Balance matches Zoho's Customer Balance Summary (the balance sheet AR drill-down); same-named contacts are combined &nbsp;·&nbsp; Open Invoices filtered by: <strong>${escHtml(entityLabel)}</strong></td>
       </tr>
     </tfoot>
     </table></div>`;
