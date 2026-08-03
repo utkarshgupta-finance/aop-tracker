@@ -1981,7 +1981,7 @@ function renderNav() {
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     document.getElementById('bottom-nav')?.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets(); }
+    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets(); loadInvoicePtp().then(() => renderAR()); }
     if (activeId === 'ar-reco') renderAdvancesReconcile();
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
@@ -3669,7 +3669,7 @@ function showTab(id, btn) {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); loadAgingBrackets(); }
+  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); loadAgingBrackets(); loadInvoicePtp().then(() => renderAR()); }
   loadArCustMaster();
 }
 
@@ -5121,7 +5121,7 @@ function renderARCustomerView(rows) {
       <tr>
         ${cvSortHdr('name',    'Customer',         '')}
         ${cvSortHdr('bu',        'BU',        '')}
-        ${cvSortHdr('collector', 'Collector', '')}
+        ${cvSortHdr('collector', 'POC', '')}
         <th style="text-align:center">Entity</th>
         ${cvSortHdr('cnt',     '# Inv',            'right')}
         ${cvSortHdr('totalBal','Outstanding (₹)',  'right')}
@@ -5160,6 +5160,7 @@ function renderARInvoiceList(rows) {
           case 'inv_date': va = a.invoice_date||''; vb = b.invoice_date||''; break;
           case 'due_date': va = a.due_date||''; vb = b.due_date||''; break;
           case 'days':     va = arOverdueDays(a.due_date); vb = arOverdueDays(b.due_date); break;
+          case 'ptp':      va = (_arPtpMap[a.invoice_id]?.ptp_date) || ''; vb = (_arPtpMap[b.invoice_id]?.ptp_date) || ''; break;
           case 'balance':  va = arInr(a); vb = arInr(b); break;
           case 'total':    va = arTotal(a); vb = arTotal(b); break;
           case 'type':     va = a.revenue_type||''; vb = b.revenue_type||''; break;
@@ -5226,6 +5227,14 @@ function renderARInvoiceList(rows) {
     const intPopupBtn = r.invoice_id
       ? `<button onclick="arShowInvInteractions(this.dataset.iid,this.dataset.inum)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
       : '';
+    // PTP cell — current promise-to-pay date, editable in place
+    const ptpRec = r.invoice_id ? _arPtpMap[r.invoice_id] : null;
+    const ptpPast = ptpRec?.ptp_date && ptpRec.ptp_date < new Date(Date.now() + 330*60000).toISOString().slice(0,10);
+    const ptpCell = r.invoice_id
+      ? `${ptpRec?.ptp_date
+          ? `<span title="${escHtml('Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>`
+          : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
+      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr class="${sevCls}">
       <td class="td-cust">${escHtml(r.customer_name)}${unmappedBadge}</td>
       <td style="white-space:nowrap">${buCell}</td>
@@ -5234,6 +5243,7 @@ function renderARInvoiceList(rows) {
       <td class="td-date">${r.invoice_date || '—'}</td>
       <td class="td-date">${r.due_date || '—'}</td>
       <td class="td-days">${daysCell}</td>
+      <td style="white-space:nowrap">${ptpCell}</td>
       <td class="td-amt" style="${balStyle}">₹${f(balINR)}${fxBal}</td>
       <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
@@ -5247,11 +5257,12 @@ function renderARInvoiceList(rows) {
     <thead><tr>
       ${th('Customer','customer')}
       ${th('BU','bu')}
-      ${th('Collector','collector')}
+      ${th('POC','collector')}
       ${th('Invoice #','inv')}
       ${th('Inv Date','inv_date')}
       ${th('Due Date','due_date')}
       ${th('Due / Overdue','days')}
+      ${th('PTP','ptp')}
       ${th('Balance (INR)','balance','r')}
       ${th('Total (INR)','total','r')}
       ${th('Type','type')}
@@ -6769,6 +6780,15 @@ async function ccSubmit() {
         headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify(joinRows),
       });
+      // A promised date on the interaction moves the PTP of every linked
+      // invoice — recorded in ptp_events so PTP slippage stays trackable.
+      if (payload.promised_date) {
+        for (const invId of s.selectedInvIds) {
+          const inv = s.invoices.find(i => i.invoice_id === invId);
+          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id); }
+          catch(e) { console.warn('PTP update from interaction failed:', e); }
+        }
+      }
       if (payload.outcome === 'dispute_raised') {
         const disputeRows = [...s.selectedInvIds].map(invId => {
           const inv = s.invoices.find(i => i.invoice_id === invId);
@@ -6869,8 +6889,22 @@ async function ccLoadHistory() {
   if (to)              url += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
   if (collectorFilter) url += `&collector_id=eq.${encodeURIComponent(collectorFilter)}`;
 
+  // PTP movements shown inline with interactions (only when not filtering by
+  // outcome/collector — those filters don't apply to PTP change events)
+  let ptpUrl = `${SUPABASE_URL}/rest/v1/ptp_events?order=created_at.desc&limit=200&select=*`;
+  if (custName) ptpUrl += `&customer_name=eq.${encodeURIComponent(custName)}`;
+  if (from)     ptpUrl += `&created_at=gte.${encodeURIComponent(from)}`;
+  if (to)       ptpUrl += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
+
   try {
     const r = await fetch(url, { headers: cmrrHdr() });
+    let ptpEvents = [];
+    if (!outcome && !collectorFilter) {
+      try {
+        const pr = await fetch(ptpUrl, { headers: cmrrHdr() });
+        if (pr.ok) ptpEvents = await pr.json();
+      } catch(_) {}
+    }
     if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
     let rows = await r.json();
 
@@ -6990,7 +7024,15 @@ async function ccLoadHistory() {
         <span style="font-size:11.5px;color:var(--txt3)">${filtered.length} interaction${filtered.length !== 1 ? 's' : ''}</span>
       </div>
       <div>
-        ${filtered.map(i => ccRenderTLItem(i, invMap[i.id] || [], contactMap, collectorMap)).join('')}
+        ${(() => {
+          let evs = ptpEvents;
+          if (kw) evs = evs.filter(e => [e.customer_name, e.invoice_number, e.changed_by].join(' ').toLowerCase().includes(kw));
+          const merged = [
+            ...filtered.map(i => ({ _at: i.created_at, _html: () => ccRenderTLItem(i, invMap[i.id] || [], contactMap, collectorMap) })),
+            ...evs.map(e => ({ _at: e.created_at, _html: () => renderPtpEventItem(e) })),
+          ].sort((a, b) => new Date(b._at) - new Date(a._at));
+          return merged.map(m => m._html()).join('');
+        })()}
       </div>`;
   } catch(e) {
     contentEl.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message || 'failed')}</div>`;
@@ -7100,16 +7142,21 @@ async function arShowInvInteractions(invoiceId, invoiceNumber) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const links = await r.json();
     if (!links.length) {
-      body.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No interactions recorded for this invoice.</div>';
+      const per0 = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?invoice_id=eq.${encodeURIComponent(invoiceId)}&order=created_at.desc&limit=100`, { headers: cmrrHdr() });
+      const ev0 = per0.ok ? await per0.json() : [];
+      body.innerHTML = ev0.length
+        ? ev0.map(renderPtpEventItem).join('')
+        : '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No interactions recorded for this invoice.</div>';
       return;
     }
     const ids = links.map(l => l.interaction_id);
-    const ir = await fetch(
-      `${SUPABASE_URL}/rest/v1/interactions?id=in.(${ids.map(encodeURIComponent).join(',')})&order=created_at.desc`,
-      { headers: cmrrHdr() }
-    );
+    const [ir, per] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/interactions?id=in.(${ids.map(encodeURIComponent).join(',')})&order=created_at.desc`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/ptp_events?invoice_id=eq.${encodeURIComponent(invoiceId)}&order=created_at.desc&limit=100`, { headers: cmrrHdr() }),
+    ]);
     if (!ir.ok) throw new Error('HTTP ' + ir.status);
     const interactions = await ir.json();
+    const ptpEvents = per.ok ? await per.json() : [];
     // Build collector name map
     const collIds = [...new Set(interactions.map(i => i.collector_id).filter(Boolean))];
     const collMap = {};
@@ -7120,10 +7167,108 @@ async function arShowInvInteractions(invoiceId, invoiceNumber) {
       );
       if (cr.ok) (await cr.json()).forEach(u => { collMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
     }
-    body.innerHTML = interactions.map(i => ccRenderTLItem(i, [invoiceId], {}, collMap)).join('');
+    const merged = [
+      ...interactions.map(i => ({ _at: i.created_at, _html: () => ccRenderTLItem(i, [invoiceId], {}, collMap) })),
+      ...ptpEvents.map(e => ({ _at: e.created_at, _html: () => renderPtpEventItem(e) })),
+    ].sort((a, b) => new Date(b._at) - new Date(a._at));
+    body.innerHTML = merged.length
+      ? merged.map(m => m._html()).join('')
+      : '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No interactions recorded for this invoice.</div>';
   } catch(e) {
     body.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
   }
+}
+
+/* ─── INVOICE PTP (promise-to-pay) TRACKING ─────────────────── */
+let _arPtpMap = {}; // invoice_id → { ptp_date, set_by, source, updated_at }
+
+async function loadInvoicePtp() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?select=invoice_id,ptp_date,set_by,source,updated_at`, { headers: cmrrHdr() });
+    if (!r.ok) return;
+    _arPtpMap = {};
+    (await r.json()).forEach(p => { _arPtpMap[p.invoice_id] = p; });
+  } catch(e) { console.warn('loadInvoicePtp:', e); }
+}
+
+// Single write path for PTP changes — updates the current value AND records
+// the movement in ptp_events so PTP slippage is trackable across the org.
+async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, source, interactionId) {
+  const oldDate = _arPtpMap[invoiceId]?.ptp_date || null;
+  if ((oldDate || null) === (newDate || null)) return false;
+  const by = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
+  const now = new Date().toISOString();
+  const cur = {
+    invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
+    ptp_date: newDate || null, source, interaction_id: interactionId || null, set_by: by, updated_at: now,
+  };
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?on_conflict=invoice_id`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(cur),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  await fetch(`${SUPABASE_URL}/rest/v1/ptp_events`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
+      old_date: oldDate, new_date: newDate || null, source, interaction_id: interactionId || null, changed_by: by,
+    }),
+  });
+  _arPtpMap[invoiceId] = { ptp_date: newDate || null, set_by: by, source, updated_at: now };
+  return true;
+}
+
+function arEditPtp(invoiceId, invoiceNumber, customerName) {
+  document.getElementById('ptp-edit-modal')?.remove();
+  const cur = _arPtpMap[invoiceId]?.ptp_date || '';
+  const ov = document.createElement('div');
+  ov.id = 'ptp-edit-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:360px;width:100%;padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="font-weight:700;font-size:14px;margin-bottom:.15rem">Set PTP date</div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:.8rem">${escHtml(invoiceNumber || invoiceId)} · ${escHtml(customerName || '')}</div>
+    <input type="date" id="ptp-edit-date" value="${escHtml(cur)}" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--sans)">
+    <div id="ptp-edit-err" style="font-size:11.5px;color:var(--red);min-height:15px;margin-top:.3rem"></div>
+    <div style="display:flex;justify-content:space-between;gap:.5rem;margin-top:.4rem">
+      ${cur ? '<button id="ptp-edit-clear" style="border:none;background:none;color:var(--red);font-size:12px;cursor:pointer;padding:.4rem 0">Remove PTP</button>' : '<span></span>'}
+      <div style="display:flex;gap:.5rem">
+        <button onclick="document.getElementById('ptp-edit-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;padding:.4rem .9rem;cursor:pointer;font-size:12.5px">Cancel</button>
+        <button id="ptp-edit-save" style="border:none;background:var(--navy);color:#fff;border-radius:6px;padding:.4rem 1.1rem;cursor:pointer;font-size:12.5px;font-weight:600">Save</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const save = async (dateVal) => {
+    const err = document.getElementById('ptp-edit-err');
+    try {
+      const changed = await setInvoicePtp(invoiceId, invoiceNumber, customerName, dateVal, 'manual', null);
+      ov.remove();
+      if (changed) renderAR();
+    } catch(e) { if (err) err.textContent = 'Save failed: ' + e.message; }
+  };
+  document.getElementById('ptp-edit-save').addEventListener('click', () => {
+    const v = document.getElementById('ptp-edit-date').value;
+    if (!v) { document.getElementById('ptp-edit-err').textContent = 'Pick a date (or use Remove PTP).'; return; }
+    save(v);
+  });
+  document.getElementById('ptp-edit-clear')?.addEventListener('click', () => save(null));
+}
+
+function renderPtpEventItem(e) {
+  const dt = new Date(e.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const label = e.new_date
+    ? `PTP date changed to <strong>${escHtml(e.new_date)}</strong>${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`
+    : `PTP date removed${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`;
+  return `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .2rem;border-bottom:1px dashed var(--brd)">
+    <span style="font-size:13px;line-height:1.3">🗓</span>
+    <div style="min-width:0">
+      <div style="font-size:12px;color:var(--ink)">${label}${e.invoice_number ? ` <span style="color:var(--ink-faint);font-size:11px">· ${escHtml(e.invoice_number)}</span>` : ''}</div>
+      <div style="font-size:11px;color:var(--txt3)">${dt} · ${escHtml(e.changed_by || '')}${e.source === 'interaction' ? ' · via logged interaction' : ' · direct update'}</div>
+    </div>
+  </div>`;
 }
 
 /* ─── CONFIRMED DATES (PTP) TAB ─────────────────────────────── */
@@ -7160,10 +7305,8 @@ async function loadConfirmedDates() {
       if (page.length < PAGE) break;
       off += PAGE;
     }
-    if (!allInteractions.length) {
-      content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No promise-to-pay dates have been logged yet.</div>';
-      return;
-    }
+    // (manual PTP changes from Open AR are merged below, so continue even
+    // when no interaction-based PTPs exist yet)
 
     // Fetch linked invoice IDs for all interactions
     const iids = allInteractions.map(i => i.id);
@@ -7252,7 +7395,43 @@ async function loadConfirmedDates() {
       }
     }
 
+    // Merge direct (manual) PTP changes made from Open AR — tracked in
+    // ptp_events — into the same per-invoice history
+    try {
+      const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?source=eq.manual&order=created_at.asc&limit=2000&select=*`, { headers: cmrrHdr() });
+      if (mr.ok) {
+        for (const ev of await mr.json()) {
+          if (!ev.new_date) continue;
+          if (!invoicePtpMap[ev.invoice_id]) {
+            const custName = ev.customer_name || '';
+            invoicePtpMap[ev.invoice_id] = {
+              invoiceId: ev.invoice_id,
+              invoiceNumber: ev.invoice_number || ev.invoice_id,
+              customerName: custName,
+              bu: arGetBu(custName) || '',
+              collector: arGetCollector(custName) || '',
+              ptpHistory: []
+            };
+          }
+          invoicePtpMap[ev.invoice_id].ptpHistory.push({
+            date: ev.new_date,
+            amount: null,
+            loggedAt: ev.created_at,
+            collectorName: (ev.changed_by || '') + ' (direct)',
+            interactionId: null
+          });
+        }
+        for (const d of Object.values(invoicePtpMap)) {
+          d.ptpHistory.sort((a, b) => (a.loggedAt || '').localeCompare(b.loggedAt || ''));
+        }
+      }
+    } catch(_) {}
+
     _cdAllData = Object.values(invoicePtpMap).filter(d => d.ptpHistory.length > 0);
+    if (!_cdAllData.length) {
+      content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No promise-to-pay dates have been logged yet.</div>';
+      return;
+    }
     // Sort: most recent PTP date first
     _cdAllData.sort((a, b) => {
       const aLast = a.ptpHistory[a.ptpHistory.length - 1]?.date || '';
