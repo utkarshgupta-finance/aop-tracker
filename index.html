@@ -46,7 +46,7 @@ header{display:none}
 .bdismiss{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:.3rem .8rem;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;align-self:flex-start}
 .bdismiss:hover{background:rgba(255,255,255,.2)}
 /* ── App shell layout ── */
-.app-layout{display:flex;flex:1;min-height:100vh}
+.app-layout{display:flex;flex:1;min-width:0;min-height:100vh}
 .sidebar{width:210px;min-width:210px;background:var(--navy);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0;transition:width .2s ease,min-width .2s ease}
 .sidebar.collapsed{width:52px;min-width:52px;overflow-x:hidden}
 .sb-brand{padding:.9rem 1.1rem .75rem;border-bottom:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:flex-start;position:relative}
@@ -1715,7 +1715,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <input type="text" id="ctc-modal-role" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance Manager">
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+      <div style="display:grid;grid-template-columns:1fr;gap:.6rem">
         <div>
           <label class="cc-label">Email</label>
           <input type="email" id="ctc-modal-email" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="email@example.com">
@@ -1723,8 +1723,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div>
           <label class="cc-label">Phone</label>
           <div style="display:flex;gap:.35rem;margin-top:.25rem">
-            <select id="ctc-modal-cc" class="nret-sel" title="Country code" style="font-size:12px;padding:.35rem .25rem;flex:0 0 86px"></select>
-            <input type="tel" id="ctc-modal-phone" class="cust-input" style="flex:1 1 auto;min-width:0;font-size:12.5px;padding:.35rem .6rem" placeholder="98765 43210">
+            <select id="ctc-modal-cc" class="nret-sel" title="Country code" style="font-size:12.5px;padding:.35rem .2rem;flex:0 0 72px"></select>
+            <input type="tel" id="ctc-modal-phone" class="cust-input" style="flex:1 1 auto;min-width:0;font-size:12.5px;padding:.35rem .6rem;font-family:var(--mono)" placeholder="98765 43210">
           </div>
         </div>
       </div>
@@ -2402,8 +2402,8 @@ function ctcFillCcDropdown(selected) {
   const sel = document.getElementById('ctc-modal-cc');
   if (!sel) return;
   if (!sel.options.length) {
-    sel.innerHTML = CTC_DIAL_CODES.map(([code, name, iso]) =>
-      `<option value="${code}" title="${escHtml(name)}">${code} ${escHtml(iso)}</option>`).join('');
+    sel.innerHTML = CTC_DIAL_CODES.map(([code, name]) =>
+      `<option value="${code}" title="${escHtml(name)}">${code}</option>`).join('');
   }
   sel.value = CTC_DIAL_CODES.some(([c]) => c === selected) ? selected : CTC_DEFAULT_CC;
 }
@@ -7334,6 +7334,7 @@ let _cdInited = false;
 let _cdAllData = []; // array of { invoiceId, invoiceNumber, customerName, bu, collector, ptpHistory: [{date, amount, loggedAt, collectorName, interactionId}] }
 let _cdMonth = null;      // 'YYYY-MM' — selected month tab
 let _cdView  = 'invoice'; // 'invoice' | 'customer'
+let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month start }
 
 async function cdInit() {
   if (!_cdInited) {
@@ -7394,7 +7395,7 @@ async function loadConfirmedDates() {
     const openIds = new Set();
     {
       const ivr = await fetch(
-        `${SUPABASE_URL}/rest/v1/ar_invoices?select=invoice_id,invoice_number,customer_name,balance_inr,total_inr,status&limit=5000`,
+        `${SUPABASE_URL}/rest/v1/ar_invoices?select=invoice_id,invoice_number,customer_name,balance_inr,total_inr,status,invoice_date&limit=5000`,
         { headers: cmrrHdr() }
       );
       if (ivr.ok) for (const inv of await ivr.json()) { invoiceInfoMap[inv.invoice_id] = inv; openIds.add(inv.invoice_id); }
@@ -7429,6 +7430,7 @@ async function loadConfirmedDates() {
             balance: Number(invInfo.balance_inr || 0),
             total:   Number(invInfo.total_inr   || 0),
             status:  invInfo.status || '',
+            invoiceDate: invInfo.invoice_date || '',
             ptpHistory: []
           };
         }
@@ -7507,7 +7509,7 @@ async function loadConfirmedDates() {
       try {
         const sr = await fetch(
           `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})` +
-          `&select=invoice_id,invoice_number,customer_name,balance_inr,snapshot_date&order=snapshot_date.desc&limit=5000`,
+          `&select=invoice_id,invoice_number,customer_name,balance_inr,total_inr,invoice_date,snapshot_date&order=snapshot_date.desc&limit=5000`,
           { headers: cmrrHdr() }
         );
         if (sr.ok) for (const s of await sr.json()) { if (!lastSnap[s.invoice_id]) lastSnap[s.invoice_id] = s; }
@@ -7520,19 +7522,41 @@ async function loadConfirmedDates() {
       if (s) {
         if (!d.invoiceNumber || d.invoiceNumber === id) d.invoiceNumber = s.invoice_number || id;
         if (!d.customerName) d.customerName = s.customer_name || '';
-        if (!Number(d.balance || 0)) d.balance = Number(s.balance_inr || 0);
+        if (!d.invoiceDate) d.invoiceDate = s.invoice_date || '';
+        if (!Number(d.total || 0)) d.total = Number(s.total_inr || 0);
+        d.lastKnownBalance = Number(s.balance_inr || 0);
+        d.balance = 0;   // closed: nothing outstanding now
+      }
+    }
+
+    // Balance as at the start of each month that carries promises. A part
+    // payment during the month is then measured against the month's opening
+    // balance, not against the invoice total.
+    _cdOpening = {};
+    {
+      const monthStarts = [...new Set(Object.values(invoicePtpMap)
+        .flatMap(d => d.ptpHistory.map(h => (h.date || '').slice(0, 7)))
+        .filter(Boolean))].map(m => `${m}-01`);
+      const allIds = Object.keys(invoicePtpMap).filter(k => !k.startsWith('__noinv__'));
+      if (monthStarts.length && allIds.length) {
+        for (let start = 0; start < allIds.length; start += 100) {
+          const chunk = allIds.slice(start, start + 100);
+          try {
+            const orr = await fetch(
+              `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})` +
+              `&snapshot_date=in.(${monthStarts.join(',')})&select=invoice_id,snapshot_date,balance_inr&limit=5000`,
+              { headers: cmrrHdr() }
+            );
+            if (orr.ok) for (const s of await orr.json()) {
+              (_cdOpening[s.invoice_id] = _cdOpening[s.invoice_id] || {})[s.snapshot_date] = Number(s.balance_inr || 0);
+            }
+          } catch(_) {}
+        }
       }
     }
 
     // Partly-collected invoices stay open in Zoho with a reduced balance, so
     // they are not "closed" — flag them and remember how much came in.
-    for (const d of Object.values(invoicePtpMap)) {
-      if (d.closed) continue;
-      const tot = Number(d.total || 0), bal = Number(d.balance || 0);
-      d.partial = (d.status === 'partially_paid') || (tot > 0 && bal > 0 && tot > bal + 0.5);
-      d.paidSoFar = d.partial ? Math.max(0, tot - bal) : 0;
-    }
-
     _cdAllData = Object.values(invoicePtpMap).filter(d => d.ptpHistory.length > 0);
     if (!_cdAllData.length) {
       content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No promise-to-pay dates have been logged yet.</div>';
@@ -7589,29 +7613,6 @@ function cdFilterAndRender() {
     return true;
   });
 
-  // Summary strip
-  const summary = document.getElementById('cd-summary');
-  if (summary) {
-    const totalCount = filtered.length;
-    const overdueCount  = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp < todayStr && !d.closed; }).length;
-    const collectedCount = filtered.filter(d => d.closed).length;
-    const todayCount    = filtered.filter(d => d.ptpHistory[d.ptpHistory.length-1]?.date === todayStr).length;
-    const upcomingCount = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp > todayStr; }).length;
-    const movedCount    = filtered.filter(d => d.ptpHistory.length > 1).length;
-    summary.innerHTML = [
-      { label: 'Total', val: totalCount, color: 'var(--navy)' },
-      { label: 'Overdue PTP', val: overdueCount, color: 'var(--red)' },
-      { label: 'Due Today', val: todayCount, color: 'var(--amber)' },
-      { label: 'Upcoming', val: upcomingCount, color: '#16a34a' },
-      { label: 'Collected', val: collectedCount, color: '#16a34a' },
-      { label: 'Part-paid', val: filtered.filter(d => d.partial).length, color: '#1d4ed8' },
-      { label: 'Date Moved', val: movedCount, color: '#6366f1' },
-    ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
-      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
-      <span style="font-size:22px;font-weight:700;color:${s.color};line-height:1">${s.val}</span>
-    </div>`).join('');
-  }
-
   // ── Month day-grid: rows = invoices/customers, columns = each day of the
   // selected month; a PTP appears in the month/day its PROMISED date falls
   // on. Superseded promises show struck-through so slippage is visible. ──
@@ -7634,6 +7635,50 @@ function cdFilterAndRender() {
   const fmtFull = v => Math.round(v).toLocaleString('en-IN');
 
   // Rows in this month = invoices with any PTP (past or current) promised in it
+  const monthStart = `${_cdMonth}-01`;
+  const openingFor = (d) => {
+    if (!d.invoiceId) return Number(d.total || d.balance || 0);
+    if ((d.invoiceDate || '') >= monthStart) return Number(d.total || 0) || Number(d.balance || 0);
+    const snap = (_cdOpening[d.invoiceId] || {})[monthStart];
+    if (snap != null) return Number(snap);
+    return Number(d.lastKnownBalance || d.total || d.balance || 0);
+  };
+  // A promise amount wins; otherwise the month's opening balance is expected.
+  const entryAmt = (d, h) => Number(h.amount || 0) || openingFor(d);
+  // Money state for the selected month
+  const moneyFor = (d) => {
+    const opening = openingFor(d);
+    const outstanding = d.closed ? 0 : Number(d.balance || 0);
+    const collected = Math.max(0, opening - outstanding);
+    return {
+      opening, outstanding, collected,
+      full: d.closed || outstanding < 0.5,
+      part: !d.closed && outstanding >= 0.5 && collected > 0.5,
+    };
+
+  // Summary strip
+  const summary = document.getElementById('cd-summary');
+  if (summary) {
+    const totalCount = filtered.length;
+    const overdueCount  = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp < todayStr && !d.closed; }).length;
+    const collectedCount = filtered.filter(d => moneyFor(d).full).length;
+    const todayCount    = filtered.filter(d => d.ptpHistory[d.ptpHistory.length-1]?.date === todayStr).length;
+    const upcomingCount = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp > todayStr; }).length;
+    const movedCount    = filtered.filter(d => d.ptpHistory.length > 1).length;
+    summary.innerHTML = [
+      { label: 'Total', val: totalCount, color: 'var(--navy)' },
+      { label: 'Overdue PTP', val: overdueCount, color: 'var(--red)' },
+      { label: 'Due Today', val: todayCount, color: 'var(--amber)' },
+      { label: 'Upcoming', val: upcomingCount, color: '#16a34a' },
+      { label: 'Collected', val: collectedCount, color: '#16a34a' },
+      { label: 'Part-paid', val: filtered.filter(d => moneyFor(d).part).length, color: '#1d4ed8' },
+      { label: 'Date Moved', val: movedCount, color: '#6366f1' },
+    ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
+      <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
+      <span style="font-size:22px;font-weight:700;color:${s.color};line-height:1">${s.val}</span>
+    </div>`).join('');
+  }
+
   const monthRows = filtered.filter(d => d.ptpHistory.some(h => (h.date || '').startsWith(_cdMonth)));
   if (!monthRows.length) {
     content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No PTPs promised in this month for the current filters.</div>';
@@ -7641,7 +7686,9 @@ function cdFilterAndRender() {
   }
 
   // Per invoice/day: current (latest) promise vs superseded ones
-  const entryAmt = (d, h) => Number(h.amount || 0) || Number(d.balance || 0);
+  // Opening balance for the selected month: an invoice raised during the month
+  // starts at its own total, otherwise take the balance carried in on the 1st.
+  };
 
   // Movement stats from consecutive PTP entries: dates pushed out vs pulled
   // in, and amount raised vs cut. Re-logging the same date/amount counts as
@@ -7680,7 +7727,8 @@ function cdFilterAndRender() {
     const isCurrent = lastEntry.date === ds;
     const amt = entryAmt(d, isCurrent ? lastEntry : hits[hits.length - 1]);
     const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
-    return { isCurrent, amt, who, collected: !!d.closed, partial: !!d.partial, paid: Number(d.paidSoFar || 0) };
+    const m = moneyFor(d);
+    return { isCurrent, amt, who, collected: m.full, partial: m.part, paid: m.collected };
   };
 
   const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .2rem;border-bottom:1.5px solid var(--brd2);text-align:right;white-space:nowrap;z-index:2';
@@ -7691,12 +7739,12 @@ function cdFilterAndRender() {
     ? (c.collected
       ? `<span title="${escHtml('Collected — invoice closed · ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
       : (c.partial
-        ? `<span title="${escHtml('Part-paid — ' + fmtFull(c.paid) + ' received, ' + fmtFull(c.amt) + ' still outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
+        ? `<span title="${escHtml('Part-paid this month — ' + fmtFull(c.paid) + ' received, ' + fmtFull(c.amt) + ' outstanding (expected = balance at month start)' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
         : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`))
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
 
   // Evenly sized day columns via fixed table layout
-  const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90, TOT_W = 110;
+  const DAY_W = 88, CUST_W = 190, INV_W = 190, BU_W = 90, POC_W = 90, TOT_W = 110;
   const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W;
   const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W];
   const frz = (i, bg, z) => `position:sticky;left:${LX[i]}px;background:${bg || '#fff'};z-index:${z || 1}`;
@@ -7736,7 +7784,7 @@ function cdFilterAndRender() {
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; if (c.collected) colSum += c.amt; if (c.partial) { partSum += c.amt; paidSum += c.paid; } } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; colSum += Math.min(c.paid, c.amt); if (c.partial) partSum += c.amt; if (c.partial) paidSum += c.paid; } else oldSum += c.amt;
         });
         if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; dayCollected[day] += colSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
@@ -7745,10 +7793,11 @@ function cdFilterAndRender() {
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
       const agg = ds.reduce((acc, d) => { const s = cdMoveStats(d); acc.pushed += s.pushed; acc.pulled += s.pulled; acc.amtUp += s.amtUp; acc.amtDown += s.amtDown; return acc; }, { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 });
-      const allDone = ds.every(d => d.closed);
+      const allDone = ds.every(d => moneyFor(d).full);
+      const custOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
       return `<tr>
         <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(cust)}">${escHtml(cust)}</td>
-        <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv${cdMoveChip(agg)}</td>
+        <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv<span style="font-family:var(--mono);color:${custOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${custOutstanding < 0.5 ? '✓ nil' : fmtFull(custOutstanding)}</span>${cdMoveChip(agg)}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(ds[0].bu || '—')}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(ds[0].collector || '—')}</td>
         <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
@@ -7763,18 +7812,19 @@ function cdFilterAndRender() {
         const cells = Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
           const c = cellFor(d, day);
-          if (c && c.isCurrent) { dayTotals[day] += c.amt; rowTot += c.amt; if (c.collected) dayCollected[day] += c.amt; }
+          if (c && c.isCurrent) { dayTotals[day] += c.amt; rowTot += c.amt; dayCollected[day] += Math.min(c.paid, c.amt); }
           const wk = isWeekend(day) ? ';background:#fafbfd' : '';
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
         const moved = cdMoveChip(cdMoveStats(d));
-        const totBg = d.closed ? '#eefdf3' : (d.partial ? '#eff6ff' : '#f8fafc');
+        const money = moneyFor(d);
+        const totBg = money.full ? '#eefdf3' : (money.part ? '#eff6ff' : '#f8fafc');
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}${moved}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Collected — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(d.bu || '—')}</td>
           <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(d.collector || '—')}</td>
-          <td style="${tdS};font-weight:700;${frz(4, totBg)}${frzEdge};color:${d.closed ? '#166534' : (d.partial ? '#1d4ed8' : 'inherit')}">${rowTot > 0 ? (d.closed ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+          <td style="${tdS};font-weight:700;${frz(4, totBg)}${frzEdge};color:${money.full ? '#166534' : (money.part ? '#1d4ed8' : 'inherit')}">${rowTot > 0 ? (money.full ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
           ${cells}
         </tr>`;
       }).join('');
