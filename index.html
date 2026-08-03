@@ -7500,7 +7500,10 @@ async function loadConfirmedDates() {
       const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?source=eq.manual&order=created_at.asc&limit=2000&select=*`, { headers: cmrrHdr() });
       if (mr.ok) {
         for (const ev of await mr.json()) {
-          if (!ev.new_date) continue;
+          if (!ev.new_date) {
+            if (invoicePtpMap[ev.invoice_id]) invoicePtpMap[ev.invoice_id].ptpHistory = [];
+            continue;
+          }
           if (!invoicePtpMap[ev.invoice_id]) {
             const custName = ev.customer_name || '';
             const inf = invoiceInfoMap[ev.invoice_id] || {};
