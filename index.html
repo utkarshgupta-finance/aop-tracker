@@ -1369,6 +1369,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <label class="cc-label">Promise Date <span class="cc-req">*</span></label>
             <input type="date" id="cc-promised-date" class="cc-input" style="max-width:200px" oninput="ccUpdateFollowUpSuggestion()">
           </div>
+          <div class="cc-field">
+            <label class="cc-label">TDS % (optional — deducted on base value before GST)</label>
+            <input type="number" id="cc-tds-pct" class="cc-input" placeholder="e.g. 2" min="0" max="30" step="0.01" style="max-width:200px">
+          </div>
         </div>
       </div>
 
@@ -5332,10 +5336,15 @@ function renderARInvoiceList(rows) {
     // PTP cell — current promise-to-pay date, editable in place
     const ptpRec = r.invoice_id ? _arPtpMap[r.invoice_id] : null;
     const ptpPast = ptpRec?.ptp_date && ptpRec.ptp_date < new Date(Date.now() + 330*60000).toISOString().slice(0,10);
+    const ptpGross = ptpRec ? ((Number(ptpRec.promised_amount) || 0) || arInr(r)) : 0;
+    const ptpTds = ptpRec ? ptpTdsAmt(ptpGross, ptpRec.tds_pct) : 0;
+    const ptpTdsChip = ptpTds > 0
+      ? `<span title="${escHtml(`TDS ${ptpRec.tds_pct}% on base (₹${Math.round(ptpGross / 1.18).toLocaleString('en-IN')}) — expect ₹${Math.round(ptpGross - ptpTds).toLocaleString('en-IN')} in bank`)}" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">TDS −₹${Math.round(ptpTds).toLocaleString('en-IN')}</span>`
+      : '';
     const ptpCell = r.invoice_id
       ? `${ptpRec?.ptp_date
-          ? `<span title="${escHtml((ptpRec.promised_amount != null ? '₹' + Number(ptpRec.promised_amount).toLocaleString('en-IN') + ' · ' : '') + 'Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>`
-          : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
+          ? `<span title="${escHtml((ptpRec.promised_amount != null ? '₹' + Number(ptpRec.promised_amount).toLocaleString('en-IN') + ' · ' : '') + 'Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpTdsChip}`
+          : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr class="${sevCls}">
       <td class="td-cust" title="${escHtml(r.customer_name)}">${escHtml(r.customer_name)}${unmappedBadge}</td>
@@ -6238,7 +6247,7 @@ function ccRenderDaySummary() {
 function ccResetForm() {
   _ccState = ccMakeState();
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
-                'cc-promised-amount','cc-promised-date','cc-esc-who','cc-esc-what',
+                'cc-promised-amount','cc-promised-date','cc-tds-pct','cc-esc-who','cc-esc-what',
                 'cc-dispute-desc','cc-dispute-amount'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
@@ -6849,9 +6858,11 @@ async function ccSubmit() {
       // A promised date on the interaction moves the PTP of every linked
       // invoice — recorded in ptp_events so PTP slippage stays trackable.
       if (payload.promised_date) {
+        const tdsPctVal = document.getElementById('cc-tds-pct')?.value || null;
         for (const invId of s.selectedInvIds) {
           const inv = s.invoices.find(i => i.invoice_id === invId);
-          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id, payload.promised_amount); }
+          const invBal = Number(inv?.balance_inr || inv?.balance || 0);
+          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id, payload.promised_amount, tdsPctVal, invBal); }
           catch(e) { console.warn('PTP update from interaction failed:', e); }
         }
       }
@@ -7257,26 +7268,38 @@ let _arPtpMap = {}; // invoice_id → { ptp_date, set_by, source, updated_at }
 
 async function loadInvoicePtp() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?select=invoice_id,ptp_date,promised_amount,set_by,source,updated_at`, { headers: cmrrHdr() });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?select=invoice_id,ptp_date,promised_amount,tds_pct,tds_amount,set_by,source,updated_at`, { headers: cmrrHdr() });
     if (!r.ok) return;
     _arPtpMap = {};
     (await r.json()).forEach(p => { _arPtpMap[p.invoice_id] = p; });
   } catch(e) { console.warn('loadInvoicePtp:', e); }
 }
 
+// TDS is withheld on the taxable (pre-GST) value. Invoices here carry 18% GST,
+// so base = gross ÷ 1.18. Returns the TDS amount a gross value implies.
+function ptpTdsAmt(gross, pct) {
+  const p = Number(pct || 0), g = Number(gross || 0);
+  return (p > 0 && g > 0) ? Math.round((g / 1.18) * p) / 100 : 0;
+}
+
 // Single write path for PTP changes — updates the current value AND records
 // the movement in ptp_events so PTP slippage is trackable across the org.
-async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, source, interactionId, amount) {
+async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, source, interactionId, amount, tdsPct, grossForTds) {
   const prev = _arPtpMap[invoiceId] || {};
   const oldDate = prev.ptp_date || null;
   const newAmt = (amount !== undefined && amount !== null && amount !== '' && !isNaN(parseFloat(amount))) ? parseFloat(amount) : null;
   const oldAmt = prev.promised_amount != null ? Number(prev.promised_amount) : null;
-  if ((oldDate || null) === (newDate || null) && oldAmt === newAmt) return false;
+  const newTds = (newDate && tdsPct !== undefined && tdsPct !== null && tdsPct !== '' && !isNaN(parseFloat(tdsPct)) && parseFloat(tdsPct) > 0) ? parseFloat(tdsPct) : null;
+  const oldTds = prev.tds_pct != null ? Number(prev.tds_pct) : null;
+  if ((oldDate || null) === (newDate || null) && oldAmt === newAmt && oldTds === newTds) return false;
   const by = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
   const now = new Date().toISOString();
+  // Snapshot the implied TDS amount at set time (base = gross ÷ 1.18)
+  const tdsAmt = newTds ? ptpTdsAmt(newAmt || grossForTds || 0, newTds) : null;
   const cur = {
     invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
-    ptp_date: newDate || null, promised_amount: newAmt, source, interaction_id: interactionId || null, set_by: by, updated_at: now,
+    ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt,
+    source, interaction_id: interactionId || null, set_by: by, updated_at: now,
   };
   const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?on_conflict=invoice_id`, {
     method: 'POST',
@@ -7289,17 +7312,24 @@ async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, so
     headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({
       invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
-      old_date: oldDate, new_date: newDate || null, promised_amount: newAmt, source, interaction_id: interactionId || null, changed_by: by,
+      old_date: oldDate, new_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt,
+      source, interaction_id: interactionId || null, changed_by: by,
     }),
   });
-  _arPtpMap[invoiceId] = { ptp_date: newDate || null, promised_amount: newAmt, set_by: by, source, updated_at: now };
+  _arPtpMap[invoiceId] = { ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt, set_by: by, source, updated_at: now };
   return true;
 }
 
-function arEditPtp(invoiceId, invoiceNumber, customerName) {
+function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
+  opts = opts || {};
   document.getElementById('ptp-edit-modal')?.remove();
   const cur = _arPtpMap[invoiceId]?.ptp_date || '';
   const curAmt = _arPtpMap[invoiceId]?.promised_amount ?? null;
+  const curTds = _arPtpMap[invoiceId]?.tds_pct ?? null;
+  const balInr = Number(balanceInr || 0) || Number(_arAllRows?.find?.(x => x.invoice_id === invoiceId)?.balance_inr || 0);
+  // A promise can never exceed what is still outstanding — on a part-paid
+  // invoice the editable amount is capped at the open balance.
+  const maxAmt = opts.maxAmount != null ? Number(opts.maxAmount) : (balInr > 0.5 ? balInr : null);
   const ov = document.createElement('div');
   ov.id = 'ptp-edit-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
@@ -7309,8 +7339,11 @@ function arEditPtp(invoiceId, invoiceNumber, customerName) {
     <div style="font-size:12px;color:var(--txt3);margin-bottom:.8rem">${escHtml(invoiceNumber || invoiceId)} · ${escHtml(customerName || '')}</div>
     <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">PTP date</label>
     <input type="date" id="ptp-edit-date" value="${escHtml(cur)}" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--sans)">
-    <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .2rem">Committed amount (₹, optional — blank = full balance)</label>
-    <input type="number" id="ptp-edit-amount" min="0" step="0.01" value="${curAmt != null ? escHtml(String(curAmt)) : ''}" placeholder="e.g. 250000" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--mono)">
+    <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .2rem">Committed amount (₹, optional — blank = full balance${maxAmt != null ? ', max ₹' + Math.round(maxAmt).toLocaleString('en-IN') + ' outstanding' : ''})</label>
+    <input type="number" id="ptp-edit-amount" min="0" step="0.01" ${maxAmt != null ? `max="${maxAmt}"` : ''} value="${curAmt != null ? escHtml(String(curAmt)) : ''}" placeholder="e.g. 250000" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--mono)">
+    <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .2rem">TDS % (optional — deducted on base value, i.e. amount ÷ 1.18)</label>
+    <input type="number" id="ptp-edit-tds" min="0" max="30" step="0.01" value="${curTds != null ? escHtml(String(curTds)) : ''}" placeholder="e.g. 2" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--mono)">
+    <div id="ptp-edit-tds-note" style="font-size:11px;color:#b45309;min-height:15px;margin-top:.25rem"></div>
     <div id="ptp-edit-err" style="font-size:11.5px;color:var(--red);min-height:15px;margin-top:.3rem"></div>
     <div style="display:flex;justify-content:space-between;gap:.5rem;margin-top:.4rem">
       ${cur ? '<button id="ptp-edit-clear" style="border:none;background:none;color:var(--red);font-size:12px;cursor:pointer;padding:.4rem 0">Remove PTP</button>' : '<span></span>'}
@@ -7321,13 +7354,31 @@ function arEditPtp(invoiceId, invoiceNumber, customerName) {
     </div>
   </div>`;
   document.body.appendChild(ov);
+  // Live TDS preview: what will be withheld and what to expect in bank
+  const tdsPreview = () => {
+    const note = document.getElementById('ptp-edit-tds-note');
+    if (!note) return;
+    const pct = parseFloat(document.getElementById('ptp-edit-tds')?.value || '');
+    const gross = parseFloat(document.getElementById('ptp-edit-amount')?.value || '') || balInr;
+    if (!(pct > 0) || !(gross > 0)) { note.textContent = ''; return; }
+    const tds = ptpTdsAmt(gross, pct);
+    note.textContent = `TDS ≈ ₹${Math.round(tds).toLocaleString('en-IN')} on base ₹${Math.round(gross / 1.18).toLocaleString('en-IN')} → expect ₹${Math.round(gross - tds).toLocaleString('en-IN')} in bank`;
+  };
+  document.getElementById('ptp-edit-tds')?.addEventListener('input', tdsPreview);
+  document.getElementById('ptp-edit-amount')?.addEventListener('input', tdsPreview);
+  tdsPreview();
   const save = async (dateVal) => {
     const err = document.getElementById('ptp-edit-err');
     const amtVal = dateVal ? (document.getElementById('ptp-edit-amount')?.value || null) : null;
+    const tdsVal = dateVal ? (document.getElementById('ptp-edit-tds')?.value || null) : null;
+    if (dateVal && maxAmt != null && amtVal && parseFloat(amtVal) > maxAmt + 0.5) {
+      if (err) err.textContent = `Committed amount exceeds the outstanding balance (₹${Math.round(maxAmt).toLocaleString('en-IN')}).`;
+      return;
+    }
     try {
-      const changed = await setInvoicePtp(invoiceId, invoiceNumber, customerName, dateVal, 'manual', null, amtVal);
+      const changed = await setInvoicePtp(invoiceId, invoiceNumber, customerName, dateVal, 'manual', null, amtVal, tdsVal, balInr);
       ov.remove();
-      if (changed) renderAR();
+      if (changed) { if (opts.onSaved) opts.onSaved(); else renderAR(); }
     } catch(e) { if (err) err.textContent = 'Save failed: ' + e.message; }
   };
   document.getElementById('ptp-edit-save').addEventListener('click', () => {
@@ -7347,8 +7398,9 @@ function arEditPtp(invoiceId, invoiceNumber, customerName) {
 function renderPtpEventItem(e) {
   const dt = new Date(e.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const amt = e.promised_amount != null && Number(e.promised_amount) > 0 ? ` <span style="color:#16a34a;font-weight:600;font-family:var(--mono)">₹${f(Number(e.promised_amount))}</span>` : '';
+  const tds = e.tds_pct != null && Number(e.tds_pct) > 0 ? ` <span style="color:#b45309;font-size:11px">· TDS ${e.tds_pct}%${e.tds_amount ? ' ≈ ₹' + f(Number(e.tds_amount)) : ''}</span>` : '';
   const label = e.new_date
-    ? `PTP date changed to <strong>${escHtml(e.new_date)}</strong>${amt}${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`
+    ? `PTP date changed to <strong>${escHtml(e.new_date)}</strong>${amt}${tds}${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`
     : `PTP date removed${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`;
   return `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .2rem;border-bottom:1px dashed var(--brd)">
     <span style="font-size:13px;line-height:1.3">🗓</span>
@@ -7367,6 +7419,7 @@ let _cdView  = 'invoice'; // 'invoice' | 'customer'
 let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month start }
 let _cdSortTotal = null;  // null = by name, else 'desc' | 'asc' on the Total column
 let _cdBank = {};         // 'YYYY-MM' → { invoice_id: cash received in bank } | null while loading
+let _cdInvInfo = {};      // invoice_id → invoice info (open invoices + snapshot recoveries)
 
 // Cash received in bank for a month, per invoice — from Zoho customer payments
 // via the bank-collections edge function. CN / TDS / JV closures are excluded
@@ -7382,6 +7435,21 @@ async function cdLoadBank(month) {
     const j = await r.json().catch(() => ({}));
     _cdBank[month] = (r.ok && j.ok) ? (j.data || {}) : {};
   } catch(_) { _cdBank[month] = {}; }
+  // Cash can land against invoices already closed (gone from ar_invoices) —
+  // recover their number/customer from the daily snapshots so the
+  // "collected without a PTP" rows have names, not raw ids.
+  try {
+    const unknown = Object.keys(_cdBank[month] || {}).filter(id => !_cdInvInfo[id]);
+    for (let start = 0; start < unknown.length; start += 100) {
+      const chunk = unknown.slice(start, start + 100);
+      const sr = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoice_snapshots?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})` +
+        `&select=invoice_id,invoice_number,customer_name,balance_inr,total_inr,invoice_date,snapshot_date&order=snapshot_date.desc&limit=5000`,
+        { headers: cmrrHdr() }
+      );
+      if (sr.ok) for (const s of await sr.json()) { if (!_cdInvInfo[s.invoice_id]) _cdInvInfo[s.invoice_id] = s; }
+    }
+  } catch(_) {}
   cdFilterAndRender();
 }
 
@@ -7396,6 +7464,8 @@ async function cdInit(force) {
     _cdInited = true;
     // await the master so BU / POC resolve on the first paint
     try { await loadArCustMaster(); } catch(_) {}
+    // current PTP values power the edit modal when it opens from this tab
+    if (!Object.keys(_arPtpMap || {}).length) { try { await loadInvoicePtp(); } catch(_) {} }
   }
   cdStartAutoRefresh();
   if (!force && _cdLoadedAt && Date.now() - _cdLoadedAt < CD_TTL_MS) {
@@ -7417,7 +7487,12 @@ function cdOpeningFor(d) {
   return Number(d.lastKnownBalance || d.total || d.balance || 0);
 }
 // A committed amount wins; otherwise the month's opening balance is expected.
-function cdEntryAmt(d, h) { return Number(h.amount || 0) || cdOpeningFor(d); }
+// TDS (entered as a % of the pre-GST base) is deducted, so every amount in
+// Confirmed Dates is what should actually reach the bank.
+function cdEntryAmt(d, h) {
+  const gross = Number(h.amount || 0) || cdOpeningFor(d);
+  return gross - ptpTdsAmt(gross, h.tdsPct);
+}
 
 // Keeps the open tab current without reloading on every visit.
 function cdStartAutoRefresh() {
@@ -7487,6 +7562,7 @@ async function loadConfirmedDates() {
       );
       if (ivr.ok) for (const inv of await ivr.json()) { invoiceInfoMap[inv.invoice_id] = inv; openIds.add(inv.invoice_id); }
     }
+    _cdInvInfo = invoiceInfoMap;   // kept for the "collected without a PTP" rows
 
     // Fetch collector display names
     const collIds = [...new Set(allInteractions.map(i => i.collector_id).filter(Boolean))];
@@ -7499,37 +7575,16 @@ async function loadConfirmedDates() {
       if (cr.ok) (await cr.json()).forEach(u => { collMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
     }
 
-    // Build per-invoice PTP history
+    // Build per-invoice PTP history. Every invoice-level PTP write (manual or
+    // via a logged interaction) goes through setInvoicePtp and lands in
+    // ptp_events — so that table is the single source of invoice histories,
+    // carrying the TDS % with each entry. Interactions are only consulted for
+    // customer-level promises that were logged without linking invoices.
     const invoicePtpMap = {}; // invoice_id → { invoiceId, invoiceNumber, customerName, bu, collector, ptpHistory[] }
     for (const interaction of allInteractions) {
       const invoiceIds = invLinkMap[interaction.id] || [];
       const collName = collMap[interaction.collector_id] || '';
-      for (const invId of invoiceIds) {
-        if (!invoicePtpMap[invId]) {
-          const invInfo = invoiceInfoMap[invId] || {};
-          const custName = invInfo.customer_name || interaction.customer_name || '';
-          invoicePtpMap[invId] = {
-            invoiceId: invId,
-            invoiceNumber: invInfo.invoice_number || invId,
-            customerName: custName,
-            bu: arGetBu(custName) || '',
-            collector: arGetCollector(custName) || collName,
-            balance: Number(invInfo.balance_inr || 0),
-            total:   Number(invInfo.total_inr   || 0),
-            status:  invInfo.status || '',
-            invoiceDate: invInfo.invoice_date || '',
-            ptpHistory: []
-          };
-        }
-        invoicePtpMap[invId].ptpHistory.push({
-          date: interaction.promised_date,
-          amount: interaction.promised_amount,
-          loggedAt: interaction.created_at,
-          collectorName: collName,
-          interactionId: interaction.id
-        });
-      }
-      // Also handle interactions without linked invoices (customer-level PTP)
+      // Customer-level PTP (no linked invoices) — has no ptp_events row
       if (!invoiceIds.length) {
         const custName = interaction.customer_name || '';
         const synKey = `__noinv__${interaction.id}`;
@@ -7542,6 +7597,7 @@ async function loadConfirmedDates() {
           ptpHistory: [{
             date: interaction.promised_date,
             amount: interaction.promised_amount,
+            tdsPct: null,
             loggedAt: interaction.created_at,
             collectorName: collName,
             interactionId: interaction.id
@@ -7550,10 +7606,10 @@ async function loadConfirmedDates() {
       }
     }
 
-    // Merge direct (manual) PTP changes made from Open AR — tracked in
-    // ptp_events — into the same per-invoice history
+    // Invoice-level histories from ptp_events (all sources, oldest first).
+    // A removal (new_date null) clears the invoice's history.
     try {
-      const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?source=eq.manual&order=created_at.asc&limit=2000&select=*`, { headers: cmrrHdr() });
+      const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?order=created_at.asc&limit=5000&select=*`, { headers: cmrrHdr() });
       if (mr.ok) {
         for (const ev of await mr.json()) {
           if (!ev.new_date) {
@@ -7572,15 +7628,17 @@ async function loadConfirmedDates() {
               balance: Number(inf.balance_inr || 0),
               total:   Number(inf.total_inr   || 0),
               status:  inf.status || '',
+              invoiceDate: inf.invoice_date || '',
               ptpHistory: []
             };
           }
           invoicePtpMap[ev.invoice_id].ptpHistory.push({
             date: ev.new_date,
             amount: ev.promised_amount != null ? Number(ev.promised_amount) : null,
+            tdsPct: ev.tds_pct != null ? Number(ev.tds_pct) : null,
             loggedAt: ev.created_at,
-            collectorName: (ev.changed_by || '') + ' (direct)',
-            interactionId: null
+            collectorName: (ev.changed_by || '') + (ev.source === 'manual' ? ' (direct)' : ''),
+            interactionId: ev.interaction_id || null
           });
         }
         for (const d of Object.values(invoicePtpMap)) {
@@ -7820,8 +7878,7 @@ function cdFilterAndRender() {
     const isCurrent = lastEntry.date === ds;
     const amt = entryAmt(d, isCurrent ? lastEntry : hits[hits.length - 1]);
     const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
-    const m = moneyFor(d);
-    return { isCurrent, amt, who, collected: m.full, partial: m.part, paid: m.collected };
+    return { isCurrent, amt, who, settled: moneyFor(d).full };
   };
 
   const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .2rem;border-bottom:1.5px solid var(--brd2);text-align:right;white-space:nowrap;z-index:2';
@@ -7829,21 +7886,26 @@ function cdFilterAndRender() {
   const tdS = 'padding:.28rem .35rem;border-bottom:1px solid var(--line);text-align:right;font-size:10.5px;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap';
   const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   const badge = (c) => c.isCurrent
-    ? (c.collected
-      ? `<span title="${escHtml('Invoice closed · ' + fmtFull(c.paid) + ' received in bank this month' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
-      : (c.partial
-        ? `<span title="${escHtml('Part-paid — ' + fmtFull(c.paid) + ' received in bank this month, ' + fmtFull(c.amt) + ' outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-weight:700">${fmtFull(c.amt)}<span style="font-family:var(--sans);font-size:8px;font-weight:700;margin-left:.15rem">PART</span></span>`
-        : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`))
+    ? (c.settled
+      ? `<span title="${escHtml('Invoice settled — nothing outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
+      : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + ' expected in bank' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`)
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
+  // Status of an expectation vs bank cash: settled ✓, part-collected, or open
+  const statusChip = (full, collected, expected) => full
+    ? '<span style="display:inline-block;font-size:9.5px;font-weight:700;background:#bbf7d0;color:#166534;padding:.1rem .35rem;border-radius:4px">✓ FULL</span>'
+    : (collected > 0.5
+      ? `<span title="${escHtml(fmtFull(collected) + ' in bank vs ' + fmtFull(expected) + ' expected')}" style="display:inline-block;font-size:9.5px;font-weight:700;background:#dbeafe;color:#1d4ed8;padding:.1rem .35rem;border-radius:4px">PART</span>`
+      : '<span style="color:var(--ink-faint)">—</span>');
 
   // Evenly sized day columns via fixed table layout
-  const DAY_W = 88, CUST_W = 190, INV_W = 190, BU_W = 90, POC_W = 90, TOT_W = 110;
-  const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W;
-  const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W];
+  const DAY_W = 88, CUST_W = 190, INV_W = 190, BU_W = 90, POC_W = 90, TOT_W = 110, COLL_W = 110, ST_W = 64;
+  const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W + ST_W;
+  const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W,
+              CUST_W + INV_W + BU_W + POC_W + TOT_W, CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W];
   const frz = (i, bg, z) => `position:sticky;left:${LX[i]}px;background:${bg || '#fff'};z-index:${z || 1}`;
   const frzEdge = ';box-shadow:2px 0 0 rgba(15,23,42,.10)';
   const tblW = LEAD_W + daysInMonth * DAY_W;
-  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${TOT_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
+  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${TOT_W}px"><col style="width:${COLL_W}px"><col style="width:${ST_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
   const dayColgroup = (nDays) => `<colgroup><col style="width:${LEAD_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
 
   const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
@@ -7854,7 +7916,6 @@ function cdFilterAndRender() {
   }).join('');
 
   const dayTotals = new Array(daysInMonth + 1).fill(0);
-  const dayCollected = new Array(daysInMonth + 1).fill(0);
 
   // One movement table per calendar month between today's month and the
   // selected month (inclusive). Viewing Oct in August gives Aug, Sep and Oct
@@ -7881,15 +7942,15 @@ function cdFilterAndRender() {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldSum = 0, colSum = 0, partSum = 0, paidSum = 0;
+        let curSum = 0, oldSum = 0, allSettled = true;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; colSum += Math.min(c.paid, c.amt); if (c.partial) partSum += c.amt; if (c.partial) paidSum += c.paid; } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; if (!c.settled) allSettled = false; } else oldSum += c.amt;
         });
-        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; dayCollected[day] += colSum; }
+        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', collected: colSum >= curSum - 0.5, partial: partSum > 0 && colSum < curSum - 0.5, paid: paidSum })}</td>`;
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
@@ -7897,13 +7958,16 @@ function cdFilterAndRender() {
       const allDone = ds.every(d => moneyFor(d).full);
       const custSet = [...new Set(ds.map(d => d.customerName))];
       const colOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
+      const colCollected = ds.reduce((s, d) => s + moneyFor(d).collected, 0);
       const bus = [...new Set(ds.map(d => d.bu).filter(Boolean))];
       return `<tr>
         <td style="${tdL};${frz(0)}" title="${escHtml(col)}">${pocCap(col === '—' ? '' : col)}</td>
         <td style="${tdL};color:var(--txt3);${frz(1)}">${custSet.length} cust<span style="font-family:var(--mono);color:${colOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${colOutstanding < 0.5 ? '✓ nil' : fmtFull(colOutstanding)}</span>${cdTlChip('coll', col, agg)}</td>
         <td style="${tdL};${frz(2)}">${bus.length ? bus.map(buCap).join(' ') : '<span class="cap-none">—</span>'}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${ds.length} inv</td>
-        <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${colCollected > 0.5 ? fmtFull(colCollected) : '—'}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, colCollected, rowTot)}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -7922,27 +7986,30 @@ function cdFilterAndRender() {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldSum = 0, colSum = 0, partSum = 0, paidSum = 0;
+        let curSum = 0, oldSum = 0, allSettled = true;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; colSum += Math.min(c.paid, c.amt); if (c.partial) partSum += c.amt; if (c.partial) paidSum += c.paid; } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; if (!c.settled) allSettled = false; } else oldSum += c.amt;
         });
-        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; dayCollected[day] += colSum; }
+        if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', collected: colSum >= curSum - 0.5, partial: partSum > 0 && colSum < curSum - 0.5, paid: paidSum })}</td>`;
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
       const agg = ds.reduce((acc, d) => { const s = cdMoveStats(d); acc.pushed += s.pushed; acc.pulled += s.pulled; acc.amtUp += s.amtUp; acc.amtDown += s.amtDown; return acc; }, { pushed: 0, pulled: 0, amtUp: 0, amtDown: 0 });
       const allDone = ds.every(d => moneyFor(d).full);
       const custOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
+      const custCollected = ds.reduce((s, d) => s + moneyFor(d).collected, 0);
       return `<tr>
         <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(cust)}">${escHtml(cust)}</td>
         <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv<span style="font-family:var(--mono);color:${custOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${custOutstanding < 0.5 ? '✓ nil' : fmtFull(custOutstanding)}</span>${cdTlChip('cust', cust, agg)}</td>
         <td style="${tdL};${frz(2)}">${buCap(ds[0].bu)}</td>
         <td style="${tdL};${frz(3)}">${pocCap(ds[0].collector)}</td>
-        <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${custCollected > 0.5 ? fmtFull(custCollected) : '—'}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, custCollected, rowTot)}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -7961,19 +8028,20 @@ function cdFilterAndRender() {
         const cells = Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
           const c = cellFor(d, day);
-          if (c && c.isCurrent) { dayTotals[day] += c.amt; rowTot += c.amt; dayCollected[day] += Math.min(c.paid, c.amt); }
+          if (c && c.isCurrent) { dayTotals[day] += c.amt; rowTot += c.amt; }
           const wk = isWeekend(day) ? ';background:#fafbfd' : '';
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
         const moved = cdTlChip('inv', d.key || String(d.invoiceId || ''), cdMoveStats(d));
         const money = moneyFor(d);
-        const totBg = money.full ? '#eefdf3' : (money.part ? '#eff6ff' : '#f8fafc');
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Collected — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
           <td style="${tdL};${frz(2)}">${buCap(d.bu)}</td>
           <td style="${tdL};${frz(3)}">${pocCap(d.collector)}</td>
-          <td style="${tdS};font-weight:700;${frz(4, totBg)}${frzEdge};color:${money.full ? '#166534' : (money.part ? '#1d4ed8' : 'inherit')}">${rowTot > 0 ? (money.full ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
+          <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+          <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${money.collected > 0.5 ? fmtFull(money.collected) : '—'}</td>
+          <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(money.full, money.collected, rowTot)}</td>
           ${cells}
         </tr>`;
       }).join('');
@@ -8048,37 +8116,89 @@ function cdFilterAndRender() {
   let carry = null;
   const movementHtml = trackMonths.map(tm => { const t = movementTable(tm, carry); carry = t.carry; return t.html; }).join('');
 
-  content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
+  // ── Month money line + cash that landed with no PTP behind it ──
+  const expectedNet = dayTotals.reduce((a, b) => a + b, 0);
+  const plannedCash = monthRows.reduce((s, d) => s + moneyFor(d).collected, 0);
+  let unplannedCash = 0, unplannedHtml = '';
+  if (bankMap) {
+    const promisedIds = new Set(_cdAllData
+      .filter(d => d.invoiceId && (d.ptpHistory[d.ptpHistory.length - 1]?.date || '').startsWith(_cdMonth))
+      .map(d => String(d.invoiceId)));
+    const unRows = Object.entries(bankMap)
+      .filter(([id, v]) => Number(v) > 0.5 && !promisedIds.has(String(id)))
+      .map(([id, v]) => {
+        const inf = _cdInvInfo[id] || {};
+        return { id, cash: Number(v), invoiceNumber: inf.invoice_number || id, customerName: inf.customer_name || '',
+                 bu: arGetBu(inf.customer_name || '') || '', collector: arGetCollector(inf.customer_name || '') || '' };
+      })
+      .filter(r => {                       // honour the pane's BU + search filters
+        if (buF && r.bu !== buF) return false;
+        if (sq) {
+          const hay = [r.invoiceNumber, r.customerName, r.bu, r.collector].join(' ').toLowerCase();
+          if (!hay.includes(sq)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.cash - a.cash);
+    unplannedCash = unRows.reduce((s, r) => s + r.cash, 0);
+    if (unRows.length) {
+      unplannedHtml = `<div style="font-weight:700;font-size:13px;color:var(--ink);margin:1.1rem 0 .1rem">Collected without a PTP in ${mLbl(_cdMonth)} <span style="font-weight:400;color:#b45309">— cash that landed with no promise behind it (planning gap)</span></div>
+      <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px;margin-bottom:.4rem"><table style="border-collapse:separate;border-spacing:0;min-width:760px">
+        <thead><tr>
+          <th style="${thL}">Customer</th><th style="${thL}">Invoice #</th><th style="${thL}">BU</th><th style="${thL}">POC</th>
+          <th style="${thS};padding-right:.6rem">Collected (bank)</th>
+        </tr></thead>
+        <tbody>${unRows.map(r => `<tr>
+          <td style="${tdL};font-weight:600">${escHtml(r.customerName || '—')}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px">${escHtml(r.invoiceNumber)}</td>
+          <td style="${tdL}">${buCap(r.bu)}</td>
+          <td style="${tdL}">${pocCap(r.collector)}</td>
+          <td style="${tdS};padding-right:.6rem;font-weight:600;color:#166534">${fmtFull(r.cash)}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr style="background:#f8fafc">
+          <td colspan="4" style="${tdL};font-weight:700">${unRows.length} invoice${unRows.length === 1 ? '' : 's'} collected unplanned</td>
+          <td style="${tdS};padding-right:.6rem;font-weight:700;color:#166534">${fmtFull(unplannedCash)}</td>
+        </tr></tfoot>
+      </table></div>`;
+    }
+  }
+  const moneyLine = `<div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.5rem;font-size:12px">
+    <span><span style="color:var(--txt3)">Expected in ${mLbl(_cdMonth)} (net of TDS):</span> <strong style="font-family:var(--mono);font-size:14px">₹${fmtFull(expectedNet)}</strong></span>
+    <span><span style="color:var(--txt3)">Collected in bank:</span> <strong style="font-family:var(--mono);font-size:14px;color:#166534">₹${bankLoading ? '…' : fmtFull(plannedCash + unplannedCash)}</strong>${bankLoading ? '' : ` <span style="color:var(--txt3)">(₹${fmtFull(plannedCash)} planned + ₹${fmtFull(unplannedCash)} unplanned)</span>`}</span>
+    <span style="color:var(--txt3);font-size:11px">bank cash only — CN / TDS / JV closures excluded</span>
+  </div>`;
+
+  content.innerHTML = `${moneyLine}<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:${tblW}px">
     ${colgroup}
     <thead><tr>
       <th style="${thL};${frz(0, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Collector (POC)' : 'Customer'}</th>
       <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Customers' : (_cdView === 'customer' ? 'Invoices' : 'Invoice #')}</th>
       <th style="${thL};${frz(2, '#f6f8fb', 6)}">BU</th>
       <th style="${thL};${frz(3, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Invoices' : 'POC'}</th>
-      <th onclick="cdToggleTotalSort()" title="Sort by total" style="${thS};${frz(4, '#eef1f6', 6)}${frzEdge};cursor:pointer;user-select:none">Total${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
+      <th onclick="cdToggleTotalSort()" title="Sort by promised total (net of TDS)" style="${thS};${frz(4, '#eef1f6', 6)};cursor:pointer;user-select:none">Promised${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
+      <th title="Cash received in bank this month" style="${thS};${frz(5, '#eef1f6', 6)}">Collected</th>
+      <th style="${thS};${frz(6, '#eef1f6', 6)}${frzEdge};text-align:center">Status</th>
       ${dayHead}
     </tr></thead>
     <tbody>${bodyHtml}</tbody>
     <tfoot><tr style="background:#f8fafc">
-      <td colspan="4" style="${tdL};font-weight:700;${frz(0, '#f8fafc', 2)}">Total promised (current PTPs)</td>
-      <td style="${tdS};font-weight:700;${frz(4, '#eef7f1', 2)}${frzEdge};color:#166534">${fmtFull(dayTotals.reduce((a, b) => a + b, 0))}</td>
+      <td colspan="4" style="${tdL};font-weight:700;${frz(0, '#f8fafc', 2)}">Total — expected (net of TDS) vs in bank${bankLoading ? ' <span style="color:var(--ink-faint)">(bank data loading…)</span>' : ''}</td>
+      <td style="${tdS};font-weight:700;${frz(4, '#eef7f1', 2)}">${fmtFull(expectedNet)}</td>
+      <td style="${tdS};font-weight:700;${frz(5, '#f6fdf8', 2)};color:#166534">${bankLoading ? '…' : fmtFull(plannedCash)}</td>
+      <td style="${frz(6, '#f8fafc', 2)}${frzEdge}"></td>
       ${totCells}
-    </tr>
-    <tr style="background:#f6fdf8">
-      <td colspan="4" style="${tdL};color:#166534;${frz(0, '#f6fdf8', 2)}">of which collected in bank${bankLoading ? ' <span style="color:var(--ink-faint)">(loading…)</span>' : ''} <span style="font-weight:400;color:var(--txt3)">— excludes CN / TDS / JV closures</span></td>
-      <td style="${tdS};font-weight:700;${frz(4, '#f6fdf8', 2)}${frzEdge};color:#166534">${fmtFull(dayCollected.reduce((a, b) => a + b, 0))}</td>
-      ${Array.from({ length: daysInMonth }, (_, i) => { const v = dayCollected[i + 1]; return `<td style="${tdS};color:#166534">${v > 0 ? fmtFull(v) : ''}</td>`; }).join('')}
     </tr></tfoot>
   </table></div>
   <div style="font-size:11px;color:var(--txt3);margin:.5rem 0 1rem">
-    <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP &nbsp;·&nbsp;
-    <span style="display:inline-block;width:12px;height:12px;background:#bbf7d0;border-radius:3px;vertical-align:-2px"></span> ✓ invoice closed &nbsp;·&nbsp;
-    <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border-radius:3px;vertical-align:-2px"></span> part-paid — cell shows the amount still outstanding &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#fde68a;border-radius:3px;vertical-align:-2px"></span> current PTP — expected in bank &nbsp;·&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;background:#bbf7d0;border-radius:3px;vertical-align:-2px"></span> ✓ invoice settled &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
-    amounts = committed amount, else invoice balance &nbsp;·&nbsp;
-    <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .34rem;border-radius:8px;font-weight:700;font-size:10px">⟲</span> click for the PTP timeline — every date and amount change, and what was standing after each one
+    amounts = committed amount (else month-opening balance), less TDS where a TDS % was set &nbsp;·&nbsp;
+    <span style="background:#dbeafe;color:#1d4ed8;padding:.05rem .3rem;border-radius:4px;font-weight:700;font-size:9px">PART</span> some cash in bank, less than expected &nbsp;·&nbsp;
+    <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .34rem;border-radius:8px;font-weight:700;font-size:10px">⟲</span> click for the PTP timeline
   </div>
-  <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
+  ${unplannedHtml}
+  <div style="font-weight:700;font-size:13px;color:var(--ink);margin:1.1rem 0 .1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
   <div style="font-size:11px;color:var(--txt3);margin-bottom:.5rem">One table per month in which that promise can change — each column is a day of that month, showing the total promised for ${mLbl(_cdMonth)} as at the end of that day. Future days are blank.</div>
   ${movementHtml}`;
 }
@@ -8115,7 +8235,7 @@ function cdTlSnaps(rows) {
   const state = new Map();
   return evs.map(({ d, h }) => {
     const before = state.get(d.key) || null;
-    const after = { date: h.date || null, amt: cdEntryAmt(d, h), explicit: h.amount != null && Number(h.amount) > 0 };
+    const after = { date: h.date || null, amt: cdEntryAmt(d, h), explicit: h.amount != null && Number(h.amount) > 0, tds: Number(h.tdsPct || 0) };
     state.set(d.key, after);
     const byDate = {};
     for (const v of state.values()) { if (v.date) byDate[v.date] = (byDate[v.date] || 0) + v.amt; }
@@ -8179,10 +8299,11 @@ function cdOpenTimeline(kind, key) {
     }
     const invTag = agg ? ` <span style="font-family:var(--mono);font-size:10.5px;color:var(--txt3)">· ${escHtml(s.d.invoiceNumber || s.d.invoiceId || '—')}</span>` : '';
     const noAmt = !s.after.explicit ? ' <span style="font-size:10px;color:var(--txt3)">(full balance)</span>' : '';
+    const tdsNote = s.after.tds > 0 ? ` <span style="font-size:10px;color:#b45309">(net of ${s.after.tds}% TDS)</span>` : '';
     return `<div style="display:flex;gap:.6rem;padding:.55rem .2rem;border-bottom:1px dashed var(--brd)">
       <div style="flex:0 0 4px;border-radius:2px;background:${tone};margin:.15rem 0"></div>
       <div style="min-width:0;flex:1">
-        <div style="font-size:12px;color:var(--ink)">${what}${noAmt}${invTag}</div>
+        <div style="font-size:12px;color:var(--ink)">${what}${noAmt}${tdsNote}${invTag}</div>
         <div style="font-size:10.5px;color:var(--txt3);margin-top:.1rem">${when}${s.who ? ' · ' + escHtml(s.who) : ''}</div>
         ${agg ? `<div style="margin-top:.3rem">${pos(s.byDate, i !== snaps.length - 1)}</div>` : ''}
       </div>
@@ -8190,6 +8311,20 @@ function cdOpenTimeline(kind, key) {
   }).join('');
 
   const current = snaps.length ? snaps[snaps.length - 1].byDate : {};
+
+  // Edit affordance: open invoices can have their PTP changed right here;
+  // a closed invoice is settled history — its PTP is locked. On a part-paid
+  // invoice, the committed amount is capped at what is still outstanding.
+  const editable = rows.filter(d => d.invoiceId && !d.closed && Number(d.balance || 0) > 0.5);
+  const lockedCount = rows.filter(d => d.invoiceId && (d.closed || Number(d.balance || 0) < 0.5)).length;
+  const editStrip = editable.length
+    ? `<div style="padding:.5rem 1.1rem .6rem;border-bottom:1px solid var(--brd);background:#fffdf5">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--txt3);margin-bottom:.3rem">Change a PTP</div>
+        ${editable.map(d => `<button data-ek="${escHtml(d.key)}" onclick="cdEditFromTl(this.dataset.ek)" title="${escHtml('Edit PTP — ₹' + Math.round(Number(d.balance)).toLocaleString('en-IN') + ' outstanding' + (Number(d.balance) < Number(d.total || 0) - 0.5 ? ' (part-paid: amount capped at outstanding)' : ''))}" style="display:inline-block;margin:0 .3rem .3rem 0;font-size:11px;font-weight:600;background:#fff;border:1px solid var(--brd2);border-radius:5px;padding:.2rem .55rem;cursor:pointer;color:var(--navy2)">✎ ${escHtml(d.invoiceNumber || d.invoiceId)}</button>`).join('')}
+        ${lockedCount ? `<span style="font-size:10.5px;color:var(--txt3)">${lockedCount} settled invoice${lockedCount === 1 ? '' : 's'} — PTP locked</span>` : ''}
+      </div>`
+    : (lockedCount ? `<div style="padding:.45rem 1.1rem;border-bottom:1px solid var(--brd);font-size:11px;color:var(--txt3)">Invoice settled — PTP locked, no further changes.</div>` : '');
+
   const ov = document.createElement('div');
   ov.id = 'cd-tl-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:1rem';
@@ -8206,6 +8341,7 @@ function cdOpenTimeline(kind, key) {
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--txt3);margin-bottom:.3rem">Standing now</div>
       ${pos(current, false)}
     </div>
+    ${editStrip}
     <div style="overflow-y:auto;padding:.35rem 1.1rem .9rem">
       ${snaps.length ? items : '<div style="font-size:12px;color:var(--txt3);padding:1rem 0">No PTP history.</div>'}
     </div>
@@ -8215,6 +8351,19 @@ function cdOpenTimeline(kind, key) {
     </div>
   </div>`;
   document.body.appendChild(ov);
+}
+
+// Opens the shared PTP editor from the timeline popup. Only reachable for
+// open invoices (settled ones never get a button); a part-paid invoice's
+// committed amount is capped at the outstanding balance inside the editor.
+function cdEditFromTl(key) {
+  const d = _cdAllData.find(x => (x.key || '') === key);
+  if (!d || !d.invoiceId || d.closed || Number(d.balance || 0) < 0.5) return;
+  document.getElementById('cd-tl-modal')?.remove();
+  arEditPtp(d.invoiceId, d.invoiceNumber, d.customerName, d.balance, {
+    maxAmount: d.balance,
+    onSaved: () => { _cdLoadedAt = 0; loadConfirmedDates(); },
+  });
 }
 
 /* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
