@@ -1940,6 +1940,27 @@ async function onSignIn(session) {
   renderNav();
   document.getElementById('logout-area').style.display = '';
   document.getElementById('logout-name').textContent = USER_ACCESS.display_name || CURRENT_USER.email;
+  scheduleNightlyAutoRefresh();
+}
+
+// Milliseconds until the next occurrence of hh:mm IST — computed from a fixed
+// UTC+5:30 offset (not the browser's local clock) so this fires at true IST
+// time regardless of where the viewer's device is set.
+function msUntilNextIST(hh, mm) {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 3600 * 1000);
+  const target = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), hh, mm, 0));
+  let delta = target.getTime() - istNow.getTime();
+  if (delta <= 0) delta += 24 * 3600 * 1000;
+  return delta;
+}
+
+// Any tab left open overnight reloads itself a couple of minutes after the
+// 23:50 IST snapshot cron completes, so whoever looks at it in the morning
+// sees numbers that already match last night's snapshot — no manual refresh,
+// no "why doesn't this match" moment like the one that prompted this.
+function scheduleNightlyAutoRefresh() {
+  setTimeout(() => location.reload(), msUntilNextIST(23, 52));
 }
 
 async function doLogin() {
