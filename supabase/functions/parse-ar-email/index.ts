@@ -113,12 +113,18 @@ Deno.serve(async (req) => {
 
   if (rows.length === 0) return json({ ok: true, inserted: 0, message: 'No invoice rows found in file' });
 
-  // Derive snapshot date from email's Date header, fall back to today
+  // FX month for computing INR fields on ar_invoices — from the email's Date
+  // header if present, else "now". NOTE: this is no longer used to stamp a
+  // daily snapshot — that is take_ar_snapshot()'s job alone (IST-aware, atomic
+  // full rebuild). This function used to ALSO upsert into ar_invoice_snapshots
+  // directly, using this same UTC-derived date and never clearing stale rows —
+  // a second, uncoordinated writer that could mislabel the snapshot day and
+  // leave it inconsistent with the RPC's full rebuild. Removed.
   const emailDate = typeof body.Date === 'string' ? body.Date : null;
-  const snapshotDate = emailDate
+  const fxDate = emailDate
     ? new Date(emailDate).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
-  const snapshotMonth = snapshotDate.slice(0, 7); // 'YYYY-MM'
+  const fxMonth = fxDate.slice(0, 7); // 'YYYY-MM'
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -126,7 +132,7 @@ Deno.serve(async (req) => {
   const { data: fxRow } = await supabase
     .from('fx_rates')
     .select('rate')
-    .eq('year_month', snapshotMonth)
+    .eq('year_month', fxMonth)
     .eq('currency', 'GBP')
     .maybeSingle();
   const gbpRate: number = fxRow?.rate ?? null;
@@ -155,27 +161,5 @@ Deno.serve(async (req) => {
     .eq('entity', 'UK');
   if (delErr) console.warn('Cleanup warning:', delErr.message);
 
-  // Write historical snapshot with INR values if rate is available
-  const snapshotRows = rows.map(r => ({
-    snapshot_date:  snapshotDate,
-    entity:         'UK',
-    invoice_id:     r.invoice_id,
-    invoice_number: r.invoice_number,
-    customer_name:  r.customer_name,
-    invoice_date:   r.invoice_date,
-    due_date:       r.due_date,
-    status:         r.status,
-    total:          r.total,
-    balance:        r.balance,
-    currency_code:  'GBP',
-    exchange_rate:  gbpRate ?? null,
-    total_inr:      gbpRate ? Math.round(r.total   * gbpRate * 100) / 100 : null,
-    balance_inr:    gbpRate ? Math.round(r.balance * gbpRate * 100) / 100 : null,
-  }));
-  const { error: snapErr } = await supabase
-    .from('ar_invoice_snapshots')
-    .upsert(snapshotRows, { onConflict: 'invoice_id,snapshot_date,entity' });
-  if (snapErr) console.warn('Snapshot insert warning:', snapErr.message);
-
-  return json({ ok: true, inserted: rows.length, snapshot_date: snapshotDate, gbp_rate: gbpRate });
+  return json({ ok: true, inserted: rows.length, gbp_rate: gbpRate });
 });

@@ -39,7 +39,15 @@ function sseStream() {
   return { response, send, close };
 }
 
-async function runSync(notify: (event: string, data: unknown) => void, writeSnapshot = false) {
+// NOTE: this function only keeps ar_invoices current. Daily snapshots are the
+// sole responsibility of the take_ar_snapshot() Postgres RPC (IST-aware,
+// atomic delete+insert of the whole table, called by its own nightly cron and
+// the admin "Take Today's Snapshot" button). This function used to ALSO write
+// ar_invoice_snapshots directly on its end-of-day cron run, using a UTC-based
+// date and an upsert-only write that never cleared stale rows — a second,
+// uncoordinated writer that could mislabel snapshot_date around IST midnight
+// and leave today's snapshot inconsistent with the RPC's full rebuild. Removed.
+async function runSync(notify: (event: string, data: unknown) => void) {
   const tok = await getAccessToken();
   if ('error' in tok) { notify('error', { message: `Zoho auth failed: ${tok.error}`, detail: tok.detail }); return null; }
 
@@ -105,68 +113,7 @@ async function runSync(notify: (event: string, data: unknown) => void, writeSnap
     if (delErr) notify('progress', { step: 3, total: 3, message: `Cleanup warning: ${delErr.message}` });
   }
 
-  // Write end-of-day snapshot only when requested (last cron run of the day)
-  if (writeSnapshot) {
-    const snapshotDate = new Date().toISOString().slice(0, 10);
-
-    // India snapshot
-    const snapshotRows = rows.map(r => ({
-      snapshot_date:  snapshotDate,
-      entity:         'IN',
-      invoice_id:     r.invoice_id,
-      invoice_number: r.invoice_number,
-      customer_name:  r.customer_name,
-      invoice_date:   r.invoice_date,
-      due_date:       r.due_date,
-      status:         r.status,
-      total:          r.total,
-      balance:        r.balance,
-      currency_code:  r.currency_code,
-      exchange_rate:  r.exchange_rate,
-      total_inr:      r.total_inr,
-      balance_inr:    r.balance_inr,
-    }));
-    for (let i = 0; i < snapshotRows.length; i += 500) {
-      const { error: snapErr } = await supabase
-        .from('ar_invoice_snapshots')
-        .upsert(snapshotRows.slice(i, i + 500), { onConflict: 'invoice_id,snapshot_date,entity' });
-      if (snapErr) notify('progress', { step: 3, total: 3, message: `IN snapshot warning: ${snapErr.message}` });
-    }
-
-    // UK snapshot — read current UK rows from ar_invoices and copy them
-    const { data: ukRows, error: ukErr } = await supabase
-      .from('ar_invoices')
-      .select('*')
-      .eq('entity', 'UK');
-    if (ukErr) {
-      notify('progress', { step: 3, total: 3, message: `UK snapshot fetch warning: ${ukErr.message}` });
-    } else if (ukRows && ukRows.length > 0) {
-      const ukSnapshotRows = ukRows.map((r: Record<string, unknown>) => ({
-        snapshot_date:  snapshotDate,
-        entity:         'UK',
-        invoice_id:     r.invoice_id,
-        invoice_number: r.invoice_number,
-        customer_name:  r.customer_name,
-        invoice_date:   r.invoice_date,
-        due_date:       r.due_date,
-        status:         r.status,
-        total:          r.total,
-        balance:        r.balance,
-        currency_code:  r.currency_code,
-        exchange_rate:  r.exchange_rate,
-        total_inr:      r.total_inr,
-        balance_inr:    r.balance_inr,
-      }));
-      const { error: ukSnapErr } = await supabase
-        .from('ar_invoice_snapshots')
-        .upsert(ukSnapshotRows, { onConflict: 'invoice_id,snapshot_date,entity' });
-      if (ukSnapErr) notify('progress', { step: 3, total: 3, message: `UK snapshot warning: ${ukSnapErr.message}` });
-    }
-
-    notify('progress', { step: 3, total: 3, message: `End-of-day snapshot saved for ${snapshotDate} (IN: ${rows.length}, UK: ${ukRows?.length ?? 0})` });
-  }
-
-  return { synced: rows.length, pages: page, snapshot_written: writeSnapshot };
+  return { synced: rows.length, pages: page };
 }
 
 Deno.serve(async (req) => {
@@ -188,13 +135,11 @@ Deno.serve(async (req) => {
 
   // ?cron=1 — synchronous JSON mode for scheduled runs
   if (url.searchParams.get('cron') === '1') {
-    // Write snapshot only on the last run of the day: 18:30 UTC = midnight IST
-    const isEndOfDay = new Date().getUTCHours() === 18;
     const log: unknown[] = [];
     const notify = (_: string, data: unknown) => log.push(data);
     try {
       notify('progress', { step: 1, total: 3, message: 'Authenticating with Zoho Books…' });
-      const result = await runSync(notify, isEndOfDay);
+      const result = await runSync(notify);
       if (!result) return json({ ok: false, log }, 500);
       return json({ ok: true, ...result, log });
     } catch (e) {

@@ -4903,7 +4903,12 @@ async function loadARSnapshots() {
   wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">Loading snapshots…</div>';
   if (status) status.textContent = '';
   try {
-    const daysAgo = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    // Local (IST) calendar date, not toISOString()'s UTC date — near midnight
+    // IST those differ by a day, which would silently drop/duplicate a column.
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const _p2 = n => String(n).padStart(2, '0');
+    const daysAgo = `${cutoff.getFullYear()}-${_p2(cutoff.getMonth() + 1)}-${_p2(cutoff.getDate())}`;
     const since = daysAgo > '2026-08-01' ? daysAgo : '2026-08-01'; // only show from Aug 1, 2026
     const snapRows = [], PAGE = 1000;
     let snapOff = 0;
