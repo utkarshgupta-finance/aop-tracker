@@ -320,6 +320,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 /* BU / Collector capsule filter rows — shared label gutter keeps chips aligned */
 .ar-cap-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .ar-cap-lbl{flex:0 0 68px;font-size:9.5px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);white-space:nowrap}
+/* BU / POC value capsules — one look for these two everywhere in the app */
+.bu-cap{display:inline-block;font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap}
+.poc-cap{display:inline-block;font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap}
+.cap-none{color:var(--ink-faint);font-size:11px}
 .ar-tbl{width:100%;border-collapse:separate;border-spacing:0}
 .ar-tbl thead th{position:sticky;top:0;z-index:3;background:#f6f8fb;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5b6472;padding:.5rem .6rem;border-bottom:1.5px solid var(--brd2);text-align:left;white-space:nowrap}
 .ar-tbl thead th.r{text-align:right}
@@ -1974,11 +1978,12 @@ function renderNav() {
     });
   }
   // Restore last-used tab, fall back to first allowed
-  const saved   = localStorage.getItem('biz_tab');
+  const saved   = getActiveTabPref();
   const allNavIds = [...ALL_TABS_CFG.filter(t => !t.roles || t.roles.includes(role)).map(t => t.id)];
   const firstMain = ALL_TABS_CFG.filter(t => t.id !== 'settings').find(t => !t.roles || t.roles.includes(role))?.id || 'ar';
   const activeId = (saved && allNavIds.includes(saved)) ? saved : firstMain;
   if (activeId) {
+    setActiveTabPref(activeId);   // pin this browser tab to what it restored
     const paneId = activeId;
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     document.getElementById(paneId)?.classList.add('active');
@@ -2529,7 +2534,7 @@ function renderContactsTable() {
   tbody.innerHTML = rows.map(c => {
     const bu        = arGetBu(c.customer_name);
     const collector = arGetCollector(c.customer_name);
-    const buBadge   = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .38rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--txt3)">—</span>';
+    const buBadge   = buCap(bu);
     const active = c.is_active !== false;
     const statusPill = active
       ? `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .45rem;border-radius:20px;cursor:pointer" data-ctc-id="${escHtml(c.id)}" onclick="toggleContactActive(this.dataset.ctcId, false)" title="Click to deactivate">Active</span>`
@@ -2548,7 +2553,7 @@ function renderContactsTable() {
     return `<tr>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.customer_name || '')}</td>
       <td>${buBadge}</td>
-      <td style="font-size:12px;color:var(--txt2)">${escHtml(collector || '—')}</td>
+      <td style="white-space:nowrap">${pocCap(collector)}</td>
       <td style="font-size:12.5px;font-weight:500">${escHtml(c.name || '')}</td>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
       <td style="font-size:12px;color:var(--txt2)">${c.category ? escHtml(catLabel) : catLabel}</td>
@@ -3467,7 +3472,7 @@ function renderDisputedInvoices() {
   tbody.innerHTML = filtered.map(r => {
     const bu         = arGetBu(r.customer_name);
     const collector  = arGetCollector(r.customer_name);
-    const buBadge    = bu ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.1rem .4rem;border-radius:4px">${escHtml(bu)}</span>` : '<span style="color:var(--txt3)">—</span>';
+    const buBadge    = buCap(bu);
     const invLabel   = escHtml(r.invoice_number || r.invoice_id || '—');
     const amtData    = _diAmounts[r.invoice_id];
     const balVal     = amtData ? (amtData.balance_inr ?? amtData.balance ?? null) : null;
@@ -3502,7 +3507,7 @@ function renderDisputedInvoices() {
     return `<tr data-dispute-id="${escHtml(r.id)}">
       <td style="font-size:12.5px;font-weight:500;max-width:160px" title="${escHtml(r.customer_name || '')}"><div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;word-break:break-word;white-space:normal">${escHtml(r.customer_name || '')}</div></td>
       <td>${buBadge}</td>
-      <td style="font-size:12px;color:var(--txt2);white-space:nowrap">${escHtml(collector || '—')}</td>
+      <td style="white-space:nowrap">${pocCap(collector)}</td>
       <td style="white-space:nowrap">${invLabelEl}${openTimesNote}</td>
       <td style="text-align:right;white-space:nowrap">${balCell}</td>
       <td style="text-align:right;white-space:nowrap">${dispAmt}</td>
@@ -3745,7 +3750,19 @@ function showTab(id, btn) {
   document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('active'));
   document.getElementById(paneId)?.classList.add('active');
   if (btn) btn.classList.add('active');
-  localStorage.setItem('biz_tab', id);
+  setActiveTabPref(id);
+}
+
+// The open menu is per browser tab: sessionStorage is scoped to one tab, so two
+// tabs (or a duplicated tab) navigate independently. localStorage is kept only
+// as the seed for a brand-new tab, which opens where you last left off.
+function setActiveTabPref(id) {
+  try { sessionStorage.setItem('biz_tab', id); } catch(_) {}
+  try { localStorage.setItem('biz_tab', id); } catch(_) {}
+}
+function getActiveTabPref() {
+  try { return sessionStorage.getItem('biz_tab') || localStorage.getItem('biz_tab'); }
+  catch(_) { return null; }
 }
 
 function showARTab(btn) {
@@ -3862,6 +3879,10 @@ function _cmLookup(customerName) {
 function arGetBu(customerName)        { return _cmLookup(customerName)?.bu_name || ''; }
 function arGetCollector(customerName) { return _cmLookup(customerName)?.collector_name || ''; }
 function arIsMapped(customerName)     { const m = _cmLookup(customerName); return !!(m && (m.bu_name || m.collector_name)); }
+
+// BU / POC always render as the same capsule, whichever table they appear in
+function buCap(v)  { return v ? `<span class="bu-cap">${escHtml(v)}</span>`  : '<span class="cap-none">—</span>'; }
+function pocCap(v) { return v ? `<span class="poc-cap">${escHtml(v)}</span>` : '<span class="cap-none">—</span>'; }
 
 function arPassesRoleFilter(r) {
   const role = USER_ACCESS.role || 'admin-edit';
@@ -5128,12 +5149,8 @@ function renderARCustomerView(rows) {
 
   let body = '';
   custs.forEach(({ name, invs, totalBal, ovdBal, ovdCnt, hasOverdue, bu, collector }, idx) => {
-    const buBadge = bu
-      ? `<span style="font-size:11px;font-weight:600;background:#dde3ff;color:#2b2ab4;padding:.15rem .45rem;border-radius:4px">${escHtml(bu)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const collectorBadge = collector
-      ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(collector)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buBadge = buCap(bu);
+    const collectorBadge = pocCap(collector);
     const entities = [...new Set(invs.map(r => r.entity).filter(Boolean))];
     const entBadges = entities.map(e => e === 'UK'
       ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:.1rem .35rem;border-radius:3px;font-weight:700">UK</span>`
@@ -5286,12 +5303,10 @@ function renderARInvoiceList(rows) {
     const fxBal   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.balance)}</span>` : '';
     const fxTot   = isFx ? `<span class="td-fx">${r.currency_code} ${f(r.total)}</span>`   : '';
     const bu = arGetBu(r.customer_name);
-    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = buCap(bu);
     const unmappedBadge = !arIsMapped(r.customer_name) ? '<span class="cm-unmapped">UNMAPPED</span>' : '';
     const collectorName = arGetCollector(r.customer_name);
-    const collectorCell = collectorName
-      ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(collectorName)}</span>`
-      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const collectorCell = pocCap(collectorName);
     const invKey = `${r.invoice_number}||${r.entity}`;
     const tagCapsules = (_arInvTags[invKey] || []).map(t => {
       const tm = _tagMaster[t] || {};
@@ -7356,24 +7371,65 @@ let _cdBank = {};         // 'YYYY-MM' → { invoice_id: cash received in bank }
 // Cash received in bank for a month, per invoice — from Zoho customer payments
 // via the bank-collections edge function. CN / TDS / JV closures are excluded
 // by construction. Loads lazily per month, then re-renders.
+let _cdBankForce = false;   // set by a manual Refresh — bypasses the server-side cache too
 async function cdLoadBank(month) {
   if (_cdBank[month] !== undefined) return;
   _cdBank[month] = null; // loading marker
+  const fq = _cdBankForce ? '&force=1' : '';
+  _cdBankForce = false;
   try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/bank-collections?month=${month}`, { headers: cmrrHdr() });
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/bank-collections?month=${month}${fq}`, { headers: cmrrHdr() });
     const j = await r.json().catch(() => ({}));
     _cdBank[month] = (r.ok && j.ok) ? (j.data || {}) : {};
   } catch(_) { _cdBank[month] = {}; }
   cdFilterAndRender();
 }
 
-async function cdInit() {
+// Re-entering the tab repaints from memory; the data itself is only refetched
+// once it is older than 15 minutes (or when Refresh is clicked).
+const CD_TTL_MS = 15 * 60 * 1000;
+let _cdLoadedAt = 0;
+let _cdRefreshTimer = null;
+
+async function cdInit(force) {
   if (!_cdInited) {
     _cdInited = true;
     // await the master so BU / POC resolve on the first paint
     try { await loadArCustMaster(); } catch(_) {}
   }
+  cdStartAutoRefresh();
+  if (!force && _cdLoadedAt && Date.now() - _cdLoadedAt < CD_TTL_MS) {
+    cdFilterAndRender();   // fresh enough — no network, no flicker
+    return;
+  }
+  if (force) { _cdBank = {}; _cdBankForce = true; }   // a manual refresh re-pulls bank cash from Zoho too
   await loadConfirmedDates();
+}
+
+// Balance expected against a promise: the balance as at the start of the
+// selected month (an invoice raised inside the month starts at its own total).
+function cdOpeningFor(d) {
+  const monthStart = `${_cdMonth}-01`;
+  if (!d.invoiceId) return Number(d.total || d.balance || 0);
+  if ((d.invoiceDate || '') >= monthStart) return Number(d.total || 0) || Number(d.balance || 0);
+  const snap = (_cdOpening[d.invoiceId] || {})[monthStart];
+  if (snap != null) return Number(snap);
+  return Number(d.lastKnownBalance || d.total || d.balance || 0);
+}
+// A committed amount wins; otherwise the month's opening balance is expected.
+function cdEntryAmt(d, h) { return Number(h.amount || 0) || cdOpeningFor(d); }
+
+// Keeps the open tab current without reloading on every visit.
+function cdStartAutoRefresh() {
+  if (_cdRefreshTimer) return;
+  _cdRefreshTimer = setInterval(() => {
+    const pane = document.getElementById('confirmed-dates');
+    if (!pane || !pane.classList.contains('active')) return;
+    if (document.hidden) return;
+    if (Date.now() - _cdLoadedAt < CD_TTL_MS) return;
+    _cdBank = {};
+    loadConfirmedDates();
+  }, 60 * 1000);
 }
 
 function showConfirmedDatesTab(btn) {
@@ -7591,7 +7647,9 @@ async function loadConfirmedDates() {
 
     // Partly-collected invoices stay open in Zoho with a reduced balance, so
     // they are not "closed" — flag them and remember how much came in.
+    Object.entries(invoicePtpMap).forEach(([k, v]) => { v.key = k; });   // stable row key for timeline lookups
     _cdAllData = Object.values(invoicePtpMap).filter(d => d.ptpHistory.length > 0);
+    _cdLoadedAt = Date.now();
     if (!_cdAllData.length) {
       content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No promise-to-pay dates have been logged yet.</div>';
       return;
@@ -7670,15 +7728,8 @@ function cdFilterAndRender() {
 
   // Rows in this month = invoices with any PTP (past or current) promised in it
   const monthStart = `${_cdMonth}-01`;
-  const openingFor = (d) => {
-    if (!d.invoiceId) return Number(d.total || d.balance || 0);
-    if ((d.invoiceDate || '') >= monthStart) return Number(d.total || 0) || Number(d.balance || 0);
-    const snap = (_cdOpening[d.invoiceId] || {})[monthStart];
-    if (snap != null) return Number(snap);
-    return Number(d.lastKnownBalance || d.total || d.balance || 0);
-  };
-  // A promise amount wins; otherwise the month's opening balance is expected.
-  const entryAmt = (d, h) => Number(h.amount || 0) || openingFor(d);
+  const openingFor = cdOpeningFor;
+  const entryAmt   = cdEntryAmt;
   const rowTotalFor = (d) => {
     const last = d.ptpHistory[d.ptpHistory.length - 1];
     if (!last || !(last.date || '').startsWith(_cdMonth)) return 0;
@@ -7721,7 +7772,11 @@ function cdFilterAndRender() {
     ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
       <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
       <span style="font-size:22px;font-weight:700;color:${s.color};line-height:1">${s.val}</span>
-    </div>`).join('');
+    </div>`).join('')
+    + `<div style="margin-left:auto;align-self:center;text-align:right;font-size:11px;color:var(--txt3);line-height:1.5">
+      <div>Data as of ${_cdLoadedAt ? new Date(_cdLoadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+      <button onclick="cdInit(true)" style="border:1px solid var(--brd2);background:#fff;border-radius:5px;padding:.18rem .6rem;font-size:11px;cursor:pointer;color:var(--txt2)">Refresh</button>
+    </div>`;
   }
 
   const monthRows = filtered.filter(d => d.ptpHistory.some(h => (h.date || '').startsWith(_cdMonth)));
@@ -7746,18 +7801,16 @@ function cdFilterAndRender() {
     }
     return s;
   };
-  const cdMoveChip = (s) => {
-    const moves = s.pushed + s.pulled;
-    if (!moves && !s.amtUp && !s.amtDown) return '';
-    const tip = [
-      `Pushed to a later date: ${s.pushed}`,
-      `Pulled to an earlier date: ${s.pulled}`,
-      `Amount increased: ${s.amtUp}`,
-      `Amount decreased: ${s.amtDown}`,
-    ].join('\n');
-    const label = moves ? `${moves}x` : 'AMT';
-    const bg = s.pushed ? '#f5f3ff' : '#eef7f1', fg = s.pushed ? '#7c3aed' : '#0a6e4c';
-    return ` <span title="${escHtml(tip)}" style="font-family:var(--sans);font-size:9px;background:${bg};color:${fg};padding:.05rem .3rem;border-radius:8px;font-weight:700;cursor:help">${label}</span>`;
+  // Opens the PTP timeline for this row. Colour hints at what moved; the numbers
+  // themselves live in the popup rather than in a cryptic chip label.
+  const cdTlChip = (kind, key, s) => {
+    const moves = s.pushed + s.pulled, amtCh = s.amtUp + s.amtDown;
+    const bg = moves ? '#f5f3ff' : (amtCh ? '#eef7f1' : '#f1f5f9');
+    const fg = moves ? '#7c3aed' : (amtCh ? '#0a6e4c' : '#94a3b8');
+    const tip = (moves || amtCh)
+      ? `Pushed later ${s.pushed} · pulled earlier ${s.pulled} · amount raised ${s.amtUp} · cut ${s.amtDown}\nClick for the full PTP timeline`
+      : 'Click for the full PTP timeline';
+    return ` <button data-tlt="${escHtml(kind)}" data-tlk="${escHtml(key)}" onclick="event.stopPropagation();cdOpenTimeline(this.dataset.tlt,this.dataset.tlk)" title="${escHtml(tip)}" style="font-family:var(--sans);font-size:10px;background:${bg};color:${fg};border:none;padding:.1rem .34rem;border-radius:8px;font-weight:700;cursor:pointer;line-height:1.4">⟲</button>`;
   };
   const cellFor = (d, day) => {
     const ds = dstr(day);
@@ -7846,9 +7899,9 @@ function cdFilterAndRender() {
       const colOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
       const bus = [...new Set(ds.map(d => d.bu).filter(Boolean))];
       return `<tr>
-        <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(col)}">${escHtml(col)}</td>
-        <td style="${tdL};color:var(--txt3);${frz(1)}">${custSet.length} cust<span style="font-family:var(--mono);color:${colOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${colOutstanding < 0.5 ? '✓ nil' : fmtFull(colOutstanding)}</span>${cdMoveChip(agg)}</td>
-        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(bus.join(', ') || '—')}</td>
+        <td style="${tdL};${frz(0)}" title="${escHtml(col)}">${pocCap(col === '—' ? '' : col)}</td>
+        <td style="${tdL};color:var(--txt3);${frz(1)}">${custSet.length} cust<span style="font-family:var(--mono);color:${colOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${colOutstanding < 0.5 ? '✓ nil' : fmtFull(colOutstanding)}</span>${cdTlChip('coll', col, agg)}</td>
+        <td style="${tdL};${frz(2)}">${bus.length ? bus.map(buCap).join(' ') : '<span class="cap-none">—</span>'}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${ds.length} inv</td>
         <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
         ${cells}
@@ -7886,9 +7939,9 @@ function cdFilterAndRender() {
       const custOutstanding = ds.reduce((s, d) => s + moneyFor(d).outstanding, 0);
       return `<tr>
         <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(cust)}">${escHtml(cust)}</td>
-        <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv<span style="font-family:var(--mono);color:${custOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${custOutstanding < 0.5 ? '✓ nil' : fmtFull(custOutstanding)}</span>${cdMoveChip(agg)}</td>
-        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(ds[0].bu || '—')}</td>
-        <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(ds[0].collector || '—')}</td>
+        <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv<span style="font-family:var(--mono);color:${custOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${custOutstanding < 0.5 ? '✓ nil' : fmtFull(custOutstanding)}</span>${cdTlChip('cust', cust, agg)}</td>
+        <td style="${tdL};${frz(2)}">${buCap(ds[0].bu)}</td>
+        <td style="${tdL};${frz(3)}">${pocCap(ds[0].collector)}</td>
         <td style="${tdS};font-weight:700;${frz(4, allDone ? '#eefdf3' : '#f8fafc')}${frzEdge};color:${allDone ? '#166534' : 'inherit'}">${rowTot > 0 ? (allDone ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
         ${cells}
       </tr>`;
@@ -7912,14 +7965,14 @@ function cdFilterAndRender() {
           const wk = isWeekend(day) ? ';background:#fafbfd' : '';
           return `<td style="${tdS}${wk}">${c ? badge(c) : ''}</td>`;
         }).join('');
-        const moved = cdMoveChip(cdMoveStats(d));
+        const moved = cdTlChip('inv', d.key || String(d.invoiceId || ''), cdMoveStats(d));
         const money = moneyFor(d);
         const totBg = money.full ? '#eefdf3' : (money.part ? '#eff6ff' : '#f8fafc');
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
           <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Collected — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
-          <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(2)}">${escHtml(d.bu || '—')}</td>
-          <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${escHtml(d.collector || '—')}</td>
+          <td style="${tdL};${frz(2)}">${buCap(d.bu)}</td>
+          <td style="${tdL};${frz(3)}">${pocCap(d.collector)}</td>
           <td style="${tdS};font-weight:700;${frz(4, totBg)}${frzEdge};color:${money.full ? '#166534' : (money.part ? '#1d4ed8' : 'inherit')}">${rowTot > 0 ? (money.full ? '✓ ' : '') + fmtFull(rowTot) : '—'}</td>
           ${cells}
         </tr>`;
@@ -8023,7 +8076,7 @@ function cdFilterAndRender() {
     <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border-radius:3px;vertical-align:-2px"></span> part-paid — cell shows the amount still outstanding &nbsp;·&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border-radius:3px;vertical-align:-2px"></span> <s style="color:#94a3b8">amount</s> promise later moved to another date &nbsp;·&nbsp;
     amounts = committed amount, else invoice balance &nbsp;·&nbsp;
-    <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .3rem;border-radius:8px;font-weight:700;font-size:9px">N×</span> date moved N times — hover for pushed / pulled / amount up / amount down
+    <span style="background:#f5f3ff;color:#7c3aed;padding:.05rem .34rem;border-radius:8px;font-weight:700;font-size:10px">⟲</span> click for the PTP timeline — every date and amount change, and what was standing after each one
   </div>
   <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:.1rem">How the total promised for ${mLbl(_cdMonth)} has moved</div>
   <div style="font-size:11px;color:var(--txt3);margin-bottom:.5rem">One table per month in which that promise can change — each column is a day of that month, showing the total promised for ${mLbl(_cdMonth)} as at the end of that day. Future days are blank.</div>
@@ -8042,6 +8095,126 @@ function cdSetView(v) {
   document.getElementById('cd-vt-customer')?.classList.toggle('active', v === 'customer');
   document.getElementById('cd-vt-collector')?.classList.toggle('active', v === 'collector');
   cdFilterAndRender();
+}
+
+/* ─── PTP TIMELINE POPUP ─────────────────────────────────────────
+   One invoice reads as a straight line of promises. A customer or collector
+   reads as a position: replay every promise in the order it was logged and,
+   after each one, show what the whole group then stood committed to — "2L on
+   the 10th and 5L on the 15th" becoming "1L on the 10th and 8L on the 18th". */
+function cdTlRows(kind, key) {
+  if (kind === 'cust') return _cdAllData.filter(d => (d.customerName || '') === key);
+  if (kind === 'coll') return _cdAllData.filter(d => (d.collector || '—') === key);
+  return _cdAllData.filter(d => (d.key || '') === key || String(d.invoiceId || '') === key);
+}
+
+function cdTlSnaps(rows) {
+  const evs = [];
+  rows.forEach(d => (d.ptpHistory || []).forEach(h => evs.push({ d, h })));
+  evs.sort((a, b) => (a.h.loggedAt || '').localeCompare(b.h.loggedAt || ''));
+  const state = new Map();
+  return evs.map(({ d, h }) => {
+    const before = state.get(d.key) || null;
+    const after = { date: h.date || null, amt: cdEntryAmt(d, h), explicit: h.amount != null && Number(h.amount) > 0 };
+    state.set(d.key, after);
+    const byDate = {};
+    for (const v of state.values()) { if (v.date) byDate[v.date] = (byDate[v.date] || 0) + v.amt; }
+    return { at: h.loggedAt || '', who: h.collectorName || '', d, before, after, byDate };
+  });
+}
+
+function cdTlDay(ds) {
+  if (!ds) return '—';
+  const dt = new Date(ds + 'T00:00:00');
+  return isNaN(dt) ? ds : dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function cdTlAmt(v) { return '₹' + Math.round(Number(v) || 0).toLocaleString('en-IN'); }
+
+function cdOpenTimeline(kind, key) {
+  document.getElementById('cd-tl-modal')?.remove();
+  const rows = cdTlRows(kind, key);
+  const snaps = cdTlSnaps(rows);
+  const agg = kind !== 'inv';
+  const heading = kind === 'inv'
+    ? `${rows[0]?.invoiceNumber || key}`
+    : kind === 'cust' ? key : `${key} · collector`;
+  const sub = kind === 'inv'
+    ? escHtml(rows[0]?.customerName || '')
+    : (() => {
+        const nc = [...new Set(rows.map(r => r.customerName))].length;
+        return `${rows.length} invoice${rows.length === 1 ? '' : 's'}${kind === 'coll' ? ` · ${nc} customer${nc === 1 ? '' : 's'}` : ''}`;
+      })();
+
+  const pos = (byDate, dim) => {
+    const ks = Object.keys(byDate).sort();
+    if (!ks.length) return '<span style="color:var(--txt3);font-size:11.5px">no open promises</span>';
+    const tot = ks.reduce((s, k) => s + byDate[k], 0);
+    const chips = ks.map(k => {
+      const inMonth = k.startsWith(_cdMonth);
+      return `<span style="display:inline-block;font-size:11px;padding:.1rem .4rem;border-radius:5px;margin:0 .25rem .25rem 0;background:${inMonth ? '#fef3c7' : '#f1f5f9'};color:${inMonth ? '#92400e' : '#64748b'};font-weight:600">${cdTlDay(k)} · ${cdTlAmt(byDate[k])}</span>`;
+    }).join('');
+    return `<div style="opacity:${dim ? .65 : 1}">${chips}<span style="font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap">= ${cdTlAmt(tot)}</span></div>`;
+  };
+
+  const items = snaps.map((s, i) => {
+    const when = s.at ? new Date(s.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    let what, tone = '#64748b';
+    if (!s.before) {
+      what = `Promised <strong>${cdTlDay(s.after.date)}</strong> · <strong>${cdTlAmt(s.after.amt)}</strong>`;
+      tone = '#0a6e4c';
+    } else {
+      const bits = [];
+      if ((s.after.date || '') !== (s.before.date || '')) {
+        const later = (s.after.date || '') > (s.before.date || '');
+        tone = later ? '#b45309' : '#0a6e4c';
+        bits.push(`${later ? 'Pushed' : 'Pulled'} ${cdTlDay(s.before.date)} → <strong>${cdTlDay(s.after.date)}</strong>`);
+      }
+      if (Math.abs(s.after.amt - s.before.amt) > 0.5) {
+        const up = s.after.amt > s.before.amt;
+        if (!bits.length) tone = up ? '#0a6e4c' : '#b91c1c';
+        bits.push(`Amount ${up ? 'raised' : 'cut'} ${cdTlAmt(s.before.amt)} → <strong>${cdTlAmt(s.after.amt)}</strong>`);
+      }
+      what = bits.length ? bits.join(' · ') : `Re-confirmed <strong>${cdTlDay(s.after.date)}</strong> · ${cdTlAmt(s.after.amt)}`;
+      if (!bits.length) tone = '#94a3b8';
+    }
+    const invTag = agg ? ` <span style="font-family:var(--mono);font-size:10.5px;color:var(--txt3)">· ${escHtml(s.d.invoiceNumber || s.d.invoiceId || '—')}</span>` : '';
+    const noAmt = !s.after.explicit ? ' <span style="font-size:10px;color:var(--txt3)">(full balance)</span>' : '';
+    return `<div style="display:flex;gap:.6rem;padding:.55rem .2rem;border-bottom:1px dashed var(--brd)">
+      <div style="flex:0 0 4px;border-radius:2px;background:${tone};margin:.15rem 0"></div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12px;color:var(--ink)">${what}${noAmt}${invTag}</div>
+        <div style="font-size:10.5px;color:var(--txt3);margin-top:.1rem">${when}${s.who ? ' · ' + escHtml(s.who) : ''}</div>
+        ${agg ? `<div style="margin-top:.3rem">${pos(s.byDate, i !== snaps.length - 1)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const current = snaps.length ? snaps[snaps.length - 1].byDate : {};
+  const ov = document.createElement('div');
+  ov.id = 'cd-tl-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:620px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;padding:.9rem 1.1rem .65rem;border-bottom:1px solid var(--brd)">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">PTP timeline — ${escHtml(heading)}</div>
+        <div style="font-size:11.5px;color:var(--txt3);margin-top:.1rem">${sub}</div>
+      </div>
+      <button onclick="document.getElementById('cd-tl-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;color:var(--txt2);flex:0 0 auto">×</button>
+    </div>
+    <div style="padding:.65rem 1.1rem;background:#f8fafc;border-bottom:1px solid var(--brd)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--txt3);margin-bottom:.3rem">Standing now</div>
+      ${pos(current, false)}
+    </div>
+    <div style="overflow-y:auto;padding:.35rem 1.1rem .9rem">
+      ${snaps.length ? items : '<div style="font-size:12px;color:var(--txt3);padding:1rem 0">No PTP history.</div>'}
+    </div>
+    <div style="padding:.5rem 1.1rem .7rem;border-top:1px solid var(--brd);font-size:10.5px;color:var(--txt3)">
+      <span style="display:inline-block;width:10px;height:10px;background:#fef3c7;border-radius:3px;vertical-align:-1px"></span> promised in ${escHtml(_cdMonth || '')} &nbsp;·&nbsp;
+      <span style="display:inline-block;width:10px;height:10px;background:#f1f5f9;border-radius:3px;vertical-align:-1px"></span> promised in another month
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
 }
 
 /* ─── HISTORY COLLECTOR DROPDOWN ────────────────────────────── */
@@ -8205,8 +8378,8 @@ function renderAdvancesEntry() {
   const trs = rows.map((r, i) => {
     const bu = arGetBu(r.customer_name);
     const cl = arGetCollector(r.customer_name);
-    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const clCell = cl ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = buCap(bu);
+    const clCell = pocCap(cl);
     return `<tr>
       <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px;min-width:32px">${i + 1}</td>
       <td style="${tdS};text-align:left;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.customer_name || '')}">${escHtml(r.customer_name || '—')}</td>
@@ -8286,8 +8459,8 @@ function renderAdvancesCustomer() {
     const invCount = arInvCount[name] || 0;
     const bu = arGetBu(name);
     const cl = arGetCollector(name);
-    const buCell = bu ? `<span style="font-size:10.5px;font-weight:600;background:#eef1ff;color:#3b3aa8;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(bu)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
-    const clCell = cl ? `<span style="font-size:10.5px;font-weight:600;background:#e7f7ef;color:#0a6e4c;padding:.12rem .4rem;border-radius:4px;white-space:nowrap">${escHtml(cl)}</span>` : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const buCell = buCap(bu);
+    const clCell = pocCap(cl);
     return `<tr>
       <td style="${tdS};text-align:center;color:var(--ink-faint);font-size:11px;min-width:32px">${i + 1}</td>
       <td style="${tdS};text-align:left;font-weight:600;color:var(--navy2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(name)}">${escHtml(name)}</td>
@@ -8900,7 +9073,7 @@ async function ccLoadFollowUps() {
             </div>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;color:var(--ink)">${escHtml(i.customer_name||'')}</div>
-              <div style="margin-top:.2rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${opill}${collector?`<span style="font-size:11px;color:var(--txt3)">${escHtml(collector)}</span>`:''}</div>
+              <div style="margin-top:.2rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${opill}${buCap(arGetBu(i.customer_name||''))}${collector?pocCap(collector):''}</div>
               ${i.note?`<div style="font-size:12px;color:var(--txt2);margin-top:.2rem;font-style:italic">${escHtml(i.note)}</div>`:''}
               <div style="font-size:11px;color:var(--txt3);margin-top:.2rem">Logged: ${loggedDate}</div>
             </div>
