@@ -629,6 +629,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div class="ar-view-tog" id="ar-view-tog-wrap">
         <button id="ar-vt-invoice"  class="ar-vtbtn active" onclick="arSetInvView('invoice')">Invoice View</button>
         <button id="ar-vt-customer" class="ar-vtbtn"        onclick="arSetInvView('customer')">Customer View</button>
+        <button class="rbtn" onclick="arExportOpenAR()" style="margin-left:.5rem" title="Export the currently filtered Open AR invoices">⬇ Export to Excel</button>
       </div>
     </div>
     <!-- Open Invoices pane (default) -->
@@ -675,6 +676,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </label>
         <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
           <div id="adv-sync-btn-wrap" style="display:flex;gap:.4rem">
+            <button class="rbtn" onclick="advExportXlsx()" style="margin-left:0" title="Export the current view (By Entry / By Customer)">⬇ Export to Excel</button>
             <button onclick="syncAdvances()" id="adv-sync-btn" style="font-size:12px;padding:.32rem .9rem;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Advances</button>
           </div>
           <div id="adv-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
@@ -684,7 +686,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
     <!-- AR Aging pane -->
     <div id="ar-pane-aging" style="display:none">
-      <div id="ar-aging-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.85rem;align-items:center;min-height:28px"></div>
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem">
+        <div id="ar-aging-bu-row" style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;min-height:28px;flex:1"></div>
+        <button class="rbtn" onclick="arExportAging()" style="margin-left:0" title="Export the aging bucket breakdown">⬇ Export to Excel</button>
+      </div>
       <div class="twrap" style="margin-bottom:1rem;max-width:660px">
         <table style="width:100%;min-width:420px;border-collapse:collapse">
           <thead><tr style="background:#f5f7fb">
@@ -771,7 +776,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </label>
       </div>
       <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:.2rem">
-        <button onclick="syncBalances()" id="arreco-balances-btn" style="font-size:12px;padding:.32rem .9rem;background:#0891b2;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Balances</button>
+        <div style="display:flex;gap:.4rem">
+          <button class="rbtn" onclick="arRecoExportXlsx()" style="margin-left:0" title="Export the reconciliation table">⬇ Export to Excel</button>
+          <button onclick="syncBalances()" id="arreco-balances-btn" style="font-size:12px;padding:.32rem .9rem;background:#0891b2;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">🔄 Sync Balances</button>
+        </div>
         <div id="arreco-sync-info" style="font-size:11px;color:var(--txt3);min-height:14px;text-align:right"></div>
       </div>
     </div>
@@ -2376,6 +2384,91 @@ function downloadCustMaster() {
   XLSX.utils.book_append_sheet(wb, ws, 'Customer Master');
   XLSX.writeFile(wb, 'customer_master.xlsx');
 }
+
+/* ─── SHARED XLSX EXPORT HELPERS ─────────────────────────────
+   Two strategies: (1) json_to_sheet from a clean array of plain objects —
+   used where we already hold structured row data (Open AR, AR Aging), giving
+   pristine numeric columns; (2) a DOM-table capture — used for views whose
+   layout is easiest to mirror exactly as rendered (Advances, AR Reco,
+   Confirmed Dates). The table capture strips buttons/selects (so ✎/⟲ edit
+   controls and dropdowns don't leak into cells) and turns currency-formatted
+   text back into real numbers so the sheet can be summed/pivoted in Excel. */
+function xlsxBook(sheets) { // sheets: [{ name, ws }]
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+  for (const { name, ws } of sheets) {
+    let n = (name || 'Sheet').replace(/[:/\\?*\[\]]/g, ' ').trim().slice(0, 31) || 'Sheet';
+    let uniq = n, i = 2;
+    while (used.has(uniq)) { uniq = (n.slice(0, 28) + ' ' + i).slice(0, 31); i++; }
+    used.add(uniq);
+    XLSX.utils.book_append_sheet(wb, ws, uniq);
+  }
+  return wb;
+}
+
+function xlsxSheetFromRows(rows, colWidths) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  if (colWidths) ws['!cols'] = colWidths.map(w => ({ wch: w }));
+  return ws;
+}
+
+// Cell text like "₹11,60,000" or "12.5%" becomes a real number/percent so
+// Excel can sum it directly; anything else (badges, names) stays text.
+function xlsxNumifySheet(ws) {
+  if (!ws || !ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (!cell || cell.t !== 's') continue;
+      const cleaned = String(cell.v).trim().replace(/^✓\s*/, '').replace(/[₹,]/g, '').trim();
+      if (!cleaned) continue;
+      const isPct = cleaned.endsWith('%');
+      const numStr = isPct ? cleaned.slice(0, -1) : cleaned;
+      if (/^-?\d+(\.\d+)?$/.test(numStr)) {
+        cell.t = 'n';
+        cell.v = isPct ? parseFloat(numStr) / 100 : parseFloat(numStr);
+        if (isPct) cell.z = '0.0%';
+        delete cell.w;
+      }
+    }
+  }
+}
+
+function xlsxAutoWidth(ws, maxWch = 40) {
+  if (!ws || !ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const widths = [];
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    let max = 8;
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell && cell.v != null) max = Math.max(max, String(cell.v).length + 2);
+    }
+    widths.push({ wch: Math.min(max, maxWch) });
+  }
+  ws['!cols'] = widths;
+}
+
+// Captures a rendered table exactly as shown (current filters/sort/search
+// already applied), minus interactive controls, as one worksheet.
+function xlsxSheetFromTable(table) {
+  if (!table) return null;
+  const clone = table.cloneNode(true);
+  clone.querySelectorAll('button').forEach(b => b.remove());
+  clone.querySelectorAll('select').forEach(sel => {
+    const span = document.createElement('span');
+    span.textContent = sel.options[sel.selectedIndex]?.text || '';
+    sel.replaceWith(span);
+  });
+  clone.querySelectorAll('th').forEach(th => { th.textContent = th.textContent.replace(/\s*[⇅▲▼]\s*$/, '').trim(); });
+  const ws = XLSX.utils.table_to_sheet(clone, { raw: true });
+  xlsxNumifySheet(ws);
+  xlsxAutoWidth(ws);
+  return ws;
+}
+
+function xlsxNoDataAlert() { alert('Nothing to export yet — check your filters or wait for the data to finish loading.'); }
 
 function updateCmStats() {
   const el = document.getElementById('cm-stats');
@@ -4671,6 +4764,41 @@ function renderARAgingBar(rows) {
   wrap.innerHTML = `<div class="ar-aging-bar">${segs}</div><div class="ar-aging-legend">${legend}</div>`;
 }
 
+// Same bucket math as renderARAgingTable, exported as clean rows (no % text,
+// no Cr rounding) so the totals foot exactly to what the on-screen table shows.
+function arExportAging() {
+  const rows = _arLastRows || [];
+  if (!rows.length) { xlsxNoDataAlert(); return; }
+  const inr = r => arInr(r);
+  const activeBuckets = arGetActiveBuckets();
+  const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, { count: 0, balance: 0 }]));
+  rows.forEach(r => { const bk = arAgeBucket(r.due_date); if (buckets[bk]) { buckets[bk].count++; buckets[bk].balance += inr(r); } });
+  const total = rows.reduce((s, r) => s + inr(r), 0);
+  let cumBal = 0;
+  const out = activeBuckets.map(b => {
+    const { count, balance } = buckets[b.key] || { count: 0, balance: 0 };
+    cumBal += balance;
+    return {
+      Bucket: b.label,
+      '# Invoices': count,
+      'Outstanding Balance': Math.round(balance * 100) / 100,
+      '% of Total': total > 0 ? Math.round((balance / total) * 1000) / 1000 : 0,
+      'Cumulative %': total > 0 ? Math.round((cumBal / total) * 1000) / 1000 : 0,
+    };
+  });
+  out.push({ Bucket: 'Total', '# Invoices': rows.length, 'Outstanding Balance': Math.round(total * 100) / 100, '% of Total': 1, 'Cumulative %': 1 });
+  const ws = xlsxSheetFromRows(out, [26, 12, 20, 12, 14]);
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = 1; R <= range.e.r; R++) {
+    for (const C of [3, 4]) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell) cell.z = '0.0%';
+    }
+  }
+  const wb = xlsxBook([{ name: 'AR Aging', ws }]);
+  XLSX.writeFile(wb, `ar_aging_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function renderARAgingTable(rows) {
   const inr = r => arInr(r);
   const activeBuckets = arGetActiveBuckets();
@@ -5246,6 +5374,45 @@ function renderARCustomerView(rows) {
     </thead>
     <tbody>${body}</tbody>
   </table>`;
+}
+
+// Exports the currently filtered Open AR invoices (independent of the
+// Invoice/Customer view toggle — always one row per invoice) as clean,
+// summable columns rather than a DOM capture, since the Customer View's
+// expandable rows don't map cleanly onto a flat sheet.
+function arExportOpenAR() {
+  const rows = _arLastRows || [];
+  if (!rows.length) { xlsxNoDataAlert(); return; }
+  const sorted = [...rows].sort((a, b) => arOverdueDays(b.due_date) - arOverdueDays(a.due_date));
+  const out = sorted.map(r => {
+    const ptp = _arPtpMap[r.invoice_id] || {};
+    const bal = arInr(r);
+    const gross = (Number(ptp.promised_amount) || 0) || bal;
+    const tdsAmt = ptp.ptp_date ? ptpTdsAmt(gross, ptp.tds_pct) : 0;
+    return {
+      Customer: r.customer_name || '',
+      BU: arGetBu(r.customer_name) || '',
+      Collector: arGetCollector(r.customer_name) || '',
+      Entity: r.entity || '',
+      'Invoice #': r.invoice_number || '',
+      'Invoice Date': r.invoice_date || '',
+      'Due Date': r.due_date || '',
+      'Days Overdue': arOverdueDays(r.due_date),
+      Status: r.status || '',
+      'Revenue Type': r.revenue_type || '',
+      Currency: r.currency_code || 'INR',
+      Total: arTotal(r),
+      Balance: bal,
+      'PTP Date': ptp.ptp_date || '',
+      'PTP Committed Amount': ptp.promised_amount != null ? Number(ptp.promised_amount) : '',
+      'TDS %': ptp.tds_pct != null ? Number(ptp.tds_pct) : '',
+      'TDS Amount': tdsAmt || '',
+      'Expected in Bank': ptp.ptp_date ? Math.round((gross - tdsAmt) * 100) / 100 : '',
+    };
+  });
+  const ws = xlsxSheetFromRows(out, [26, 14, 14, 8, 16, 12, 12, 11, 12, 12, 9, 13, 13, 12, 16, 8, 12, 14]);
+  const wb = xlsxBook([{ name: 'Open AR', ws }]);
+  XLSX.writeFile(wb, `open_ar_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function renderARInvoiceList(rows) {
@@ -7833,7 +8000,10 @@ function cdFilterAndRender() {
     </div>`).join('')
     + `<div style="margin-left:auto;align-self:center;text-align:right;font-size:11px;color:var(--txt3);line-height:1.5">
       <div>Data as of ${_cdLoadedAt ? new Date(_cdLoadedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
-      <button onclick="cdInit(true)" style="border:1px solid var(--brd2);background:#fff;border-radius:5px;padding:.18rem .6rem;font-size:11px;cursor:pointer;color:var(--txt2)">Refresh</button>
+      <div style="display:flex;gap:.4rem;margin-top:.15rem">
+        <button onclick="cdExportXlsx()" style="border:1px solid var(--brd2);background:#fff;border-radius:5px;padding:.18rem .6rem;font-size:11px;cursor:pointer;color:var(--txt2)">⬇ Export</button>
+        <button onclick="cdInit(true)" style="border:1px solid var(--brd2);background:#fff;border-radius:5px;padding:.18rem .6rem;font-size:11px;cursor:pointer;color:var(--txt2)">Refresh</button>
+      </div>
     </div>`;
   }
 
@@ -8203,6 +8373,27 @@ function cdFilterAndRender() {
   ${movementHtml}`;
 }
 
+// Every table currently rendered in the pane — the PTP grid, the "collected
+// without a PTP" table (if any), and each month's movement table — becomes its
+// own sheet, named from its own heading so the workbook reads the same as the
+// screen. Sheet 1 is always the grid so opening the file lands on the right view.
+function cdExportXlsx() {
+  const content = document.getElementById('cd-content');
+  const tables = content ? [...content.querySelectorAll('table')] : [];
+  if (!tables.length) { xlsxNoDataAlert(); return; }
+  const sheets = tables.map((tbl, i) => {
+    const ws = xlsxSheetFromTable(tbl);
+    let name = i === 0 ? `PTP Grid (${_cdMonth || ''})` : '';
+    if (!name) {
+      const heading = tbl.closest('div')?.previousElementSibling;
+      name = (heading?.textContent || '').trim() || `Sheet ${i + 1}`;
+    }
+    return { name, ws };
+  }).filter(s => s.ws);
+  const wb = xlsxBook(sheets);
+  XLSX.writeFile(wb, `confirmed_dates_${_cdMonth || 'export'}.xlsx`);
+}
+
 function cdToggleTotalSort() {
   _cdSortTotal = _cdSortTotal === 'desc' ? 'asc' : _cdSortTotal === 'asc' ? null : 'desc';
   cdFilterAndRender();
@@ -8463,6 +8654,16 @@ function advSetView(view) {
 function renderAdvances() {
   if (_advView === 'customer') renderAdvancesCustomer();
   else renderAdvancesEntry();
+}
+
+// Captures whichever Customer Advances view (By Entry / By Customer) is
+// currently on screen, respecting the active search + include-excluded filter.
+function advExportXlsx() {
+  const table = document.querySelector('#adv-wrap table');
+  if (!table) { xlsxNoDataAlert(); return; }
+  const ws = xlsxSheetFromTable(table);
+  const wb = xlsxBook([{ name: _advView === 'customer' ? 'Advances by Customer' : 'Advances by Entry', ws }]);
+  XLSX.writeFile(wb, `customer_advances_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function makeSortable(tbl, { skipLastRow = false } = {}) {
@@ -8824,6 +9025,16 @@ function _arRecoEntitySel() {
     showIN: document.getElementById('arreco-entity-in')?.checked !== false,
     showUK: document.getElementById('arreco-entity-uk')?.checked === true,
   };
+}
+
+// Captures the reconciliation table exactly as filtered/shown (entity
+// selection + search), including the AR Ledger/BS control totals in the footer.
+function arRecoExportXlsx() {
+  const table = document.getElementById('adv-recon-tbl');
+  if (!table) { xlsxNoDataAlert(); return; }
+  const ws = xlsxSheetFromTable(table);
+  const wb = xlsxBook([{ name: 'AR Reco', ws }]);
+  XLSX.writeFile(wb, `ar_reco_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 async function renderAdvancesReconcile(force = false) {
