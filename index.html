@@ -1378,6 +1378,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
             <input type="date" id="cc-promised-date" class="cc-input" style="max-width:200px" oninput="ccUpdateFollowUpSuggestion()">
           </div>
           <div class="cc-field">
+            <label class="cc-label">Who gave this date? <span class="cc-req">*</span></label>
+            <div style="display:flex;gap:.5rem;max-width:340px">
+              <button type="button" class="cc-opt-btn cc-sm" data-val="customer" onclick="ccSetPtpGivenBy('customer')" id="cc-gb-customer">Customer gave it</button>
+              <button type="button" class="cc-opt-btn cc-sm" data-val="self"     onclick="ccSetPtpGivenBy('self')"     id="cc-gb-self">My own estimate</button>
+            </div>
+          </div>
+          <div class="cc-field">
             <label class="cc-label">TDS % (optional — deducted on base value before GST)</label>
             <input type="number" id="cc-tds-pct" class="cc-input" placeholder="e.g. 2" min="0" max="30" step="0.01" style="max-width:200px">
           </div>
@@ -1642,6 +1649,14 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button id="cd-vt-invoice"  class="ar-vtbtn active" onclick="cdSetView('invoice')">Invoice View</button>
           <button id="cd-vt-customer" class="ar-vtbtn"        onclick="cdSetView('customer')">Customer View</button>
           <button id="cd-vt-collector" class="ar-vtbtn"       onclick="cdSetView('collector')">Collector View</button>
+        </div>
+      </div>
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">Given By</span>
+        <div class="ar-view-tog" style="margin-left:0">
+          <button id="cd-gb-both"     class="ar-vtbtn active" onclick="cdSetGivenByFilter('both')">Both</button>
+          <button id="cd-gb-customer" class="ar-vtbtn"        onclick="cdSetGivenByFilter('customer')">Customer PTP</button>
+          <button id="cd-gb-self"     class="ar-vtbtn"        onclick="cdSetGivenByFilter('self')">Self PTP</button>
         </div>
       </div>
     </div>
@@ -5534,9 +5549,14 @@ function renderARInvoiceList(rows) {
     const ptpTdsChip = ptpTds > 0
       ? `<span title="${escHtml(`TDS ${ptpRec.tds_pct}% on base (₹${Math.round(ptpGross / 1.18).toLocaleString('en-IN')}) — expect ₹${Math.round(ptpGross - ptpTds).toLocaleString('en-IN')} in bank`)}" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">TDS −₹${Math.round(ptpTds).toLocaleString('en-IN')}</span>`
       : '';
+    const ptpGivenByChip = ptpRec?.ptp_date
+      ? (ptpRec.given_by === 'self'
+        ? `<span title="This is the collector's own estimate — not confirmed by the customer" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#6b21a8;background:#f5f0ff;border:1px solid #e0d0ff;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">SELF</span>`
+        : `<span title="Customer committed to this date" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#0a6e4c;background:#eefdf3;border:1px solid #bbf7d0;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">CUST</span>`)
+      : '';
     const ptpCell = r.invoice_id
       ? `${ptpRec?.ptp_date
-          ? `<span title="${escHtml((ptpRec.promised_amount != null ? '₹' + Number(ptpRec.promised_amount).toLocaleString('en-IN') + ' · ' : '') + 'Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpTdsChip}`
+          ? `<span title="${escHtml((ptpRec.promised_amount != null ? '₹' + Number(ptpRec.promised_amount).toLocaleString('en-IN') + ' · ' : '') + 'Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpGivenByChip}${ptpTdsChip}`
           : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr class="${sevCls}">
@@ -6256,7 +6276,7 @@ function ccMakeState() {
     connected: null, contactId: null, channel: null, outcome: null,
     paymentType: null, fullConfirmed: false, ackReason: null,
     disputeType: null, needsHelp: false, escalationNeeded: false,
-    contacts: [], fuAutoSet: false,
+    contacts: [], fuAutoSet: false, ptpGivenBy: null,
   };
 }
 
@@ -6444,6 +6464,7 @@ function ccResetForm() {
                 'cc-dispute-desc','cc-dispute-amount'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-needs-help').checked = false;
+  document.querySelectorAll('#cc-gb-customer, #cc-gb-self').forEach(b => b.classList.remove('selected'));
   _ccOpenDisputes = {};
   document.getElementById('cc-cust-summary').style.display    = 'none';
   document.getElementById('cc-invoices-wrap').style.display   = 'none';
@@ -6809,6 +6830,8 @@ function ccSetOutcome(val) {
   _ccState.disputeType  = null;
   _ccState.needsHelp    = false;
   _ccState.fuAutoSet    = false;
+  _ccState.ptpGivenBy   = null;
+  document.querySelectorAll('#cc-gb-customer, #cc-gb-self').forEach(b => b.classList.remove('selected'));
   document.getElementById('cc-needs-help').checked = false;
   document.querySelectorAll('#cc-outcome-btns .cc-opt-btn').forEach(b =>
     b.classList.toggle('selected', b.dataset.val === val)
@@ -6825,6 +6848,12 @@ function ccSetOutcome(val) {
     document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
   }
   ccUpdateFollowUpSuggestion();
+}
+
+function ccSetPtpGivenBy(val) {
+  _ccState.ptpGivenBy = val;
+  document.getElementById('cc-gb-customer')?.classList.toggle('selected', val === 'customer');
+  document.getElementById('cc-gb-self')?.classList.toggle('selected', val === 'self');
 }
 
 function ccHideBranches() {
@@ -6976,6 +7005,7 @@ function ccValidate() {
     const pd = document.getElementById('cc-promised-date').value;
     if (!pd) return 'Please enter a promise date.';
     if (pd < new Date().toISOString().slice(0,10)) return 'Promise date must be today or in the future.';
+    if (!s.ptpGivenBy) return 'Please select who gave this date — customer or your own estimate.';
   }
   if (s.outcome === 'payment_acknowledged_no_commitment' && !s.ackReason) return 'Please select an acknowledgement reason.';
   if (s.outcome === 'dispute_raised' && !s.disputeType) return 'Please select a dispute type.';
@@ -7055,7 +7085,7 @@ async function ccSubmit() {
         for (const invId of s.selectedInvIds) {
           const inv = s.invoices.find(i => i.invoice_id === invId);
           const invBal = Number(inv?.balance_inr || inv?.balance || 0);
-          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id, payload.promised_amount, tdsPctVal, invBal); }
+          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id, payload.promised_amount, tdsPctVal, invBal, s.ptpGivenBy); }
           catch(e) { console.warn('PTP update from interaction failed:', e); }
         }
       }
@@ -7461,7 +7491,7 @@ let _arPtpMap = {}; // invoice_id → { ptp_date, set_by, source, updated_at }
 
 async function loadInvoicePtp() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?select=invoice_id,ptp_date,promised_amount,tds_pct,tds_amount,set_by,source,updated_at`, { headers: cmrrHdr() });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?select=invoice_id,ptp_date,promised_amount,tds_pct,tds_amount,given_by,set_by,source,updated_at`, { headers: cmrrHdr() });
     if (!r.ok) return;
     _arPtpMap = {};
     (await r.json()).forEach(p => { _arPtpMap[p.invoice_id] = p; });
@@ -7477,21 +7507,23 @@ function ptpTdsAmt(gross, pct) {
 
 // Single write path for PTP changes — updates the current value AND records
 // the movement in ptp_events so PTP slippage is trackable across the org.
-async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, source, interactionId, amount, tdsPct, grossForTds) {
+async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, source, interactionId, amount, tdsPct, grossForTds, givenBy) {
   const prev = _arPtpMap[invoiceId] || {};
   const oldDate = prev.ptp_date || null;
   const newAmt = (amount !== undefined && amount !== null && amount !== '' && !isNaN(parseFloat(amount))) ? parseFloat(amount) : null;
   const oldAmt = prev.promised_amount != null ? Number(prev.promised_amount) : null;
   const newTds = (newDate && tdsPct !== undefined && tdsPct !== null && tdsPct !== '' && !isNaN(parseFloat(tdsPct)) && parseFloat(tdsPct) > 0) ? parseFloat(tdsPct) : null;
   const oldTds = prev.tds_pct != null ? Number(prev.tds_pct) : null;
-  if ((oldDate || null) === (newDate || null) && oldAmt === newAmt && oldTds === newTds) return false;
+  const newGivenBy = newDate ? (givenBy === 'customer' ? 'customer' : 'self') : null;
+  const oldGivenBy = prev.given_by || null;
+  if ((oldDate || null) === (newDate || null) && oldAmt === newAmt && oldTds === newTds && oldGivenBy === newGivenBy) return false;
   const by = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
   const now = new Date().toISOString();
   // Snapshot the implied TDS amount at set time (base = gross ÷ 1.18)
   const tdsAmt = newTds ? ptpTdsAmt(newAmt || grossForTds || 0, newTds) : null;
   const cur = {
     invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
-    ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt,
+    ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt, given_by: newGivenBy,
     source, interaction_id: interactionId || null, set_by: by, updated_at: now,
   };
   const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_ptp?on_conflict=invoice_id`, {
@@ -7505,11 +7537,11 @@ async function setInvoicePtp(invoiceId, invoiceNumber, customerName, newDate, so
     headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({
       invoice_id: invoiceId, invoice_number: invoiceNumber || null, customer_name: customerName || null,
-      old_date: oldDate, new_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt,
+      old_date: oldDate, new_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt, given_by: newGivenBy,
       source, interaction_id: interactionId || null, changed_by: by,
     }),
   });
-  _arPtpMap[invoiceId] = { ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt, set_by: by, source, updated_at: now };
+  _arPtpMap[invoiceId] = { ptp_date: newDate || null, promised_amount: newAmt, tds_pct: newTds, tds_amount: tdsAmt, given_by: newGivenBy, set_by: by, source, updated_at: now };
   return true;
 }
 
@@ -7519,6 +7551,7 @@ function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
   const cur = _arPtpMap[invoiceId]?.ptp_date || '';
   const curAmt = _arPtpMap[invoiceId]?.promised_amount ?? null;
   const curTds = _arPtpMap[invoiceId]?.tds_pct ?? null;
+  const curGivenBy = _arPtpMap[invoiceId]?.given_by || 'customer';
   const balInr = Number(balanceInr || 0) || Number(_arAllRows?.find?.(x => x.invoice_id === invoiceId)?.balance_inr || 0);
   // A promise can never exceed what is still outstanding — on a part-paid
   // invoice the editable amount is capped at the open balance.
@@ -7532,6 +7565,11 @@ function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
     <div style="font-size:12px;color:var(--txt3);margin-bottom:.8rem">${escHtml(invoiceNumber || invoiceId)} · ${escHtml(customerName || '')}</div>
     <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:.2rem">PTP date</label>
     <input type="date" id="ptp-edit-date" value="${escHtml(cur)}" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--sans)">
+    <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .3rem">Who gave this date?</label>
+    <div style="display:flex;gap:.4rem" id="ptp-edit-givenby">
+      <button type="button" data-gb="customer" class="ptp-gb-btn${curGivenBy === 'customer' ? ' active' : ''}" style="flex:1;padding:.4rem .3rem;border:1.5px solid ${curGivenBy === 'customer' ? 'var(--navy)' : 'var(--brd2)'};background:${curGivenBy === 'customer' ? 'var(--navy)' : '#fff'};color:${curGivenBy === 'customer' ? '#fff' : 'var(--ink)'};border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Customer gave it</button>
+      <button type="button" data-gb="self" class="ptp-gb-btn${curGivenBy === 'self' ? ' active' : ''}" style="flex:1;padding:.4rem .3rem;border:1.5px solid ${curGivenBy === 'self' ? 'var(--navy)' : 'var(--brd2)'};background:${curGivenBy === 'self' ? 'var(--navy)' : '#fff'};color:${curGivenBy === 'self' ? '#fff' : 'var(--ink)'};border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">My own estimate</button>
+    </div>
     <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .2rem">Committed amount (₹, optional — blank = full balance${maxAmt != null ? ', max ₹' + Math.round(maxAmt).toLocaleString('en-IN') + ' outstanding' : ''})</label>
     <input type="number" id="ptp-edit-amount" min="0" step="0.01" ${maxAmt != null ? `max="${maxAmt}"` : ''} value="${curAmt != null ? escHtml(String(curAmt)) : (balInr > 0.5 ? Math.round(balInr * 100) / 100 : '')}" placeholder="e.g. 250000" style="width:100%;padding:.45rem .6rem;border:1.5px solid var(--brd2);border-radius:6px;font-size:13px;font-family:var(--mono)">
     <label style="font-size:11px;color:var(--txt3);display:block;margin:.55rem 0 .2rem">TDS % (optional — deducted on base value, i.e. amount ÷ 1.18)</label>
@@ -7547,6 +7585,18 @@ function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
     </div>
   </div>`;
   document.body.appendChild(ov);
+  let givenBy = curGivenBy;
+  ov.querySelectorAll('.ptp-gb-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      givenBy = btn.dataset.gb;
+      ov.querySelectorAll('.ptp-gb-btn').forEach(b => {
+        const on = b.dataset.gb === givenBy;
+        b.style.background = on ? 'var(--navy)' : '#fff';
+        b.style.color = on ? '#fff' : 'var(--ink)';
+        b.style.borderColor = on ? 'var(--navy)' : 'var(--brd2)';
+      });
+    });
+  });
   // Live TDS preview: what will be withheld and what to expect in bank
   const tdsPreview = () => {
     const note = document.getElementById('ptp-edit-tds-note');
@@ -7569,7 +7619,7 @@ function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
       return;
     }
     try {
-      const changed = await setInvoicePtp(invoiceId, invoiceNumber, customerName, dateVal, 'manual', null, amtVal, tdsVal, balInr);
+      const changed = await setInvoicePtp(invoiceId, invoiceNumber, customerName, dateVal, 'manual', null, amtVal, tdsVal, balInr, dateVal ? givenBy : null);
       ov.remove();
       if (changed) { if (opts.onSaved) opts.onSaved(); else renderAR(); }
     } catch(e) { if (err) err.textContent = 'Save failed: ' + e.message; }
@@ -7592,8 +7642,9 @@ function renderPtpEventItem(e) {
   const dt = new Date(e.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const amt = e.promised_amount != null && Number(e.promised_amount) > 0 ? ` <span style="color:#16a34a;font-weight:600;font-family:var(--mono)">₹${f(Number(e.promised_amount))}</span>` : '';
   const tds = e.tds_pct != null && Number(e.tds_pct) > 0 ? ` <span style="color:#b45309;font-size:11px">· TDS ${e.tds_pct}%${e.tds_amount ? ' ≈ ₹' + f(Number(e.tds_amount)) : ''}</span>` : '';
+  const gb = e.given_by ? ` <span style="font-size:10px;font-weight:700;color:${e.given_by === 'self' ? '#6b21a8' : '#0a6e4c'}">· ${e.given_by === 'self' ? 'SELF' : 'CUST'}</span>` : '';
   const label = e.new_date
-    ? `PTP date changed to <strong>${escHtml(e.new_date)}</strong>${amt}${tds}${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`
+    ? `PTP date changed to <strong>${escHtml(e.new_date)}</strong>${amt}${tds}${gb}${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`
     : `PTP date removed${e.old_date ? ` <span style="color:var(--txt3)">(was ${escHtml(e.old_date)})</span>` : ''}`;
   return `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .2rem;border-bottom:1px dashed var(--brd)">
     <span style="font-size:13px;line-height:1.3">🗓</span>
@@ -7611,6 +7662,7 @@ let _cdMonth = null;      // 'YYYY-MM' — selected month tab
 let _cdView  = 'invoice'; // 'invoice' | 'customer'
 let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month start }
 let _cdSortTotal = null;  // null = by name, else 'desc' | 'asc' on the Total column
+let _cdGivenBy = 'both';  // 'both' | 'customer' | 'self' — filters on the CURRENT (latest) PTP's given_by
 let _cdBank = {};         // 'YYYY-MM' → { invoice_id: cash received in bank } | null while loading
 let _cdInvInfo = {};      // invoice_id → invoice info (open invoices + snapshot recoveries)
 
@@ -7791,6 +7843,7 @@ async function loadConfirmedDates() {
             date: interaction.promised_date,
             amount: interaction.promised_amount,
             tdsPct: null,
+            givenBy: 'customer',
             loggedAt: interaction.created_at,
             collectorName: collName,
             interactionId: interaction.id
@@ -7829,6 +7882,7 @@ async function loadConfirmedDates() {
             date: ev.new_date,
             amount: ev.promised_amount != null ? Number(ev.promised_amount) : null,
             tdsPct: ev.tds_pct != null ? Number(ev.tds_pct) : null,
+            givenBy: ev.given_by || 'customer',
             loggedAt: ev.created_at,
             collectorName: (ev.changed_by || '') + (ev.source === 'manual' ? ' (direct)' : ''),
             interactionId: ev.interaction_id || null
@@ -7939,6 +7993,10 @@ function cdFilterAndRender() {
   const filtered = _cdAllData.filter(d => {
     if (buF && d.bu !== buF) return false;
     const lastPtp = d.ptpHistory[d.ptpHistory.length - 1]?.date || '';
+    if (_cdGivenBy !== 'both') {
+      const givenBy = d.ptpHistory[d.ptpHistory.length - 1]?.givenBy || 'customer';
+      if (givenBy !== _cdGivenBy) return false;
+    }
     if (statF) {
       const isPaid = !!d.closed;
       if (statF === 'kept' && !isPaid) return false;
@@ -8230,9 +8288,12 @@ function cdFilterAndRender() {
         }).join('');
         const moved = cdTlChip('inv', d.key || String(d.invoiceId || ''), cdMoveStats(d));
         const money = moneyFor(d);
+        const gb = d.ptpHistory[d.ptpHistory.length - 1]?.givenBy || 'customer';
+        const gbTip = gb === 'self' ? 'Collector’s own estimate — not confirmed by the customer' : 'Customer committed to this date';
+        const gbChip = ` <span title="${escHtml(gbTip)}" style="font-size:9px;font-weight:700;color:${gb === 'self' ? '#6b21a8' : '#0a6e4c'};background:${gb === 'self' ? '#f5f0ff' : '#eefdf3'};border:1px solid ${gb === 'self' ? '#e0d0ff' : '#bbf7d0'};border-radius:4px;padding:.03rem .28rem;white-space:nowrap">${gb === 'self' ? 'SELF' : 'CUST'}</span>`;
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${gbChip}${moved}</td>
           <td style="${tdL};${frz(2)}">${buCap(d.bu)}</td>
           <td style="${tdL};${frz(3)}">${pocCap(d.collector)}</td>
           <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
@@ -8431,6 +8492,14 @@ function cdSetView(v) {
   document.getElementById('cd-vt-invoice')?.classList.toggle('active', v === 'invoice');
   document.getElementById('cd-vt-customer')?.classList.toggle('active', v === 'customer');
   document.getElementById('cd-vt-collector')?.classList.toggle('active', v === 'collector');
+  cdFilterAndRender();
+}
+
+function cdSetGivenByFilter(v) {
+  _cdGivenBy = v;
+  document.getElementById('cd-gb-both')?.classList.toggle('active', v === 'both');
+  document.getElementById('cd-gb-customer')?.classList.toggle('active', v === 'customer');
+  document.getElementById('cd-gb-self')?.classList.toggle('active', v === 'self');
   cdFilterAndRender();
 }
 
