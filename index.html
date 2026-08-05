@@ -1868,8 +1868,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <input type="text" id="esc-modal-team" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance">
       </div>
       <div>
-        <label class="cc-label">Customer <span style="color:var(--txt3);font-weight:400">(optional — leave blank to apply to all customers)</span></label>
-        <select id="esc-modal-customer" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
+        <label class="cc-label">Customers <span style="color:var(--txt3);font-weight:400">(optional — leave empty to apply to all customers)</span></label>
+        <div style="display:flex;gap:.4rem;margin-top:.25rem">
+          <select id="esc-modal-customer-add" class="nret-sel" style="flex:1;font-size:12.5px"></select>
+          <button type="button" onclick="escModalAddCustomer()" style="font-size:12px;padding:.3rem .7rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Map</button>
+        </div>
+        <div id="esc-modal-customer-chips" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem"></div>
       </div>
     </div>
     <div id="esc-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
@@ -8941,20 +8945,28 @@ async function ccPopulateHistCollectorDd() {
 
 /* ─── ESCALATION PERSONS ─────────────────────────────────────── */
 // Shared by "Who needs to act?" and "Who did you speak to internally?" — a
-// person can be pinned to one customer (shown first for that customer) or
-// left customer_name = null to apply everywhere.
+// person can be mapped to any number of customers (shown first for those
+// customers) or left unmapped to apply everywhere.
 let _escPersonsFull = [];
 let _escModalOpts   = {};
 async function loadEscalationPersons() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name,email,team,customer_name&order=name`, { headers: cmrrHdr() });
-    if (r.ok) _escPersonsFull = await r.json();
+    const [pr, mr] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name,email,team&order=name`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/escalation_person_customers?select=id,person_id,customer_name`, { headers: cmrrHdr() }),
+    ]);
+    const people   = pr.ok ? await pr.json() : [];
+    const mappings = mr.ok ? await mr.json() : [];
+    _escPersonsFull = people.map(p => ({
+      ...p,
+      customers: mappings.filter(m => m.person_id === p.id).map(m => ({ mapId: m.id, name: m.customer_name })),
+    }));
   } catch(e) { console.warn('loadEscalationPersons:', e); }
 }
-// People pinned to this customer first, then the customers-agnostic ones.
+// People mapped to this customer first, then the customer-agnostic ones.
 function ccEscPersonsFor(customerName) {
-  const mine   = _escPersonsFull.filter(p => p.customer_name === customerName);
-  const global = _escPersonsFull.filter(p => !p.customer_name);
+  const mine   = _escPersonsFull.filter(p => p.customers.some(c => c.name === customerName));
+  const global = _escPersonsFull.filter(p => p.customers.length === 0);
   return [...mine, ...global];
 }
 function ccRenderEscWhoSelect() {
@@ -9810,46 +9822,78 @@ async function renderEscalationPersonsList() {
     await loadEscalationPersons();
     const rows = _escPersonsFull;
     if (!rows.length) { listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3)">No escalation persons yet.</div>'; return; }
-    listEl.innerHTML = rows.map(p => `<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.45rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
-      <div style="min-width:0">
-        <span style="font-size:13px;color:var(--ink);font-weight:600">${escHtml(p.name)}</span>
-        <span style="font-size:11.5px;color:var(--txt3);margin-left:.5rem">${escHtml(p.email || '—')}</span>
-        ${p.team ? `<span style="font-size:10.5px;font-weight:600;background:#eef1f6;color:#475569;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.team)}</span>` : ''}
-        ${p.customer_name ? `<span style="font-size:10.5px;font-weight:600;background:#eef7f1;color:#0a6e4c;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.customer_name)}</span>` : `<span style="font-size:10.5px;color:var(--txt3);margin-left:.5rem">all customers</span>`}
+    listEl.innerHTML = rows.map(p => `<div style="padding:.5rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+        <div style="min-width:0">
+          <span style="font-size:13px;color:var(--ink);font-weight:600">${escHtml(p.name)}</span>
+          <span style="font-size:11.5px;color:var(--txt3);margin-left:.5rem">${escHtml(p.email || '—')}</span>
+          ${p.team ? `<span style="font-size:10.5px;font-weight:600;background:#eef1f6;color:#475569;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.team)}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:.4rem;flex-shrink:0">
+          <button onclick="openEscModal('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid var(--brd2);border-radius:4px;background:#fff;color:var(--navy2);cursor:pointer">Edit</button>
+          <button onclick="deleteEscalationPerson('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+        </div>
       </div>
-      <div style="display:flex;gap:.4rem;flex-shrink:0">
-        <button onclick="openEscModal('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid var(--brd2);border-radius:4px;background:#fff;color:var(--navy2);cursor:pointer">Edit</button>
-        <button onclick="deleteEscalationPerson('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem">
+        ${p.customers.length
+          ? p.customers.map(c => `<span style="display:inline-flex;align-items:center;gap:.25rem;font-size:10.5px;font-weight:600;background:#eef7f1;color:#0a6e4c;padding:.1rem .3rem .1rem .5rem;border-radius:10px">${escHtml(c.name)}<button onclick="demapEscPersonCustomer('${escHtml(c.mapId)}')" title="Un-map ${escHtml(c.name)} — keeps ${escHtml(p.name)}" style="background:none;border:none;cursor:pointer;color:#0a6e4c;font-weight:700;padding:0 .15rem;line-height:1">×</button></span>`).join('')
+          : '<span style="font-size:10.5px;color:var(--txt3)">mapped to all customers</span>'}
       </div>
     </div>`).join('');
   } catch(e) { listEl.innerHTML = `<div style="color:var(--red);font-size:12px">${escHtml(e.message)}</div>`; }
 }
-// opts.lockCustomer pins (and disables) the Customer field — used when adding
-// a person straight from the Log Interaction screen for a given customer.
+// Removes one customer mapping — the person and any other mappings stay.
+async function demapEscPersonCustomer(mapId) {
+  await fetch(`${SUPABASE_URL}/rest/v1/escalation_person_customers?id=eq.${encodeURIComponent(mapId)}`, {
+    method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
+  });
+  renderEscalationPersonsList();
+}
+// opts.lockCustomer pre-maps (and locks) one customer — used when adding a
+// person straight from the Log Interaction screen for a given customer.
 // opts.onSaved fires with the saved row so the caller can auto-select it.
+let _escModalChips = []; // customer names currently shown as chips, mid-edit
 function openEscModal(id, opts) {
   _escModalOpts = opts || {};
   document.getElementById('esc-modal-title').textContent = id ? 'Edit Person' : 'Add Person';
   document.getElementById('esc-modal-err').textContent = '';
   document.getElementById('esc-modal-ov').dataset.editId = id || '';
   const p = id ? _escPersonsFull.find(x => x.id === id) : null;
-
-  const custSel = document.getElementById('esc-modal-customer');
+  _escModalChips = p ? p.customers.map(c => c.name) : [];
   const lock = _escModalOpts.lockCustomer || '';
-  const customers = lock ? [lock] : [...new Set([
-    ..._escPersonsFull.map(x => x.customer_name),
-    ..._cmData.map(c => c.customer_name)
-  ].filter(Boolean))].sort();
-  custSel.innerHTML = (lock ? '' : '<option value="">— All customers (global) —</option>')
-    + customers.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-  custSel.disabled = !!lock;
-  custSel.style.background = lock ? 'var(--surf2)' : '';
+  if (lock && !_escModalChips.includes(lock)) _escModalChips.push(lock);
 
   document.getElementById('esc-modal-name').value  = p?.name  || '';
   document.getElementById('esc-modal-email').value = p?.email || '';
   document.getElementById('esc-modal-team').value  = p?.team  || '';
-  custSel.value = lock || p?.customer_name || '';
+  escModalRenderCustomerPicker();
   document.getElementById('esc-modal-ov').style.display = 'flex';
+}
+function escModalRenderCustomerPicker() {
+  const addSel = document.getElementById('esc-modal-customer-add');
+  const known = [...new Set([
+    ..._escPersonsFull.flatMap(p => p.customers.map(c => c.name)),
+    ..._cmData.map(c => c.customer_name)
+  ].filter(Boolean))].sort().filter(n => !_escModalChips.includes(n));
+  addSel.innerHTML = '<option value="">— Select customer to map —</option>'
+    + known.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  const lock = _escModalOpts.lockCustomer || '';
+
+  document.getElementById('esc-modal-customer-chips').innerHTML = _escModalChips.map(n => `
+    <span style="display:inline-flex;align-items:center;gap:.25rem;font-size:11px;font-weight:600;background:#eef7f1;color:#0a6e4c;padding:.12rem .35rem .12rem .55rem;border-radius:10px">
+      ${escHtml(n)}${n === lock ? '' : `<button type="button" onclick="escModalRemoveCustomer(${JSON.stringify(n)})" title="Un-map" style="background:none;border:none;cursor:pointer;color:#0a6e4c;font-weight:700;padding:0 .15rem;line-height:1">×</button>`}
+    </span>`).join('') || '<span style="font-size:11px;color:var(--txt3)">No customers mapped — applies to all customers.</span>';
+}
+function escModalAddCustomer() {
+  const sel = document.getElementById('esc-modal-customer-add');
+  const name = sel.value;
+  if (!name || _escModalChips.includes(name)) return;
+  _escModalChips.push(name);
+  escModalRenderCustomerPicker();
+}
+function escModalRemoveCustomer(name) {
+  _escModalChips = _escModalChips.filter(n => n !== name);
+  escModalRenderCustomerPicker();
 }
 function closeEscModal() { document.getElementById('esc-modal-ov').style.display = 'none'; }
 async function saveEscPerson() {
@@ -9857,7 +9901,6 @@ async function saveEscPerson() {
   const name    = document.getElementById('esc-modal-name').value.trim();
   const email   = document.getElementById('esc-modal-email').value.trim();
   const team    = document.getElementById('esc-modal-team').value.trim() || null;
-  const customer_name = document.getElementById('esc-modal-customer').value.trim() || null;
   const errEl   = document.getElementById('esc-modal-err');
   if (!name)  { errEl.textContent = 'Full name is required.'; return; }
   if (!email) { errEl.textContent = 'Email ID is required.'; return; }
@@ -9871,7 +9914,7 @@ async function saveEscPerson() {
     const method = editId ? 'PATCH' : 'POST';
     const r = await fetch(url, {
       method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ name, email, team, customer_name }),
+      body: JSON.stringify({ name, email, team }),
     });
     if (!r.ok) {
       const t = await r.text();
@@ -9879,7 +9922,22 @@ async function saveEscPerson() {
       return;
     }
     const [saved] = await r.json();
+    const personId = editId || saved.id;
+    // Diff chips vs what was already mapped, then apply just the delta.
+    const before = editId ? (_escPersonsFull.find(p => p.id === editId)?.customers.map(c => c.name) || []) : [];
+    const toAdd    = _escModalChips.filter(n => !before.includes(n));
+    const toRemove = editId ? (_escPersonsFull.find(p => p.id === editId)?.customers || []).filter(c => !_escModalChips.includes(c.name)) : [];
+    await Promise.all([
+      ...toAdd.map(customer_name => fetch(`${SUPABASE_URL}/rest/v1/escalation_person_customers`, {
+        method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ person_id: personId, customer_name }),
+      })),
+      ...toRemove.map(c => fetch(`${SUPABASE_URL}/rest/v1/escalation_person_customers?id=eq.${encodeURIComponent(c.mapId)}`, {
+        method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
+      })),
+    ]);
     await renderEscalationPersonsList();
+    saved.customers = _escModalChips.map(name => ({ name }));
     const cb = _escModalOpts.onSaved;
     closeEscModal();
     if (typeof cb === 'function') cb(saved);
