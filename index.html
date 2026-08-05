@@ -1191,14 +1191,11 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
     <!-- Escalation Persons (admin only) -->
     <div id="st-pane-escalation" class="st-pane" style="display:none">
-      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:520px">
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem">
-          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Escalation Persons</span>
-          <span style="font-size:12px;color:var(--txt2)">— names that appear in the "Who needs to act?" dropdown</span>
-        </div>
-        <div style="display:flex;gap:.5rem;margin-bottom:.85rem">
-          <input type="text" id="esc-person-new" class="cc-input" style="flex:1;font-size:13px" placeholder="Add name or team…" onkeydown="if(event.key==='Enter')addEscalationPerson()">
-          <button onclick="addEscalationPerson()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:640px">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Escalation Matrix</span>
+          <span style="font-size:12px;color:var(--txt2)">— people who appear in "Who needs to act?" and "Who did you speak to internally?"</span>
+          <button onclick="openEscModal(null)" style="margin-left:auto;font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add Person</button>
         </div>
         <div id="esc-persons-list"></div>
       </div>
@@ -1842,6 +1839,35 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
       <button onclick="closeContactModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="saveContact()" class="modal-csv" id="ctc-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Escalation / Internal-Contact Person Modal ────────────── -->
+<div id="esc-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeEscModal()">
+  <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+      <span id="esc-modal-title" style="font-size:14px;font-weight:600;color:var(--navy)">Add Person</span>
+      <button onclick="closeEscModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1;padding:.1rem .3rem">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.65rem">
+      <div>
+        <label class="cc-label">Full Name <span class="cc-req">*</span></label>
+        <input type="text" id="esc-modal-name" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="Full name">
+      </div>
+      <div>
+        <label class="cc-label">Email ID <span class="cc-req">*</span></label>
+        <input type="email" id="esc-modal-email" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="email@example.com">
+      </div>
+      <div>
+        <label class="cc-label">Team</label>
+        <input type="text" id="esc-modal-team" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance">
+      </div>
+    </div>
+    <div id="esc-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button onclick="closeEscModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="saveEscPerson()" class="modal-csv" id="esc-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
     </div>
   </div>
 </div>
@@ -9741,35 +9767,72 @@ async function abDeleteBracket(id) {
 }
 
 /* ─── ESCALATION PERSONS SETTINGS ───────────────────────────── */
+let _escPersonsFull = [];
 async function renderEscalationPersonsList() {
   const listEl = document.getElementById('esc-persons-list');
   if (!listEl) return;
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name&order=name`, { headers: cmrrHdr() });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name,email,team&order=name`, { headers: cmrrHdr() });
     if (!r.ok) { listEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading list.</div>'; return; }
     const rows = await r.json();
+    _escPersonsFull   = rows;
     _escalationPersons = rows.map(x => x.name);
     if (!rows.length) { listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3)">No escalation persons yet.</div>'; return; }
-    listEl.innerHTML = rows.map(p => `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
-      <span style="font-size:13px;color:var(--ink)">${escHtml(p.name)}</span>
-      <button onclick="deleteEscalationPerson('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+    listEl.innerHTML = rows.map(p => `<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.45rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
+      <div style="min-width:0">
+        <span style="font-size:13px;color:var(--ink);font-weight:600">${escHtml(p.name)}</span>
+        <span style="font-size:11.5px;color:var(--txt3);margin-left:.5rem">${escHtml(p.email || '—')}</span>
+        ${p.team ? `<span style="font-size:10.5px;font-weight:600;background:#eef1f6;color:#475569;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.team)}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:.4rem;flex-shrink:0">
+        <button onclick="openEscModal('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid var(--brd2);border-radius:4px;background:#fff;color:var(--navy2);cursor:pointer">Edit</button>
+        <button onclick="deleteEscalationPerson('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+      </div>
     </div>`).join('');
   } catch(e) { listEl.innerHTML = `<div style="color:var(--red);font-size:12px">${escHtml(e.message)}</div>`; }
 }
-async function addEscalationPerson() {
-  const inp = document.getElementById('esc-person-new');
-  const name = (inp?.value || '').trim();
-  if (!name) return;
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons`, {
-    method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ name }),
-  });
-  if (!r.ok) { alert('Could not add: name may already exist.'); return; }
-  if (inp) inp.value = '';
-  renderEscalationPersonsList();
+function openEscModal(id) {
+  document.getElementById('esc-modal-title').textContent = id ? 'Edit Person' : 'Add Person';
+  document.getElementById('esc-modal-err').textContent = '';
+  document.getElementById('esc-modal-ov').dataset.editId = id || '';
+  const p = id ? _escPersonsFull.find(x => x.id === id) : null;
+  document.getElementById('esc-modal-name').value  = p?.name  || '';
+  document.getElementById('esc-modal-email').value = p?.email || '';
+  document.getElementById('esc-modal-team').value  = p?.team  || '';
+  document.getElementById('esc-modal-ov').style.display = 'flex';
+}
+function closeEscModal() { document.getElementById('esc-modal-ov').style.display = 'none'; }
+async function saveEscPerson() {
+  const editId = document.getElementById('esc-modal-ov').dataset.editId || null;
+  const name    = document.getElementById('esc-modal-name').value.trim();
+  const email   = document.getElementById('esc-modal-email').value.trim();
+  const team    = document.getElementById('esc-modal-team').value.trim() || null;
+  const errEl   = document.getElementById('esc-modal-err');
+  if (!name)  { errEl.textContent = 'Full name is required.'; return; }
+  if (!email) { errEl.textContent = 'Email ID is required.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Enter a valid email address.'; return; }
+  const dupe = _escPersonsFull.find(p => p.id !== editId && (p.email || '').toLowerCase() === email.toLowerCase());
+  if (dupe) { errEl.textContent = `Email already in use by ${dupe.name}.`; return; }
+  const btn = document.getElementById('esc-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const url    = editId ? `${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(editId)}` : `${SUPABASE_URL}/rest/v1/escalation_persons`;
+    const method = editId ? 'PATCH' : 'POST';
+    const r = await fetch(url, {
+      method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ name, email, team }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      errEl.textContent = /duplicate|unique/i.test(t) ? 'This email is already in use.' : 'Could not save person.';
+      return;
+    }
+    closeEscModal();
+    renderEscalationPersonsList();
+  } finally { btn.disabled = false; btn.textContent = 'Save'; }
 }
 async function deleteEscalationPerson(id) {
-  if (!confirm('Remove this person from the escalation list?')) return;
+  if (!confirm('Remove this person from the escalation matrix?')) return;
   await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(id)}`, {
     method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' }
   });
