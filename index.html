@@ -1312,9 +1312,22 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </div>
       </div>
 
-      <!-- Section 3: Connection Status -->
+      <!-- Section 3: Channel -->
+      <div class="cc-section" id="cc-sec-channel" style="display:none">
+        <div class="cc-sec-title">3 · Channel</div>
+        <div class="cc-field">
+          <label class="cc-label">Channel <span class="cc-req">*</span></label>
+          <div class="cc-btn-group" id="cc-channel-btns">
+            <button type="button" class="cc-opt-btn" data-val="call"      onclick="ccSetChannel('call')">Call</button>
+            <button type="button" class="cc-opt-btn" data-val="whatsapp"  onclick="ccSetChannel('whatsapp')">WhatsApp</button>
+            <button type="button" class="cc-opt-btn" data-val="email"     onclick="ccSetChannel('email')">Email</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Connection Status -->
       <div class="cc-section" id="cc-sec2" style="display:none">
-        <div class="cc-sec-title">3 · Connection Status</div>
+        <div class="cc-sec-title">4 · Connection Status</div>
         <div class="cc-btn-group" id="cc-connected-btns">
           <button type="button" class="cc-opt-btn" data-val="yes"          onclick="ccSetConnected('yes')">Yes — Connected</button>
           <button type="button" class="cc-opt-btn" data-val="no_answer"    onclick="ccSetConnected('no_answer')">No Answer</button>
@@ -1342,7 +1355,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 3: Contact Details (connected=yes) -->
       <div id="cc-sec3" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">4 · Contact Details</div>
+          <div class="cc-sec-title">5 · Contact Details</div>
           <div class="cc-field">
             <label class="cc-label">Who did you speak with? <span class="cc-req">*</span></label>
             <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
@@ -1354,21 +1367,13 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
               <div id="cc-contacts-mini-list"></div>
             </div>
           </div>
-          <div class="cc-field">
-            <label class="cc-label">Channel <span class="cc-req">*</span></label>
-            <div class="cc-btn-group" id="cc-channel-btns">
-              <button type="button" class="cc-opt-btn" data-val="call"      onclick="ccSetChannel('call')">Call</button>
-              <button type="button" class="cc-opt-btn" data-val="whatsapp"  onclick="ccSetChannel('whatsapp')">WhatsApp</button>
-              <button type="button" class="cc-opt-btn" data-val="email"     onclick="ccSetChannel('email')">Email</button>
-            </div>
-          </div>
         </div>
       </div>
 
-      <!-- Section 4: Outcome -->
+      <!-- Section 6: Outcome -->
       <div id="cc-sec4" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">5 · Outcome</div>
+          <div class="cc-sec-title">6 · Outcome</div>
           <div class="cc-btn-group" id="cc-outcome-btns">
             <button type="button" class="cc-opt-btn" data-val="payment_committed"                  onclick="ccSetOutcome('payment_committed')">Payment Committed</button>
             <button type="button" class="cc-opt-btn" data-val="payment_acknowledged_no_commitment" onclick="ccSetOutcome('payment_acknowledged_no_commitment')">Payment Acknowledged, No Commitment</button>
@@ -1463,7 +1468,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 5: Escalation -->
       <div id="cc-sec5" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">6 · Escalation</div>
+          <div class="cc-sec-title">7 · Escalation</div>
           <div id="cc-esc-prompt" class="cc-field">
             <label class="cc-label">Does anyone else need to act on this?</label>
             <div class="cc-btn-group" id="cc-esc-btns">
@@ -1490,7 +1495,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 6: Follow-up + Note -->
       <div id="cc-sec6" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">7 · Next Steps</div>
+          <div class="cc-sec-title">8 · Next Steps</div>
           <div class="cc-field">
             <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
             <input type="date" id="cc-fu-date" class="cc-input" style="max-width:200px" oninput="ccFuDateManualEdit()">
@@ -6575,6 +6580,7 @@ function ccResetForm() {
   document.getElementById('cc-invoices-wrap').style.display   = 'none';
   document.getElementById('cc-invoice-list').innerHTML        = '';
   const dp = document.getElementById('cc-disputes-panel'); if (dp) { dp.style.display = 'none'; dp.innerHTML = ''; }
+  document.getElementById('cc-sec-channel').style.display     = 'none';
   document.getElementById('cc-sec2').style.display            = 'none';
   document.getElementById('cc-sec-noconn').style.display      = 'none';
   document.getElementById('cc-sec3').style.display            = 'none';
@@ -8960,6 +8966,7 @@ function ccEscWhoSelect(name) {
 function ccSetIntType(val) {
   const internal = val === 'internal';
   document.getElementById('cc-int-fields').style.display = internal ? '' : 'none';
+  document.getElementById('cc-sec-channel').style.display = internal ? 'none' : '';
   document.getElementById('cc-sec2').style.display = internal ? 'none' : '';
   if (internal) {
     ccPopulateIntWho();
