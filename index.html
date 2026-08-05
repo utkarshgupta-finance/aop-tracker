@@ -1749,6 +1749,43 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
     </div>
   </div>
+
+  <!-- ── Bank Receipts Pane ─────────────────────────────────── -->
+  <div id="bank-receipts" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Bank Receipts</span>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">HDFC 0436 — money received, month by month</div>
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <input type="text" id="br-search" class="cust-input" style="font-size:12px;width:220px" placeholder="Search payee / reference / invoice…" oninput="brRender()">
+        <button onclick="brRefresh()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.7rem">
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">Month</span>
+        <div style="display:flex;gap:.3rem;align-items:center">
+          <button onclick="brShiftMonth(-1)" style="font-size:13px;padding:.2rem .6rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer">‹</button>
+          <span id="br-month-lbl" style="font-size:13px;font-weight:700;min-width:90px;text-align:center"></span>
+          <button id="br-month-next" onclick="brShiftMonth(1)" style="font-size:13px;padding:.2rem .6rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer">›</button>
+        </div>
+      </div>
+      <div class="ar-cap-row">
+        <span class="ar-cap-lbl">Mapped As</span>
+        <div class="ar-view-tog" style="margin-left:0">
+          <button id="br-f-all"         class="ar-vtbtn active" onclick="brSetFilter('all')">All</button>
+          <button id="br-f-collections" class="ar-vtbtn"        onclick="brSetFilter('collections')">Collections</button>
+          <button id="br-f-others"      class="ar-vtbtn"        onclick="brSetFilter('others')">Others</button>
+          <button id="br-f-unmapped"    class="ar-vtbtn"        onclick="brSetFilter('unmapped')">Unmapped</button>
+        </div>
+      </div>
+    </div>
+    <div id="br-summary" style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
+    <div id="br-content">
+      <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>
+    </div>
+  </div>
 </main>
 </div><!-- app-content -->
 </div><!-- app-layout -->
@@ -1918,6 +1955,8 @@ const ALL_TABS_CFG = [
   { id: 'contacts',            label: 'Contacts',            abbr: 'CT',  fn: 'showContactsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'confirmed-dates',     label: 'Confirmed Dates',     abbr: 'CD',  fn: 'showConfirmedDatesTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector'] },
+  { id: 'bank-receipts',       label: 'Bank Receipts',       abbr: 'BR',  fn: 'showBankReceiptsTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     abbr: 'RC',  fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            abbr: 'ST',  fn: 'showSettingsTab(this)',
@@ -7792,6 +7831,171 @@ function cdStartAutoRefresh() {
 function showConfirmedDatesTab(btn) {
   showTab('confirmed-dates', btn);
   cdInit();
+}
+
+/* ─── BANK RECEIPTS (HDFC 0436) ──────────────────────────────── */
+let _brInited = false;
+let _brMonth  = new Date().toISOString().slice(0, 7);
+let _brFilter = 'all';
+let _brData   = {};   // month -> receipts[] (undefined = not requested, null = loading)
+let _brMap    = {};   // transaction_id -> 'collections' | 'others'
+
+function showBankReceiptsTab(btn) {
+  showTab('bank-receipts', btn);
+  if (!_brInited) { _brInited = true; brLoadMap().then(() => brLoad(_brMonth)); }
+  brUpdateMonthUi();
+}
+
+function brMonthLbl(m) { return new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }); }
+
+function brUpdateMonthUi() {
+  const lbl = document.getElementById('br-month-lbl');
+  if (lbl) lbl.textContent = brMonthLbl(_brMonth);
+  const nxt = document.getElementById('br-month-next');
+  if (nxt) nxt.disabled = _brMonth >= new Date().toISOString().slice(0, 7);
+}
+
+function brShiftMonth(dir) {
+  const [y, m] = _brMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + dir, 1);
+  const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  if (next > new Date().toISOString().slice(0, 7)) return;
+  _brMonth = next;
+  brUpdateMonthUi();
+  brLoad(_brMonth);
+}
+
+function brSetFilter(f) {
+  _brFilter = f;
+  ['all', 'collections', 'others', 'unmapped'].forEach(k =>
+    document.getElementById('br-f-' + k)?.classList.toggle('active', k === f));
+  brRender();
+}
+
+async function brLoadMap() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/bank_receipt_map?select=transaction_id,category`, { headers: cmrrHdr() });
+    if (r.ok) for (const row of await r.json()) _brMap[row.transaction_id] = row.category;
+  } catch(e) { console.warn('brLoadMap:', e); }
+}
+
+async function brLoad(month, force) {
+  if (!force && _brData[month] !== undefined) { brRender(); return; }
+  _brData[month] = null;
+  brRender();
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/bank-receipts?month=${month}${force ? '&force=1' : ''}`, { headers: cmrrHdr() });
+    const j = await r.json().catch(() => ({}));
+    _brData[month] = (r.ok && j.ok) ? (j.data?.receipts || []) : [];
+    if (!(r.ok && j.ok)) console.warn('bank-receipts:', j.error || r.status);
+  } catch(e) { _brData[month] = []; console.warn('brLoad:', e); }
+  brRender();
+}
+
+function brRefresh() { brLoadMap().then(() => brLoad(_brMonth, true)); }
+
+async function brSetCat(txnId, cat) {
+  const prev = _brMap[txnId];
+  _brMap[txnId] = cat;
+  brRender();
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/bank_receipt_map`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ transaction_id: txnId, category: cat, mapped_by: CURRENT_USER?.id || null, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+  } catch(e) {
+    if (prev === undefined) delete _brMap[txnId]; else _brMap[txnId] = prev;
+    brRender();
+    alert('Failed to save mapping: ' + e.message);
+  }
+}
+
+function brRender() {
+  const content = document.getElementById('br-content');
+  if (!content) return;
+  const rows = _brData[_brMonth];
+  if (rows === undefined || rows === null) {
+    content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading receipts from Zoho…</div>';
+    return;
+  }
+  const fmt = v => Math.round(v).toLocaleString('en-IN');
+  const sq = (document.getElementById('br-search')?.value || '').toLowerCase().trim();
+
+  const catOf = r => _brMap[r.transaction_id] || (r.transaction_type === 'customer_payment' ? 'collections' : null);
+
+  let filtered = rows.filter(r => {
+    const cat = catOf(r);
+    if (_brFilter === 'collections' && cat !== 'collections') return false;
+    if (_brFilter === 'others'      && cat !== 'others') return false;
+    if (_brFilter === 'unmapped'    && cat !== null) return false;
+    if (sq) {
+      const hay = [r.payee, r.customer_name, r.reference_number, r.description,
+                   ...(r.invoices || []).map(i => i.invoice_number)].join(' ').toLowerCase();
+      if (!hay.includes(sq)) return false;
+    }
+    return true;
+  });
+
+  const collTotal  = rows.filter(r => catOf(r) === 'collections').reduce((s, r) => s + r.amount, 0);
+  const othTotal   = rows.filter(r => catOf(r) === 'others').reduce((s, r) => s + r.amount, 0);
+  const unmapTotal = rows.filter(r => catOf(r) === null).reduce((s, r) => s + r.amount, 0);
+  document.getElementById('br-summary').innerHTML = [
+    { label: 'Receipts',    val: `${rows.length} · ₹${fmt(rows.reduce((s, r) => s + r.amount, 0))}`, color: 'var(--navy)' },
+    { label: 'Collections', val: `₹${fmt(collTotal)}`,  color: '#166534' },
+    { label: 'Others',      val: `₹${fmt(othTotal)}`,   color: '#6b7280' },
+    { label: 'Unmapped',    val: `₹${fmt(unmapTotal)}`, color: '#b45309' },
+  ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:110px">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3)">${s.label}</span>
+    <span style="font-size:14px;font-weight:700;font-family:var(--mono);color:${s.color}">${s.val}</span>
+  </div>`).join('');
+
+  if (!filtered.length) {
+    content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No receipts match.</div>';
+    return;
+  }
+
+  const thL = 'padding:.5rem .6rem;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;text-align:left;white-space:nowrap';
+  const tdL = 'padding:.45rem .6rem;font-size:12px;border-bottom:1px solid #f1f5f9;vertical-align:top';
+
+  content.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px"><table style="border-collapse:separate;border-spacing:0;width:100%;min-width:860px">
+    <thead><tr>
+      <th style="${thL}">Date</th>
+      <th style="${thL}">Payee / Description</th>
+      <th style="${thL}">Reference</th>
+      <th style="${thL};text-align:right">Amount</th>
+      <th style="${thL};text-align:center">Mapped As</th>
+      <th style="${thL}">Invoices (Zoho)</th>
+    </tr></thead>
+    <tbody>${filtered.map(r => {
+      const cat = catOf(r);
+      const isExplicit = !!_brMap[r.transaction_id];
+      const btn = (val, lbl, on) => `<button type="button" data-txn="${escHtml(r.transaction_id)}" data-cat="${val}"
+        onclick="brSetCat(this.dataset.txn, this.dataset.cat)"
+        style="font-size:10.5px;padding:.18rem .55rem;border-radius:12px;cursor:pointer;font-weight:600;border:1px solid ${on ? 'transparent' : 'var(--brd2)'};
+        background:${on ? (val === 'collections' ? '#166534' : '#6b7280') : '#fff'};color:${on ? '#fff' : 'var(--txt2)'}">${lbl}</button>`;
+      const invHtml = (r.invoices || []).length
+        ? r.invoices.map(i => `<div style="white-space:nowrap;font-size:11.5px"><span style="font-family:var(--mono)">${escHtml(i.invoice_number)}</span> <span style="color:#166534;font-family:var(--mono)">₹${fmt(i.amount_applied)}</span>${i.tax_amount_withheld ? ` <span style="color:var(--txt3);font-size:10px">+TDS ₹${fmt(i.tax_amount_withheld)}</span>` : ''}</div>`).join('')
+        : (cat === 'collections' ? '<span style="color:var(--txt3);font-size:11px">—</span>' : '');
+      const desc = r.payee || r.customer_name || r.description || '—';
+      const sub  = (r.payee || r.customer_name) && r.description ? `<div style="font-size:10.5px;color:var(--txt3);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.description)}">${escHtml(r.description)}</div>` : '';
+      const autoTag = (cat === 'collections' && !isExplicit) ? ' <span style="font-size:9px;color:var(--txt3)">(auto)</span>' : '';
+      return `<tr>
+        <td style="${tdL};white-space:nowrap;font-variant-numeric:tabular-nums">${escHtml(r.date)}</td>
+        <td style="${tdL};font-weight:600">${escHtml(desc)}${sub}</td>
+        <td style="${tdL};font-family:var(--mono);font-size:10.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.reference_number)}">${escHtml(r.reference_number || '—')}</td>
+        <td style="${tdL};text-align:right;font-family:var(--mono);font-weight:600;color:#166534;white-space:nowrap">₹${fmt(r.amount)}</td>
+        <td style="${tdL};text-align:center;white-space:nowrap"><div style="display:inline-flex;gap:.3rem">${btn('collections', 'Collections', cat === 'collections')}${btn('others', 'Others', cat === 'others')}</div>${autoTag}</td>
+        <td style="${tdL}">${invHtml}</td>
+      </tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr style="background:#f8fafc">
+      <td colspan="3" style="${tdL};font-weight:700">${filtered.length} receipt${filtered.length === 1 ? '' : 's'}</td>
+      <td style="${tdL};text-align:right;font-family:var(--mono);font-weight:700;color:#166534">₹${fmt(filtered.reduce((s, r) => s + r.amount, 0))}</td>
+      <td colspan="2"></td>
+    </tr></tfoot>
+  </table></div>`;
 }
 
 async function loadConfirmedDates() {
