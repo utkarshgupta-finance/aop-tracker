@@ -1867,7 +1867,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <label class="cc-label">Team</label>
         <input type="text" id="esc-modal-team" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance">
       </div>
-      <div>
+      <div id="esc-modal-customers-field">
         <label class="cc-label">Customers <span style="color:var(--txt3);font-weight:400">(optional — leave empty to apply to all customers)</span></label>
         <div style="display:flex;gap:.4rem;margin-top:.25rem">
           <select id="esc-modal-customer-add" class="nret-sel" style="flex:1;font-size:12.5px"></select>
@@ -8984,6 +8984,7 @@ function ccEscWhoChanged() {
     sel.value = '';
     openEscModal(null, {
       lockCustomer: _ccState.customerName,
+      hideMapping:  true,
       onSaved: (saved) => { ccRenderEscWhoSelect(); sel.value = saved.name; },
     });
   }
@@ -9026,6 +9027,7 @@ function ccIntWhoChanged() {
     sel.value = '';
     openEscModal(null, {
       lockCustomer: _ccState.customerName,
+      hideMapping:  true,
       onSaved: (saved) => { ccPopulateIntWho(); sel.value = saved.name; },
     });
   }
@@ -9852,6 +9854,9 @@ async function demapEscPersonCustomer(mapId) {
 // opts.lockCustomer pre-maps (and locks) one customer — used when adding a
 // person straight from the Log Interaction screen for a given customer.
 // opts.onSaved fires with the saved row so the caller can auto-select it.
+// opts.hideMapping hides the Customers picker entirely — mapping management
+// is a Settings-only concern; Log Interaction still maps the person to
+// opts.lockCustomer behind the scenes, it's just not shown or editable there.
 let _escModalChips = []; // customer names currently shown as chips, mid-edit
 function openEscModal(id, opts) {
   _escModalOpts = opts || {};
@@ -9866,6 +9871,7 @@ function openEscModal(id, opts) {
   document.getElementById('esc-modal-name').value  = p?.name  || '';
   document.getElementById('esc-modal-email').value = p?.email || '';
   document.getElementById('esc-modal-team').value  = p?.team  || '';
+  document.getElementById('esc-modal-customers-field').style.display = _escModalOpts.hideMapping ? 'none' : '';
   escModalRenderCustomerPicker();
   document.getElementById('esc-modal-ov').style.display = 'flex';
 }
@@ -9906,27 +9912,38 @@ async function saveEscPerson() {
   if (!email) { errEl.textContent = 'Email ID is required.'; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Enter a valid email address.'; return; }
   const dupe = _escPersonsFull.find(p => p.id !== editId && (p.email || '').toLowerCase() === email.toLowerCase());
-  if (dupe) { errEl.textContent = `Email already in use by ${dupe.name}.`; return; }
+  // From Log Interaction, "adding" someone who already exists (by email) just
+  // maps that existing person to this customer instead of blocking — Settings
+  // still refuses to create a genuine duplicate person.
+  const mergeIntoDupe = dupe && !editId && _escModalOpts.hideMapping;
+  if (dupe && !mergeIntoDupe) { errEl.textContent = `Email already in use by ${dupe.name}.`; return; }
   const btn = document.getElementById('esc-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    const url    = editId ? `${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(editId)}` : `${SUPABASE_URL}/rest/v1/escalation_persons`;
-    const method = editId ? 'PATCH' : 'POST';
-    const r = await fetch(url, {
-      method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ name, email, team }),
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      errEl.textContent = /duplicate|unique/i.test(t) ? 'This email is already in use.' : 'Could not save person.';
-      return;
+    let saved, personId, before;
+    if (mergeIntoDupe) {
+      saved    = dupe;
+      personId = dupe.id;
+      before   = dupe.customers.map(c => c.name);
+    } else {
+      const url    = editId ? `${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(editId)}` : `${SUPABASE_URL}/rest/v1/escalation_persons`;
+      const method = editId ? 'PATCH' : 'POST';
+      const r = await fetch(url, {
+        method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ name, email, team }),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        errEl.textContent = /duplicate|unique/i.test(t) ? 'This email is already in use.' : 'Could not save person.';
+        return;
+      }
+      [saved]  = await r.json();
+      personId = editId || saved.id;
+      // Diff chips vs what was already mapped, then apply just the delta.
+      before = editId ? (_escPersonsFull.find(p => p.id === editId)?.customers.map(c => c.name) || []) : [];
     }
-    const [saved] = await r.json();
-    const personId = editId || saved.id;
-    // Diff chips vs what was already mapped, then apply just the delta.
-    const before = editId ? (_escPersonsFull.find(p => p.id === editId)?.customers.map(c => c.name) || []) : [];
     const toAdd    = _escModalChips.filter(n => !before.includes(n));
-    const toRemove = editId ? (_escPersonsFull.find(p => p.id === editId)?.customers || []).filter(c => !_escModalChips.includes(c.name)) : [];
+    const toRemove = mergeIntoDupe ? [] : (editId ? (_escPersonsFull.find(p => p.id === editId)?.customers || []).filter(c => !_escModalChips.includes(c.name)) : []);
     await Promise.all([
       ...toAdd.map(customer_name => fetch(`${SUPABASE_URL}/rest/v1/escalation_person_customers`, {
         method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
