@@ -1265,36 +1265,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
     <!-- ── LOG INTERACTION ──────────────────────────────── -->
     <div id="cc-pane-log">
-      <div class="ar-view-tog" style="margin:0 0 .9rem">
-        <button type="button" id="cc-mode-customer" class="ar-vtbtn active" onclick="ccSetMode('customer')">Customer</button>
-        <button type="button" id="cc-mode-internal" class="ar-vtbtn"        onclick="ccSetMode('internal')">Internal</button>
-      </div>
-
-      <!-- Internal mode: log a chat with a colleague, not a customer -->
-      <div id="cc-pane-internal" style="display:none">
-        <div class="cc-section">
-          <div class="cc-sec-title">Internal Discussion</div>
-          <div class="cc-field">
-            <label class="cc-label">Who did you speak to? <span class="cc-req">*</span></label>
-            <div class="cc-cust-wrap" style="max-width:320px">
-              <input type="text" id="cc-int-who" class="cc-input" style="width:100%;box-sizing:border-box" placeholder="Type to search…" oninput="ccIntWhoFilter()" onfocus="ccIntWhoFilter()" autocomplete="off">
-              <div id="cc-int-who-dd" class="cc-cust-dd" style="display:none"></div>
-            </div>
-          </div>
-          <div class="cc-field">
-            <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
-            <input type="date" id="cc-int-fu-date" class="cc-input" style="max-width:200px">
-          </div>
-          <div class="cc-field">
-            <label class="cc-label">Note (optional)</label>
-            <textarea id="cc-int-note" class="cc-textarea" rows="2" placeholder="Any notes…"></textarea>
-          </div>
-          <div id="cc-int-err" class="cc-err"></div>
-          <button type="button" class="cc-submit-btn" id="cc-int-submit" onclick="ccSubmitInternal()">Submit</button>
-        </div>
-      </div>
-
-      <div id="cc-pane-customer">
       <!-- Section 1: Customer + Invoices -->
       <div class="cc-section" id="cc-sec1">
         <div class="cc-sec-title">1 · Contact Target</div>
@@ -1314,9 +1284,41 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         </div>
       </div>
 
-      <!-- Section 2: Connection Status -->
+      <!-- Section 2: Internal or External -->
+      <div class="cc-section" id="cc-sec-type" style="display:none">
+        <div class="cc-sec-title">2 · Interaction Type</div>
+        <div class="cc-field">
+          <label class="cc-label">Who was this discussion with? <span class="cc-req">*</span></label>
+          <select id="cc-int-type" class="cc-select" style="max-width:340px" onchange="ccSetIntType(this.value)">
+            <option value="external">External — spoke with the customer</option>
+            <option value="internal">Internal — discussed within the team</option>
+          </select>
+        </div>
+        <!-- Internal branch: who internally + follow-up, nothing else -->
+        <div id="cc-int-fields" style="display:none">
+          <div class="cc-field">
+            <label class="cc-label">Who did you speak to internally? <span class="cc-req">*</span></label>
+            <div class="cc-cust-wrap" style="max-width:320px">
+              <input type="text" id="cc-int-who" class="cc-input" style="width:100%;box-sizing:border-box" placeholder="Type to search…" oninput="ccIntWhoFilter()" onfocus="ccIntWhoFilter()" autocomplete="off">
+              <div id="cc-int-who-dd" class="cc-cust-dd" style="display:none"></div>
+            </div>
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
+            <input type="date" id="cc-int-fu-date" class="cc-input" style="max-width:200px">
+          </div>
+          <div class="cc-field">
+            <label class="cc-label">Note (optional)</label>
+            <textarea id="cc-int-note" class="cc-textarea" rows="2" placeholder="What was discussed…"></textarea>
+          </div>
+          <div id="cc-int-err" class="cc-err"></div>
+          <button type="button" class="cc-submit-btn" id="cc-int-submit" onclick="ccSubmitInternal()">Submit</button>
+        </div>
+      </div>
+
+      <!-- Section 3: Connection Status -->
       <div class="cc-section" id="cc-sec2" style="display:none">
-        <div class="cc-sec-title">2 · Connection Status</div>
+        <div class="cc-sec-title">3 · Connection Status</div>
         <div class="cc-btn-group" id="cc-connected-btns">
           <button type="button" class="cc-opt-btn" data-val="yes"          onclick="ccSetConnected('yes')">Yes — Connected</button>
           <button type="button" class="cc-opt-btn" data-val="no_answer"    onclick="ccSetConnected('no_answer')">No Answer</button>
@@ -1344,7 +1346,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 3: Contact Details (connected=yes) -->
       <div id="cc-sec3" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">3 · Contact Details</div>
+          <div class="cc-sec-title">4 · Contact Details</div>
           <div class="cc-field">
             <label class="cc-label">Who did you speak with? <span class="cc-req">*</span></label>
             <select id="cc-contact-sel" class="cc-select" onchange="ccContactChanged()">
@@ -1370,7 +1372,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 4: Outcome -->
       <div id="cc-sec4" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">4 · Outcome</div>
+          <div class="cc-sec-title">5 · Outcome</div>
           <div class="cc-btn-group" id="cc-outcome-btns">
             <button type="button" class="cc-opt-btn" data-val="payment_committed"                  onclick="ccSetOutcome('payment_committed')">Payment Committed</button>
             <button type="button" class="cc-opt-btn" data-val="payment_acknowledged_no_commitment" onclick="ccSetOutcome('payment_acknowledged_no_commitment')">Payment Acknowledged, No Commitment</button>
@@ -1465,7 +1467,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 5: Escalation -->
       <div id="cc-sec5" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">5 · Escalation</div>
+          <div class="cc-sec-title">6 · Escalation</div>
           <div id="cc-esc-prompt" class="cc-field">
             <label class="cc-label">Does anyone else need to act on this?</label>
             <div class="cc-btn-group" id="cc-esc-btns">
@@ -1492,7 +1494,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <!-- Section 6: Follow-up + Note -->
       <div id="cc-sec6" style="display:none">
         <div class="cc-section">
-          <div class="cc-sec-title">6 · Next Steps</div>
+          <div class="cc-sec-title">7 · Next Steps</div>
           <div class="cc-field">
             <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
             <input type="date" id="cc-fu-date" class="cc-input" style="max-width:200px" oninput="ccFuDateManualEdit()">
@@ -1506,7 +1508,6 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <button type="button" class="cc-submit-btn" id="cc-submit-conn" onclick="ccSubmit()">Submit</button>
         </div>
       </div>
-      </div><!-- end #cc-pane-customer -->
     </div><!-- end #cc-pane-log -->
 
     <!-- ── INTERACTION HISTORY ───────────────────────────── -->
@@ -6537,8 +6538,11 @@ function ccResetForm() {
   _ccState = ccMakeState();
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
                 'cc-promised-amount','cc-promised-date','cc-tds-pct','cc-esc-who','cc-esc-what',
-                'cc-dispute-desc','cc-dispute-amount'];
+                'cc-dispute-desc','cc-dispute-amount','cc-int-who','cc-int-fu-date','cc-int-note'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('cc-int-type').value = 'external';
+  document.getElementById('cc-sec-type').style.display   = 'none';
+  document.getElementById('cc-int-fields').style.display = 'none';
   document.getElementById('cc-needs-help').checked = false;
   document.querySelectorAll('#cc-gb-customer, #cc-gb-self').forEach(b => b.classList.remove('selected'));
   _ccOpenDisputes = {};
@@ -6663,7 +6667,8 @@ async function ccSelectCustomer(name) {
       }).join('');
     }
     document.getElementById('cc-invoices-wrap').style.display = '';
-    document.getElementById('cc-sec2').style.display = '';
+    document.getElementById('cc-sec-type').style.display = '';
+    ccSetIntType(document.getElementById('cc-int-type').value);
     ccUpdateConnectedBtnState();
     ccLoadContacts(name);
     if (invoices.length) {
@@ -8393,7 +8398,7 @@ function cdFilterAndRender() {
       : '<span style="color:var(--ink-faint)">—</span>');
 
   // Evenly sized day columns via fixed table layout
-  const DAY_W = 88, CUST_W = 190, INV_W = 130, BU_W = 90, POC_W = 90, TOT_W = 85, COLL_W = 85, ST_W = 64;
+  const DAY_W = 88, CUST_W = 190, INV_W = 210, BU_W = 90, POC_W = 90, TOT_W = 85, COLL_W = 85, ST_W = 64;
   const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W + ST_W;
   const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W,
               CUST_W + INV_W + BU_W + POC_W + TOT_W, CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W];
@@ -8924,12 +8929,23 @@ function ccEscWhoSelect(name) {
   if (dd) dd.style.display = 'none';
 }
 
-/* ─── LOG INTERACTION: CUSTOMER vs INTERNAL MODE ─────────────── */
-function ccSetMode(mode) {
-  document.getElementById('cc-mode-customer').classList.toggle('active', mode === 'customer');
-  document.getElementById('cc-mode-internal').classList.toggle('active', mode === 'internal');
-  document.getElementById('cc-pane-customer').style.display = mode === 'customer' ? '' : 'none';
-  document.getElementById('cc-pane-internal').style.display = mode === 'internal' ? '' : 'none';
+/* ─── LOG INTERACTION: INTERNAL vs EXTERNAL ──────────────────── */
+// Internal swaps the whole external flow (connection status onwards) for a
+// two-field form: who was spoken to internally, and the follow-up date.
+function ccSetIntType(val) {
+  const internal = val === 'internal';
+  document.getElementById('cc-int-fields').style.display = internal ? '' : 'none';
+  document.getElementById('cc-sec2').style.display = internal ? 'none' : '';
+  if (internal) {
+    document.getElementById('cc-sec-noconn').style.display = 'none';
+    document.getElementById('cc-sec3').style.display = 'none';
+    document.getElementById('cc-sec4').style.display = 'none';
+    ccHideBranches();
+    document.getElementById('cc-sec5').style.display = 'none';
+    document.getElementById('cc-sec6').style.display = 'none';
+    document.querySelectorAll('#cc-connected-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
+    _ccState.connected = null;
+  }
 }
 function ccIntWhoFilter() {
   const q = (document.getElementById('cc-int-who').value || '').toLowerCase().trim();
@@ -8962,15 +8978,14 @@ async function ccSubmitInternal() {
       headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
         collector_id:    CURRENT_USER.id,
+        customer_name:   _ccState.customerName || null,
         spoke_with:      who,
         follow_up_date:  fuDate,
         note:            document.getElementById('cc-int-note').value.trim() || null,
       }),
     });
     if (!r.ok) throw new Error(await r.text());
-    document.getElementById('cc-int-who').value = '';
-    document.getElementById('cc-int-fu-date').value = '';
-    document.getElementById('cc-int-note').value = '';
+    ccResetForm();
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;background:#166534;color:#fff;font-size:13px;padding:.65rem 1.25rem;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:9999;font-family:var(--sans)';
     toast.textContent = 'Internal discussion logged.';
