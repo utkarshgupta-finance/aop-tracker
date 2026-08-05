@@ -1295,7 +1295,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="cc-int-fields" style="display:none">
           <div class="cc-field">
             <label class="cc-label">Who did you speak to internally? <span class="cc-req">*</span></label>
-            <select id="cc-int-who" class="cc-select" style="max-width:320px">
+            <select id="cc-int-who" class="cc-select" style="max-width:320px" onchange="ccIntWhoChanged()">
               <option value="">— Select person —</option>
             </select>
           </div>
@@ -1479,10 +1479,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           <div id="cc-esc-fields" style="display:none">
             <div class="cc-field">
               <label class="cc-label">Who needs to act? <span class="cc-req">*</span></label>
-              <div class="cc-cust-wrap" style="max-width:320px">
-                <input type="text" id="cc-esc-who" class="cc-input" style="width:100%;box-sizing:border-box" placeholder="Type to search…" oninput="ccEscWhoFilter()" onfocus="ccEscWhoFilter()" autocomplete="off">
-                <div id="cc-esc-who-dd" class="cc-cust-dd" style="display:none"></div>
-              </div>
+              <select id="cc-esc-who" class="cc-select" style="max-width:320px" onchange="ccEscWhoChanged()">
+                <option value="">— Select person —</option>
+              </select>
             </div>
             <div class="cc-field">
               <label class="cc-label">What do they need to do? <span class="cc-req">*</span></label>
@@ -1867,6 +1866,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div>
         <label class="cc-label">Team</label>
         <input type="text" id="esc-modal-team" class="cust-input" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem" placeholder="e.g. Finance">
+      </div>
+      <div>
+        <label class="cc-label">Customer <span style="color:var(--txt3);font-weight:400">(optional — leave blank to apply to all customers)</span></label>
+        <select id="esc-modal-customer" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
       </div>
     </div>
     <div id="esc-modal-err" style="font-size:11.5px;color:var(--red);margin-top:.65rem;min-height:1rem"></div>
@@ -7047,6 +7050,7 @@ function ccSetEscalation(yes) {
     b.classList.toggle('selected', (b.dataset.val === 'yes') === yes)
   );
   document.getElementById('cc-esc-fields').style.display = yes ? '' : 'none';
+  if (yes) ccRenderEscWhoSelect();
 }
 
 /* ── Follow-up date suggestion ───────────────────────────── */
@@ -8936,28 +8940,41 @@ async function ccPopulateHistCollectorDd() {
 }
 
 /* ─── ESCALATION PERSONS ─────────────────────────────────────── */
-let _escalationPersons = [];
+// Shared by "Who needs to act?" and "Who did you speak to internally?" — a
+// person can be pinned to one customer (shown first for that customer) or
+// left customer_name = null to apply everywhere.
+let _escPersonsFull = [];
+let _escModalOpts   = {};
 async function loadEscalationPersons() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=name&order=name`, { headers: cmrrHdr() });
-    if (r.ok) _escalationPersons = (await r.json()).map(x => x.name).filter(Boolean);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name,email,team,customer_name&order=name`, { headers: cmrrHdr() });
+    if (r.ok) _escPersonsFull = await r.json();
   } catch(e) { console.warn('loadEscalationPersons:', e); }
 }
-function ccEscWhoFilter() {
-  const q = (document.getElementById('cc-esc-who').value || '').toLowerCase().trim();
-  const dd = document.getElementById('cc-esc-who-dd');
-  if (!dd) return;
-  if (!q) { dd.style.display = 'none'; return; }
-  const matches = _escalationPersons.filter(n => n.toLowerCase().includes(q)).slice(0, 15);
-  if (!matches.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = matches.map(n => `<div class="cc-cust-dd-item" onclick="ccEscWhoSelect(${JSON.stringify(escHtml(n))})">${escHtml(n)}</div>`).join('');
-  dd.style.display = '';
+// People pinned to this customer first, then the customers-agnostic ones.
+function ccEscPersonsFor(customerName) {
+  const mine   = _escPersonsFull.filter(p => p.customer_name === customerName);
+  const global = _escPersonsFull.filter(p => !p.customer_name);
+  return [...mine, ...global];
 }
-function ccEscWhoSelect(name) {
-  const inp = document.getElementById('cc-esc-who');
-  if (inp) inp.value = name;
-  const dd = document.getElementById('cc-esc-who-dd');
-  if (dd) dd.style.display = 'none';
+function ccRenderEscWhoSelect() {
+  const sel = document.getElementById('cc-esc-who');
+  if (!sel) return;
+  const current = sel.value;
+  const people = ccEscPersonsFor(_ccState.customerName);
+  sel.innerHTML = '<option value="">— Select person —</option>'
+    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('')
+    + '<option value="__new__">+ Add new person…</option>';
+}
+function ccEscWhoChanged() {
+  const sel = document.getElementById('cc-esc-who');
+  if (sel.value === '__new__') {
+    sel.value = '';
+    openEscModal(null, {
+      lockCustomer: _ccState.customerName,
+      onSaved: (saved) => { ccRenderEscWhoSelect(); sel.value = saved.name; },
+    });
+  }
 }
 
 /* ─── LOG INTERACTION: INTERNAL vs EXTERNAL ──────────────────── */
@@ -8980,14 +8997,26 @@ function ccSetIntType(val) {
     _ccState.connected = null;
   }
 }
-// The internal-person picker is a plain dropdown fed by the same escalation
-// matrix used for "Who needs to act?" — the names are common to both.
+// The internal-person picker is fed by the same escalation matrix used for
+// "Who needs to act?" — the names are common to both.
 function ccPopulateIntWho() {
   const sel = document.getElementById('cc-int-who');
   if (!sel) return;
   const current = sel.value;
+  const people = ccEscPersonsFor(_ccState.customerName);
   sel.innerHTML = '<option value="">— Select person —</option>'
-    + _escalationPersons.map(n => `<option value="${escHtml(n)}"${n === current ? ' selected' : ''}>${escHtml(n)}</option>`).join('');
+    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('')
+    + '<option value="__new__">+ Add new person…</option>';
+}
+function ccIntWhoChanged() {
+  const sel = document.getElementById('cc-int-who');
+  if (sel.value === '__new__') {
+    sel.value = '';
+    openEscModal(null, {
+      lockCustomer: _ccState.customerName,
+      onSaved: (saved) => { ccPopulateIntWho(); sel.value = saved.name; },
+    });
+  }
 }
 async function ccSubmitInternal() {
   const errEl = document.getElementById('cc-int-err');
@@ -9774,22 +9803,19 @@ async function abDeleteBracket(id) {
 }
 
 /* ─── ESCALATION PERSONS SETTINGS ───────────────────────────── */
-let _escPersonsFull = [];
 async function renderEscalationPersonsList() {
   const listEl = document.getElementById('esc-persons-list');
   if (!listEl) return;
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/escalation_persons?select=id,name,email,team&order=name`, { headers: cmrrHdr() });
-    if (!r.ok) { listEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading list.</div>'; return; }
-    const rows = await r.json();
-    _escPersonsFull   = rows;
-    _escalationPersons = rows.map(x => x.name);
+    await loadEscalationPersons();
+    const rows = _escPersonsFull;
     if (!rows.length) { listEl.innerHTML = '<div style="font-size:12px;color:var(--txt3)">No escalation persons yet.</div>'; return; }
     listEl.innerHTML = rows.map(p => `<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.45rem .65rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.35rem;background:#fff">
       <div style="min-width:0">
         <span style="font-size:13px;color:var(--ink);font-weight:600">${escHtml(p.name)}</span>
         <span style="font-size:11.5px;color:var(--txt3);margin-left:.5rem">${escHtml(p.email || '—')}</span>
         ${p.team ? `<span style="font-size:10.5px;font-weight:600;background:#eef1f6;color:#475569;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.team)}</span>` : ''}
+        ${p.customer_name ? `<span style="font-size:10.5px;font-weight:600;background:#eef7f1;color:#0a6e4c;padding:.05rem .4rem;border-radius:10px;margin-left:.5rem">${escHtml(p.customer_name)}</span>` : `<span style="font-size:10.5px;color:var(--txt3);margin-left:.5rem">all customers</span>`}
       </div>
       <div style="display:flex;gap:.4rem;flex-shrink:0">
         <button onclick="openEscModal('${escHtml(p.id)}')" style="font-size:11px;padding:.18rem .5rem;border:1px solid var(--brd2);border-radius:4px;background:#fff;color:var(--navy2);cursor:pointer">Edit</button>
@@ -9798,14 +9824,31 @@ async function renderEscalationPersonsList() {
     </div>`).join('');
   } catch(e) { listEl.innerHTML = `<div style="color:var(--red);font-size:12px">${escHtml(e.message)}</div>`; }
 }
-function openEscModal(id) {
+// opts.lockCustomer pins (and disables) the Customer field — used when adding
+// a person straight from the Log Interaction screen for a given customer.
+// opts.onSaved fires with the saved row so the caller can auto-select it.
+function openEscModal(id, opts) {
+  _escModalOpts = opts || {};
   document.getElementById('esc-modal-title').textContent = id ? 'Edit Person' : 'Add Person';
   document.getElementById('esc-modal-err').textContent = '';
   document.getElementById('esc-modal-ov').dataset.editId = id || '';
   const p = id ? _escPersonsFull.find(x => x.id === id) : null;
+
+  const custSel = document.getElementById('esc-modal-customer');
+  const lock = _escModalOpts.lockCustomer || '';
+  const customers = lock ? [lock] : [...new Set([
+    ..._escPersonsFull.map(x => x.customer_name),
+    ..._cmData.map(c => c.customer_name)
+  ].filter(Boolean))].sort();
+  custSel.innerHTML = (lock ? '' : '<option value="">— All customers (global) —</option>')
+    + customers.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  custSel.disabled = !!lock;
+  custSel.style.background = lock ? 'var(--surf2)' : '';
+
   document.getElementById('esc-modal-name').value  = p?.name  || '';
   document.getElementById('esc-modal-email').value = p?.email || '';
   document.getElementById('esc-modal-team').value  = p?.team  || '';
+  custSel.value = lock || p?.customer_name || '';
   document.getElementById('esc-modal-ov').style.display = 'flex';
 }
 function closeEscModal() { document.getElementById('esc-modal-ov').style.display = 'none'; }
@@ -9814,6 +9857,7 @@ async function saveEscPerson() {
   const name    = document.getElementById('esc-modal-name').value.trim();
   const email   = document.getElementById('esc-modal-email').value.trim();
   const team    = document.getElementById('esc-modal-team').value.trim() || null;
+  const customer_name = document.getElementById('esc-modal-customer').value.trim() || null;
   const errEl   = document.getElementById('esc-modal-err');
   if (!name)  { errEl.textContent = 'Full name is required.'; return; }
   if (!email) { errEl.textContent = 'Email ID is required.'; return; }
@@ -9826,16 +9870,19 @@ async function saveEscPerson() {
     const url    = editId ? `${SUPABASE_URL}/rest/v1/escalation_persons?id=eq.${encodeURIComponent(editId)}` : `${SUPABASE_URL}/rest/v1/escalation_persons`;
     const method = editId ? 'PATCH' : 'POST';
     const r = await fetch(url, {
-      method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ name, email, team }),
+      method, headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ name, email, team, customer_name }),
     });
     if (!r.ok) {
       const t = await r.text();
       errEl.textContent = /duplicate|unique/i.test(t) ? 'This email is already in use.' : 'Could not save person.';
       return;
     }
+    const [saved] = await r.json();
+    await renderEscalationPersonsList();
+    const cb = _escModalOpts.onSaved;
     closeEscModal();
-    renderEscalationPersonsList();
+    if (typeof cb === 'function') cb(saved);
   } finally { btn.disabled = false; btn.textContent = 'Save'; }
 }
 async function deleteEscalationPerson(id) {
