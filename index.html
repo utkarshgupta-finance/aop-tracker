@@ -1298,10 +1298,9 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="cc-int-fields" style="display:none">
           <div class="cc-field">
             <label class="cc-label">Who did you speak to internally? <span class="cc-req">*</span></label>
-            <div class="cc-cust-wrap" style="max-width:320px">
-              <input type="text" id="cc-int-who" class="cc-input" style="width:100%;box-sizing:border-box" placeholder="Type to search…" oninput="ccIntWhoFilter()" onfocus="ccIntWhoFilter()" autocomplete="off">
-              <div id="cc-int-who-dd" class="cc-cust-dd" style="display:none"></div>
-            </div>
+            <select id="cc-int-who" class="cc-select" style="max-width:320px">
+              <option value="">— Select person —</option>
+            </select>
           </div>
           <div class="cc-field">
             <label class="cc-label">Follow-up Date <span class="cc-req">*</span></label>
@@ -2767,7 +2766,7 @@ function renderContactsTable() {
       <td style="font-size:12.5px;font-weight:500">${escHtml(c.name || '')}</td>
       <td style="font-size:12px;color:var(--txt2)">${escHtml(c.role || '—')}</td>
       <td style="font-size:12px;color:var(--txt2)">${c.category ? escHtml(catLabel) : catLabel}</td>
-      <td style="font-size:12px">${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:var(--navy2);text-decoration:none">${escHtml(c.email)}</a>` : '<span style="color:var(--txt3)">—</span>'}</td>
+      <td style="font-size:12px;white-space:normal;word-break:break-word">${c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:var(--navy2);text-decoration:none">${escHtml(c.email)}</a>` : '<span style="color:var(--txt3)">—</span>'}</td>
       <td style="font-size:12px">${escHtml(c.phone || '—')}</td>
       <td style="text-align:center">${statusPill}</td>
       <td style="text-align:right;white-space:nowrap">
@@ -8937,6 +8936,7 @@ function ccSetIntType(val) {
   document.getElementById('cc-int-fields').style.display = internal ? '' : 'none';
   document.getElementById('cc-sec2').style.display = internal ? 'none' : '';
   if (internal) {
+    ccPopulateIntWho();
     document.getElementById('cc-sec-noconn').style.display = 'none';
     document.getElementById('cc-sec3').style.display = 'none';
     document.getElementById('cc-sec4').style.display = 'none';
@@ -8947,21 +8947,14 @@ function ccSetIntType(val) {
     _ccState.connected = null;
   }
 }
-function ccIntWhoFilter() {
-  const q = (document.getElementById('cc-int-who').value || '').toLowerCase().trim();
-  const dd = document.getElementById('cc-int-who-dd');
-  if (!dd) return;
-  if (!q) { dd.style.display = 'none'; return; }
-  const matches = _escalationPersons.filter(n => n.toLowerCase().includes(q)).slice(0, 15);
-  if (!matches.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = matches.map(n => `<div class="cc-cust-dd-item" onclick="ccIntWhoSelect(${JSON.stringify(escHtml(n))})">${escHtml(n)}</div>`).join('');
-  dd.style.display = '';
-}
-function ccIntWhoSelect(name) {
-  const inp = document.getElementById('cc-int-who');
-  if (inp) inp.value = name;
-  const dd = document.getElementById('cc-int-who-dd');
-  if (dd) dd.style.display = 'none';
+// The internal-person picker is a plain dropdown fed by the same escalation
+// matrix used for "Who needs to act?" — the names are common to both.
+function ccPopulateIntWho() {
+  const sel = document.getElementById('cc-int-who');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Select person —</option>'
+    + _escalationPersons.map(n => `<option value="${escHtml(n)}"${n === current ? ' selected' : ''}>${escHtml(n)}</option>`).join('');
 }
 async function ccSubmitInternal() {
   const errEl = document.getElementById('cc-int-err');
