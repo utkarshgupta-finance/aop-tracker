@@ -8437,37 +8437,15 @@ function cdFilterAndRender() {
       : '<span style="color:var(--ink-faint)">—</span>');
 
   // Evenly sized day columns via fixed table layout
-  const DAY_W = 88, CUST_W = 190, INV_W = 150, BU_W = 90, POC_W = 90, PTP_W = 150, TOT_W = 85, COLL_W = 85, ST_W = 64;
-  const LEAD_W = CUST_W + INV_W + BU_W + POC_W + PTP_W + TOT_W + COLL_W + ST_W;
+  const DAY_W = 88, CUST_W = 190, INV_W = 210, BU_W = 90, POC_W = 90, TOT_W = 85, COLL_W = 85, ST_W = 64;
+  const LEAD_W = CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W + ST_W;
   const LX = [0, CUST_W, CUST_W + INV_W, CUST_W + INV_W + BU_W, CUST_W + INV_W + BU_W + POC_W,
-              CUST_W + INV_W + BU_W + POC_W + PTP_W, CUST_W + INV_W + BU_W + POC_W + PTP_W + TOT_W,
-              CUST_W + INV_W + BU_W + POC_W + PTP_W + TOT_W + COLL_W];
+              CUST_W + INV_W + BU_W + POC_W + TOT_W, CUST_W + INV_W + BU_W + POC_W + TOT_W + COLL_W];
   const frz = (i, bg, z) => `position:sticky;left:${LX[i]}px;background:${bg || '#fff'};z-index:${z || 1}`;
   const frzEdge = ';box-shadow:2px 0 0 rgba(15,23,42,.10)';
   const tblW = LEAD_W + daysInMonth * DAY_W;
-  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${PTP_W}px"><col style="width:${TOT_W}px"><col style="width:${COLL_W}px"><col style="width:${ST_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
+  const colgroup = `<colgroup><col style="width:${CUST_W}px"><col style="width:${INV_W}px"><col style="width:${BU_W}px"><col style="width:${POC_W}px"><col style="width:${TOT_W}px"><col style="width:${COLL_W}px"><col style="width:${ST_W}px">${`<col style="width:${DAY_W}px">`.repeat(daysInMonth)}</colgroup>`;
   const dayColgroup = (nDays) => `<colgroup><col style="width:${LEAD_W}px">${`<col style="width:${DAY_W}px">`.repeat(nDays)}</colgroup>`;
-  // Compact "10 Aug · ₹2,00,000" chips for one or more invoices' current PTP,
-  // grouped by date — one chip per date, several dates when a customer/
-  // collector row's invoices don't all point at the same day.
-  const ptpShortDay = (ds) => { const dt = new Date(ds + 'T00:00:00'); return isNaN(dt) ? ds : dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }); };
-  const ptpCell = (rows) => {
-    const byDate = {};
-    let anyOpen = false;
-    rows.forEach(d => {
-      if (moneyFor(d).full) return; // settled — nothing left promised
-      const last = d.ptpHistory[d.ptpHistory.length - 1];
-      if (!last || !last.date) return;
-      const amt = entryAmt(d, last);
-      if (amt <= 0.5) return;
-      anyOpen = true;
-      byDate[last.date] = (byDate[last.date] || 0) + amt;
-    });
-    if (!anyOpen) return '<span style="color:var(--ink-faint)">—</span>';
-    return Object.keys(byDate).sort().map(dt =>
-      `<span style="display:inline-block;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:6px;margin:0 .2rem .2rem 0;white-space:nowrap">${ptpShortDay(dt)} · ${fmtFull(byDate[dt])}</span>`
-    ).join('');
-  };
 
   const dayHead = Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1;
@@ -8526,10 +8504,9 @@ function cdFilterAndRender() {
         <td style="${tdL};color:var(--txt3);${frz(1)}">${custSet.length} cust<span style="font-family:var(--mono);color:${colOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${colOutstanding < 0.5 ? '✓ nil' : fmtFull(colOutstanding)}</span>${cdTlChip('coll', col, agg)}</td>
         <td style="${tdL};${frz(2)}">${bus.length ? bus.map(buCap).join(' ') : '<span class="cap-none">—</span>'}</td>
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${ds.length} inv</td>
-        <td style="${tdL};${frz(4)}">${ptpCell(ds)}</td>
-        <td style="${tdS};font-weight:700;${frz(5, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
-        <td style="${tdS};font-weight:600;${frz(6, '#f6fdf8')};color:#166534">${colCollected > 0.5 ? fmtFull(colCollected) : '—'}</td>
-        <td style="${tdS};text-align:center;${frz(7, '#fff')}${frzEdge}">${statusChip(allDone, colCollected, rowTot)}</td>
+        <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${colCollected > 0.5 ? fmtFull(colCollected) : '—'}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, colCollected, rowTot)}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -8569,10 +8546,9 @@ function cdFilterAndRender() {
         <td style="${tdL};color:var(--txt3);${frz(1)}">${ds.length} inv<span style="font-family:var(--mono);color:${custOutstanding < 0.5 ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="Total invoice balance outstanding now">${custOutstanding < 0.5 ? '✓ nil' : fmtFull(custOutstanding)}</span>${cdTlChip('cust', cust, agg)}</td>
         <td style="${tdL};${frz(2)}">${buCap(ds[0].bu)}</td>
         <td style="${tdL};${frz(3)}">${pocCap(ds[0].collector)}</td>
-        <td style="${tdL};${frz(4)}">${ptpCell(ds)}</td>
-        <td style="${tdS};font-weight:700;${frz(5, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
-        <td style="${tdS};font-weight:600;${frz(6, '#f6fdf8')};color:#166534">${custCollected > 0.5 ? fmtFull(custCollected) : '—'}</td>
-        <td style="${tdS};text-align:center;${frz(7, '#fff')}${frzEdge}">${statusChip(allDone, custCollected, rowTot)}</td>
+        <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+        <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${custCollected > 0.5 ? fmtFull(custCollected) : '—'}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, custCollected, rowTot)}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -8597,15 +8573,17 @@ function cdFilterAndRender() {
         }).join('');
         const moved = cdTlChip('inv', d.key || String(d.invoiceId || ''), cdMoveStats(d));
         const money = moneyFor(d);
+        const gb = d.ptpHistory[d.ptpHistory.length - 1]?.givenBy || 'customer';
+        const gbTip = gb === 'self' ? 'Collector’s own estimate — not confirmed by the customer' : 'Customer committed to this date';
+        const gbChip = ` <span title="${escHtml(gbTip)}" style="font-size:9px;font-weight:700;color:${gb === 'self' ? '#6b21a8' : '#0a6e4c'};background:${gb === 'self' ? '#f5f0ff' : '#eefdf3'};border:1px solid ${gb === 'self' ? '#e0d0ff' : '#bbf7d0'};border-radius:4px;padding:.03rem .28rem;white-space:nowrap">${gb === 'self' ? 'SELF' : 'CUST'}</span>`;
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${moved}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${gbChip}${moved}</td>
           <td style="${tdL};${frz(2)}">${buCap(d.bu)}</td>
           <td style="${tdL};${frz(3)}">${pocCap(d.collector)}</td>
-          <td style="${tdL};${frz(4)}">${ptpCell([d])}</td>
-          <td style="${tdS};font-weight:700;${frz(5, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
-          <td style="${tdS};font-weight:600;${frz(6, '#f6fdf8')};color:#166534">${money.collected > 0.5 ? fmtFull(money.collected) : '—'}</td>
-          <td style="${tdS};text-align:center;${frz(7, '#fff')}${frzEdge}">${statusChip(money.full, money.collected, rowTot)}</td>
+          <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
+          <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${money.collected > 0.5 ? fmtFull(money.collected) : '—'}</td>
+          <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(money.full, money.collected, rowTot)}</td>
           ${cells}
         </tr>`;
       }).join('');
@@ -8739,19 +8717,17 @@ function cdFilterAndRender() {
       <th style="${thL};${frz(1, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Customers' : (_cdView === 'customer' ? 'Invoices' : 'Invoice #')}</th>
       <th style="${thL};${frz(2, '#f6f8fb', 6)}">BU</th>
       <th style="${thL};${frz(3, '#f6f8fb', 6)}">${_cdView === 'collector' ? 'Invoices' : 'POC'}</th>
-      <th style="${thL};${frz(4, '#f6f8fb', 6)}" title="Current PTP amount, by date">PTP</th>
-      <th onclick="cdToggleTotalSort()" title="Sort by promised total (net of TDS)" style="${thS};${frz(5, '#eef1f6', 6)};cursor:pointer;user-select:none">Promised${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
-      <th title="Cash received in bank this month" style="${thS};${frz(6, '#eef1f6', 6)}">Collected</th>
-      <th style="${thS};${frz(7, '#eef1f6', 6)}${frzEdge};text-align:center">Status</th>
+      <th onclick="cdToggleTotalSort()" title="Sort by promised total (net of TDS)" style="${thS};${frz(4, '#eef1f6', 6)};cursor:pointer;user-select:none">Promised${_cdSortTotal === 'desc' ? ' ▼' : _cdSortTotal === 'asc' ? ' ▲' : ' ⇅'}</th>
+      <th title="Cash received in bank this month" style="${thS};${frz(5, '#eef1f6', 6)}">Collected</th>
+      <th style="${thS};${frz(6, '#eef1f6', 6)}${frzEdge};text-align:center">Status</th>
       ${dayHead}
     </tr></thead>
     <tbody>${bodyHtml}</tbody>
     <tfoot><tr style="background:#f8fafc">
       <td colspan="4" style="${tdL};font-weight:700;${frz(0, '#f8fafc', 2)}">Total — expected (net of TDS) vs in bank${bankLoading ? ' <span style="color:var(--ink-faint)">(bank data loading…)</span>' : ''}</td>
-      <td style="${frz(4, '#f8fafc', 2)}"></td>
-      <td style="${tdS};font-weight:700;${frz(5, '#eef7f1', 2)}">${fmtFull(expectedNet)}</td>
-      <td style="${tdS};font-weight:700;${frz(6, '#f6fdf8', 2)};color:#166534">${bankLoading ? '…' : fmtFull(plannedCash)}</td>
-      <td style="${frz(7, '#f8fafc', 2)}${frzEdge}"></td>
+      <td style="${tdS};font-weight:700;${frz(4, '#eef7f1', 2)}">${fmtFull(expectedNet)}</td>
+      <td style="${tdS};font-weight:700;${frz(5, '#f6fdf8', 2)};color:#166534">${bankLoading ? '…' : fmtFull(plannedCash)}</td>
+      <td style="${frz(6, '#f8fafc', 2)}${frzEdge}"></td>
       ${totCells}
     </tr></tfoot>
   </table></div>
