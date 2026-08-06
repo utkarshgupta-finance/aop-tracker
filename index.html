@@ -5394,6 +5394,22 @@ function arToggleCust(idx) {
   hdr.querySelector('.ar-cv-arrow').textContent = open ? '▶' : '▼';
 }
 
+// One invoice's current PTP as {date, amount} from _arPtpMap, or null if none set.
+function arPtpInfo(r) {
+  const rec = r.invoice_id ? _arPtpMap[r.invoice_id] : null;
+  if (!rec?.ptp_date) return null;
+  return { date: rec.ptp_date, amount: (Number(rec.promised_amount) || 0) || arInr(r) };
+}
+const arPtpChip = (date, amount) => `<span style="display:inline-block;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:4px;margin:0 .25rem .25rem 0;white-space:nowrap">${escHtml(date)} · ₹${Math.round(amount).toLocaleString('en-IN')}</span>`;
+// One chip per distinct PTP date across a customer's invoices, amounts summed.
+function arPtpCellForInvoices(invs) {
+  const byDate = {};
+  invs.forEach(r => { const info = arPtpInfo(r); if (info) byDate[info.date] = (byDate[info.date] || 0) + info.amount; });
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length) return '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+  return dates.map(d => arPtpChip(d, byDate[d])).join('');
+}
+
 function renderARCustomerView(rows) {
   const wrap = document.getElementById('ar-invoice-wrap');
   if (!rows.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No invoices match the current filters.</div>'; return; }
@@ -5464,6 +5480,7 @@ function renderARCustomerView(rows) {
       <td style="text-align:right;font-family:var(--mono);color:${hasOverdue?'var(--red)':'inherit'}">${cr(totalBal)}</td>
       <td style="text-align:right;font-family:var(--mono);color:var(--red)">${ovdBal > 0 ? cr(ovdBal) : '—'}</td>
       <td>${statusBadge}</td>
+      <td>${arPtpCellForInvoices(invs)}</td>
       <td><div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center">${custTagCaps}${addCustTagBtn}</div></td>
     </tr>`;
 
@@ -5486,6 +5503,9 @@ function renderARCustomerView(rows) {
       const isFx  = r.currency_code && r.currency_code !== 'INR';
       const fxBal = isFx ? `<span class="td-fx"> ${r.currency_code} ${f(r.balance)}</span>` : '';
       const balStyle = days > 0 ? 'color:var(--red)' : '';
+      const invPtp = arPtpInfo(r);
+      const invPtpCell = (invPtp ? arPtpChip(invPtp.date, invPtp.amount) : '<span style="color:var(--ink-faint);font-size:11px">—</span>')
+        + `<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id||'')}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`;
 
       body += `<tr class="ar-cv-inv ar-cv-i${idx}" style="display:none">
         <td colspan="2" style="padding-left:1.8rem;font-family:var(--sans);font-size:11px;color:var(--ink-soft)">${invLink}</td>
@@ -5496,6 +5516,7 @@ function renderARCustomerView(rows) {
         <td style="text-align:right;color:var(--ink-faint)">${cr(arTotal(r))}</td>
         <td>${rev}</td>
         <td>${badge}</td>
+        <td style="white-space:nowrap">${invPtpCell}</td>
         <td></td>
       </tr>`;
     }
@@ -5518,13 +5539,14 @@ function renderARCustomerView(rows) {
         ${cvSortHdr('totalBal','Outstanding (₹)',  'right')}
         ${cvSortHdr('ovdBal',  'Overdue (₹)',      'right')}
         ${cvSortHdr('status',  'Status',           '')}
+        <th>PTP</th>
         <th>Tags</th>
       </tr>
       <tr style="display:none" id="ar-cv-inv-hdr">
         <th colspan="2" style="padding-left:1.8rem">Invoice #</th>
         <th>Inv Date</th><th>Due Date</th><th>Days</th>
         <th style="text-align:right">Balance</th><th style="text-align:right">Total</th>
-        <th>Type</th><th>Status</th><th></th>
+        <th>Type</th><th>Status</th><th>PTP</th><th></th>
       </tr>
     </thead>
     <tbody>${body}</tbody>
@@ -5663,14 +5685,14 @@ function renderARInvoiceList(rows) {
     const ptpTdsChip = ptpTds > 0
       ? `<span title="${escHtml(`TDS ${ptpRec.tds_pct}% on base (₹${Math.round(ptpGross / 1.18).toLocaleString('en-IN')}) — expect ₹${Math.round(ptpGross - ptpTds).toLocaleString('en-IN')} in bank`)}" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">TDS −₹${Math.round(ptpTds).toLocaleString('en-IN')}</span>`
       : '';
-    const ptpGivenByChip = ptpRec?.ptp_date
-      ? (ptpRec.given_by === 'self'
-        ? `<span title="This is the collector's own estimate — not confirmed by the customer" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#6b21a8;background:#f5f0ff;border:1px solid #e0d0ff;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">SELF</span>`
-        : `<span title="Customer committed to this date" style="display:inline-block;margin-left:.25rem;font-size:9.5px;font-weight:700;color:#0a6e4c;background:#eefdf3;border:1px solid #bbf7d0;border-radius:4px;padding:.05rem .3rem;white-space:nowrap;vertical-align:middle">CUST</span>`)
+    // Amount shown directly in the cell now — given-by used to take that
+    // space as a CUST/SELF chip, it's folded into the date chip's tooltip.
+    const ptpAmtChip = ptpRec?.ptp_date
+      ? `<span style="display:inline-block;margin-left:.3rem;font-size:10px;font-weight:600;color:var(--ink-soft);font-family:var(--mono);white-space:nowrap;vertical-align:middle">₹${Math.round(ptpGross).toLocaleString('en-IN')}</span>`
       : '';
     const ptpCell = r.invoice_id
       ? `${ptpRec?.ptp_date
-          ? `<span title="${escHtml((ptpRec.promised_amount != null ? '₹' + Number(ptpRec.promised_amount).toLocaleString('en-IN') + ' · ' : '') + 'Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : ''))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpGivenByChip}${ptpTdsChip}`
+          ? `<span title="${escHtml('Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : '') + (ptpRec.given_by === 'self' ? ' · collector\'s own estimate, not confirmed by the customer' : ' · customer committed to this date'))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpAmtChip}${ptpTdsChip}`
           : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`
       : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     return `<tr class="${sevCls}">
