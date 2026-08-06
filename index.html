@@ -5400,7 +5400,7 @@ function arPtpInfo(r) {
   if (!rec?.ptp_date) return null;
   return { date: rec.ptp_date, amount: (Number(rec.promised_amount) || 0) || arInr(r) };
 }
-const arPtpChip = (date, amount) => `<span style="display:inline-block;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:4px;margin:0 .25rem .25rem 0;white-space:nowrap">${escHtml(date)} · ₹${Math.round(amount).toLocaleString('en-IN')}</span>`;
+const arPtpChip = (date, amount) => `<span style="display:block;width:fit-content;font-size:10px;font-weight:600;background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:4px;margin:0 0 .2rem 0;white-space:nowrap">${escHtml(date)} · ₹${Math.round(amount).toLocaleString('en-IN')}</span>`;
 // One chip per distinct PTP date across a customer's invoices, amounts summed.
 function arPtpCellForInvoices(invs) {
   const byDate = {};
@@ -5504,8 +5504,10 @@ function renderARCustomerView(rows) {
       const fxBal = isFx ? `<span class="td-fx"> ${r.currency_code} ${f(r.balance)}</span>` : '';
       const balStyle = days > 0 ? 'color:var(--red)' : '';
       const invPtp = arPtpInfo(r);
-      const invPtpCell = (invPtp ? arPtpChip(invPtp.date, invPtp.amount) : '<span style="color:var(--ink-faint);font-size:11px">—</span>')
-        + `<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id||'')}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="margin-left:.3rem;background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;vertical-align:middle">✎</button>`;
+      // flex keeps the ✎ beside the chip now that chips are block-level
+      const invPtpCell = `<span style="display:flex;align-items:center;gap:.25rem">`
+        + (invPtp ? arPtpChip(invPtp.date, invPtp.amount) : '<span style="color:var(--ink-faint);font-size:11px">—</span>')
+        + `<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id||'')}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="background:none;border:none;cursor:pointer;font-size:11px;color:#64748b">✎</button></span>`;
 
       body += `<tr class="ar-cv-inv ar-cv-i${idx}" style="display:none">
         <td colspan="2" style="padding-left:1.8rem;font-family:var(--sans);font-size:11px;color:var(--ink-soft)">${invLink}</td>
