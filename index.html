@@ -1575,6 +1575,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="cc-ds-collector-cards" style="display:flex;gap:.5rem;flex-wrap:wrap"></div>
         <button type="button" onclick="ccLoadDaySummary()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
       </div>
+      <div id="cc-ds-month-row" style="display:flex;gap:.3rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem"></div>
       <div id="cc-ds-content" style="font-size:12px;color:var(--txt3)">Loading…</div>
     </div>
 
@@ -6465,14 +6466,19 @@ function ccShowSubTab(tab) {
 /* ── Day Summary sub-tab ─────────────────────────────────────── */
 let _ccDsData        = [];   // raw interactions for summary
 let _ccDsSelectedCol = '__all__';
+let _ccDsMonth       = null; // 'YYYY-MM' in IST; null = current IST month
+
+// created_at is UTC; days and months here are IST calendar days.
+const ccDsIstDay   = ts => new Date(new Date(ts).getTime() + 330 * 60000).toISOString().slice(0, 10);
+const ccDsIstToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 
 async function ccLoadDaySummary() {
   const contentEl = document.getElementById('cc-ds-content');
   if (!contentEl) return;
   contentEl.innerHTML = '<span style="color:var(--txt3)">Loading…</span>';
   try {
-    // Fetch last 90 days of interactions with collector info
-    const since = new Date(); since.setDate(since.getDate() - 90);
+    // Fetch last 6 months of interactions with collector info
+    const since = new Date(); since.setDate(since.getDate() - 185);
     const sinceStr = since.toISOString().split('T')[0];
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/interactions?created_at=gte.${sinceStr}&order=created_at.desc&select=id,created_at,customer_name,connected,outcome,collector_id`,
@@ -6512,10 +6518,29 @@ async function ccLoadDaySummary() {
     const allBtn = document.getElementById('cc-ds-all');
     if (allBtn) allBtn.classList.toggle('active', _ccDsSelectedCol === '__all__');
 
+    // Month tabs (IST months present in the data, plus the current one)
+    const curMonth = ccDsIstToday().slice(0, 7);
+    const months = [...new Set(_ccDsData.map(i => ccDsIstDay(i.created_at).slice(0, 7)))];
+    if (!months.includes(curMonth)) months.push(curMonth);
+    months.sort();
+    if (!_ccDsMonth || !months.includes(_ccDsMonth)) _ccDsMonth = curMonth;
+    const monthRow = document.getElementById('cc-ds-month-row');
+    if (monthRow) {
+      const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+      monthRow.innerHTML = months.map(m =>
+        `<button class="chip${m === _ccDsMonth ? ' active' : ''}" data-m="${m}" onclick="ccDsSetMonth(this.dataset.m)">${mLbl(m)}</button>`).join('');
+    }
+
     ccRenderDaySummary();
   } catch(e) {
     contentEl.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(e.message)}</span>`;
   }
+}
+
+function ccDsSetMonth(m) {
+  _ccDsMonth = m;
+  document.querySelectorAll('#cc-ds-month-row .chip').forEach(b => b.classList.toggle('active', b.dataset.m === m));
+  ccRenderDaySummary();
 }
 
 let _ccDsCollNameMap = {};
@@ -6532,16 +6557,64 @@ function ccDsSelectCollector(id, btn) {
 
 function ccRenderDaySummary() {
   const contentEl = document.getElementById('cc-ds-content');
-  if (!contentEl || !_ccDsData.length) return;
+  if (!contentEl) return;
 
-  const rows = _ccDsSelectedCol === '__all__'
-    ? _ccDsData
-    : _ccDsData.filter(i => i.collector_id === _ccDsSelectedCol);
+  // Selected IST month only
+  const monthRows = _ccDsData.filter(i => ccDsIstDay(i.created_at).slice(0, 7) === _ccDsMonth);
+  const dtLbl = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', weekday:'short' });
 
-  // Group by date (YYYY-MM-DD)
+  if (_ccDsSelectedCol === '__all__') {
+    // Comparative view: one row per IST day, one column per collector,
+    // cells = that collector's total interactions logged that day.
+    if (!monthRows.length) { contentEl.innerHTML = '<span style="color:var(--txt3)">No interactions in this month.</span>'; return; }
+    const collectors = [...new Set(monthRows.map(i => i.collector_id).filter(Boolean))]
+      .sort((a, b) => (_ccDsCollNameMap[a] || a).localeCompare(_ccDsCollNameMap[b] || b));
+    const byDate = {};
+    monthRows.forEach(i => {
+      const d = ccDsIstDay(i.created_at);
+      if (!byDate[d]) byDate[d] = {};
+      byDate[d][i.collector_id] = (byDate[d][i.collector_id] || 0) + 1;
+    });
+    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+    const colTotals = {};
+    collectors.forEach(c => { colTotals[c] = monthRows.filter(i => i.collector_id === c).length; });
+
+    contentEl.innerHTML = `<div style="overflow-x:auto">
+      <table class="ar-tbl" style="width:100%">
+        <thead><tr>
+          <th style="text-align:left">Date</th>
+          ${collectors.map(c => `<th style="text-align:right">${escHtml(_ccDsCollNameMap[c] || c)}</th>`).join('')}
+          <th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>
+          ${dates.map(d => {
+            const dayTot = collectors.reduce((s, c) => s + (byDate[d][c] || 0), 0);
+            return `<tr>
+              <td style="font-size:12px;white-space:nowrap;font-weight:500">${dtLbl(d)}</td>
+              ${collectors.map(c => {
+                const v = byDate[d][c] || 0;
+                return `<td style="text-align:right;font-size:12.5px;${v ? 'font-weight:600;color:var(--navy)' : 'color:var(--ink-faint)'}">${v || '—'}</td>`;
+              }).join('')}
+              <td style="text-align:right;font-size:13px;font-weight:700;color:var(--navy)">${dayTot}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot><tr style="background:#f8fafc">
+          <td style="font-weight:700;font-size:12px">Month total</td>
+          ${collectors.map(c => `<td style="text-align:right;font-weight:700;font-size:12.5px;color:var(--navy)">${colTotals[c]}</td>`).join('')}
+          <td style="text-align:right;font-weight:700;font-size:13px;color:var(--navy)">${monthRows.length}</td>
+        </tr></tfoot>
+      </table></div>`;
+    return;
+  }
+
+  // Single collector: the detailed per-day table
+  const rows = monthRows.filter(i => i.collector_id === _ccDsSelectedCol);
+
+  // Group by IST date (YYYY-MM-DD)
   const byDate = {};
   rows.forEach(i => {
-    const d = i.created_at.split('T')[0];
+    const d = ccDsIstDay(i.created_at);
     if (!byDate[d]) byDate[d] = { total: 0, connected: 0, outcomes: {} };
     byDate[d].total++;
     if (i.connected === 'yes') byDate[d].connected++;
@@ -6559,7 +6632,7 @@ function ccRenderDaySummary() {
 
   const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
   if (!dates.length) {
-    contentEl.innerHTML = '<span style="color:var(--txt3)">No interactions in last 90 days.</span>';
+    contentEl.innerHTML = '<span style="color:var(--txt3)">No interactions in this month.</span>';
     return;
   }
 
@@ -6582,9 +6655,8 @@ function ccRenderDaySummary() {
               const lbl = OUTCOME_LABELS[k] || k.replace(/_/g,' ');
               return `<span style="font-size:10.5px;background:#f0f4ff;color:#3b4dc8;padding:.1rem .45rem;border-radius:12px;margin-right:.25rem;white-space:nowrap">${escHtml(lbl)}: ${v}</span>`;
             }).join('');
-          const dt = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', weekday:'short' });
           return `<tr>
-            <td style="font-size:12px;white-space:nowrap;font-weight:500">${dt}</td>
+            <td style="font-size:12px;white-space:nowrap;font-weight:500">${dtLbl(d)}</td>
             <td style="text-align:right;font-size:13px;font-weight:700;color:var(--navy)">${s.total}</td>
             <td style="text-align:right;font-size:12px;color:#166534">${s.connected}</td>
             <td style="text-align:right;font-size:12px;color:var(--txt3)">${notReached}</td>
