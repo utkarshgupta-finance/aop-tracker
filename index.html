@@ -5481,8 +5481,9 @@ function renderARCustomerView(rows) {
     const addCustTagBtn = `<button class="inv-tag-add" onclick="event.stopPropagation();openCustTagPicker(this,'${escHtml(name)}')">+ Tag</button>`;
 
     // Customer header row
+    const custIntBtn = `<button onclick="event.stopPropagation();arShowCustInteractions(this.dataset.cust)" data-cust="${escHtml(name)}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`;
     body += `<tr class="ar-cv-hdr" id="ar-cv-h${idx}" data-open="0" onclick="arToggleCust(${idx})">
-      <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}</td>
+      <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}${custIntBtn}</td>
       <td style="white-space:nowrap">${buBadge}</td>
       <td style="white-space:nowrap">${collectorBadge}</td>
       <td style="text-align:center">${entBadges}</td>
@@ -5519,8 +5520,11 @@ function renderARCustomerView(rows) {
         + (invPtp ? arPtpChip(invPtp.date, invPtp.amount) : '<span style="color:var(--ink-faint);font-size:11px">—</span>')
         + `<button onclick="arEditPtp(this.dataset.iid,this.dataset.inum,this.dataset.cust,this.dataset.bal)" data-iid="${escHtml(r.invoice_id||'')}" data-inum="${escHtml(r.invoice_number||'')}" data-cust="${escHtml(r.customer_name||'')}" data-bal="${arInr(r)}" title="Set / change PTP date" style="background:none;border:none;cursor:pointer;font-size:11px;color:#64748b">✎</button></span>`;
 
+      const invIntBtn = r.invoice_id
+        ? `<button onclick="arShowInvInteractions(this.dataset.iid,this.dataset.inum)" data-iid="${escHtml(r.invoice_id)}" data-inum="${escHtml(r.invoice_number||'')}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
+        : '';
       body += `<tr class="ar-cv-inv ar-cv-i${idx}" style="display:none">
-        <td colspan="2" style="padding-left:1.8rem;font-family:var(--sans);font-size:11px;color:var(--ink-soft)">${invLink}</td>
+        <td colspan="2" style="padding-left:1.8rem;font-family:var(--sans);font-size:11px;color:var(--ink-soft)">${invLink}${invIntBtn}</td>
         <td style="font-size:10.5px;color:var(--ink-faint)">${r.invoice_date || '—'}</td>
         <td style="font-size:10.5px;color:var(--ink-faint)">${r.due_date || '—'}</td>
         <td>${daysCell}</td>
@@ -7654,6 +7658,63 @@ async function ccDeleteInteraction(id) {
 /* ─── INVOICE INTERACTIONS MODAL ────────────────────────────── */
 function arCloseInvModal() {
   document.getElementById('ar-inv-modal').classList.add('hidden');
+}
+
+// Customer-level flavor of the interactions popup — every interaction
+// logged against the customer, regardless of which invoices were discussed.
+async function arShowCustInteractions(customerName) {
+  const modal = document.getElementById('ar-inv-modal');
+  const body  = document.getElementById('ar-inv-modal-body');
+  const title = document.getElementById('ar-inv-modal-title');
+  title.textContent = `Interactions — ${customerName}`;
+  body.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  modal.classList.remove('hidden');
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/interactions?customer_name=eq.${encodeURIComponent(customerName)}&order=created_at.desc&limit=200`,
+      { headers: cmrrHdr() }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const interactions = await r.json();
+    if (!interactions.length) {
+      body.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No interactions recorded for this customer.</div>';
+      return;
+    }
+    const collIds = [...new Set(interactions.map(i => i.collector_id).filter(Boolean))];
+    const collMap = {};
+    if (collIds.length) {
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/user_access?user_id=in.(${collIds.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`,
+        { headers: cmrrHdr() }
+      );
+      if (cr.ok) (await cr.json()).forEach(u => { collMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+    }
+    // Which invoices each interaction discussed, shown as chips (by number)
+    const invMap = {};
+    const jr = await fetch(
+      `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${interactions.map(i => encodeURIComponent(i.id)).join(',')})&select=interaction_id,invoice_id`,
+      { headers: cmrrHdr() }
+    );
+    if (jr.ok) {
+      const joinRows = await jr.json();
+      joinRows.forEach(j => { (invMap[j.interaction_id] = invMap[j.interaction_id] || []).push(j.invoice_id); });
+      const allInvIds = [...new Set(joinRows.map(j => j.invoice_id).filter(Boolean))];
+      if (allInvIds.length) {
+        const nr = await fetch(
+          `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${allInvIds.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number`,
+          { headers: cmrrHdr() }
+        );
+        if (nr.ok) {
+          const invNumMap = {};
+          (await nr.json()).forEach(x => { invNumMap[x.invoice_id] = x.invoice_number || x.invoice_id; });
+          Object.keys(invMap).forEach(k => { invMap[k] = invMap[k].map(id => invNumMap[id] || id); });
+        }
+      }
+    }
+    body.innerHTML = interactions.map(i => ccRenderTLItem(i, invMap[i.id] || [], {}, collMap)).join('');
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message)}</div>`;
+  }
 }
 
 async function arShowInvInteractions(invoiceId, invoiceNumber) {
