@@ -9139,8 +9139,8 @@ function ccRenderEscWhoSelect() {
   const current = sel.value;
   const people = ccEscPersonsFor(_ccState.customerName);
   sel.innerHTML = '<option value="">— Select person —</option>'
-    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('')
-    + '<option value="__new__">+ Add new person…</option>';
+    + '<option value="__new__">+ Add new person…</option>'
+    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('');
 }
 function ccEscWhoChanged() {
   const sel = document.getElementById('cc-esc-who');
@@ -9182,8 +9182,8 @@ function ccPopulateIntWho() {
   const current = sel.value;
   const people = ccEscPersonsFor(_ccState.customerName);
   sel.innerHTML = '<option value="">— Select person —</option>'
-    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('')
-    + '<option value="__new__">+ Add new person…</option>';
+    + '<option value="__new__">+ Add new person…</option>'
+    + people.map(p => `<option value="${escHtml(p.name)}"${p.name === current ? ' selected' : ''}>${escHtml(p.name)}${p.team ? ` · ${escHtml(p.team)}` : ''}</option>`).join('');
 }
 function ccIntWhoChanged() {
   const sel = document.getElementById('cc-int-who');
