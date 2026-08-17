@@ -7143,6 +7143,7 @@ function ccNeedsHelpChanged() {
     _ccState.escalationNeeded = true;
     document.getElementById('cc-esc-prompt').style.display  = 'none';
     document.getElementById('cc-esc-fields').style.display  = '';
+    ccRenderEscWhoSelect();
     document.querySelectorAll('#cc-esc-btns .cc-opt-btn').forEach(b =>
       b.classList.toggle('selected', b.dataset.val === 'yes')
     );
@@ -9136,6 +9137,9 @@ function ccEscPersonsFor(customerName) {
 function ccRenderEscWhoSelect() {
   const sel = document.getElementById('cc-esc-who');
   if (!sel) return;
+  // Self-heal if the escalation matrix never loaded (failed/raced at init),
+  // which would otherwise leave the dropdown stuck on its placeholder.
+  if (!_escPersonsFull.length) loadEscalationPersons().then(() => { if (_escPersonsFull.length) ccRenderEscWhoSelect(); });
   const current = sel.value;
   const people = ccEscPersonsFor(_ccState.customerName);
   sel.innerHTML = '<option value="">— Select person —</option>'
@@ -9179,6 +9183,7 @@ function ccSetIntType(val) {
 function ccPopulateIntWho() {
   const sel = document.getElementById('cc-int-who');
   if (!sel) return;
+  if (!_escPersonsFull.length) loadEscalationPersons().then(() => { if (_escPersonsFull.length) ccPopulateIntWho(); });
   const current = sel.value;
   const people = ccEscPersonsFor(_ccState.customerName);
   sel.innerHTML = '<option value="">— Select person —</option>'
