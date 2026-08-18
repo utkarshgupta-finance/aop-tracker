@@ -8640,6 +8640,7 @@ function cdFilterAndRender() {
   }
 
   const monthRows = filtered.filter(d => d.ptpHistory.some(h => (h.date || '').startsWith(_cdMonth)));
+  _cdMonthRows = monthRows;   // movement-detail popup replays these same rows
   if (!monthRows.length) {
     content.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:2rem;text-align:center">No PTPs promised in this month for the current filters.</div>';
     return;
@@ -8903,7 +8904,7 @@ function cdFilterAndRender() {
       if (base === null) return `<td style="${tdS}${wk};color:var(--ink-faint)"></td>`;
       const dl = v - base;
       if (Math.abs(dl) < 1) return `<td style="${tdS}${wk};color:var(--ink-faint)">—</td>`;
-      return `<td style="${tdS}${wk};font-weight:600;color:${dl > 0 ? '#166534' : 'var(--red)'}">${dl > 0 ? '▲' : '▼'} ${fmtFull(Math.abs(dl))}</td>`;
+      return `<td style="${tdS}${wk};font-weight:600;color:${dl > 0 ? '#166534' : 'var(--red)'}"><span data-md="${ds(day)}" onclick="cdOpenMovementDetail(this.dataset.md)" title="Click to see which invoices moved on this day" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px">${dl > 0 ? '▲' : '▼'} ${fmtFull(Math.abs(dl))}</span></td>`;
     }).join('');
     const lastKnown = [...totals].reverse().find(v => v !== null);
     const html = `<div style="font-weight:700;font-size:12.5px;color:var(--txt2);margin:0 0 .1rem">Movement during ${mLbl(tm)}${tm === curMonth ? ' <span style="font-weight:400;color:var(--txt3)">(current month)</span>' : ''}</div>
@@ -9065,6 +9066,138 @@ function cdTlSnaps(rows) {
     for (const v of state.values()) { if (v.date) byDate[v.date] = (byDate[v.date] || 0) + v.amt; }
     return { at: h.loggedAt || '', who: h.collectorName || '', d, before, after, byDate };
   });
+}
+
+/* ─── MOVEMENT DETAIL POPUP ──────────────────────────────────────
+   Clicking a "Change vs previous day" delta replays every row's PTP as it
+   stood at the end of the previous day vs the end of that day, and lists
+   only the invoices whose contribution to the selected month actually
+   moved. The deltas foot exactly to the number that was clicked. */
+let _cdMonthRows = [];
+
+function cdMovementRows(dayStr) {
+  const prevStr = new Date(new Date(dayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
+  const at = ds => new Date(ds + 'T23:59:59.999+05:30').getTime();
+  const cutNow = at(dayStr), cutPrev = at(prevStr);
+  // The PTP in force at a cutoff = the last entry logged on or before it
+  const asOf = (d, cutoff) => {
+    let cur = null;
+    for (const h of d.ptpHistory) {
+      const t = Date.parse(h.loggedAt || '');
+      if (!isNaN(t) && t <= cutoff) cur = h;
+    }
+    return cur;
+  };
+  const contrib = (d, h) => (h && (h.date || '').startsWith(_cdMonth)) ? cdEntryAmt(d, h) : 0;
+  const out = [], flat = [];
+  for (const d of _cdMonthRows) {
+    const before = asOf(d, cutPrev), after = asOf(d, cutNow);
+    const bAmt = contrib(d, before), aAmt = contrib(d, after);
+    if (Math.abs(aAmt - bAmt) >= 0.5) { out.push({ d, before, after, bAmt, aAmt, delta: aAmt - bAmt }); continue; }
+    // Same contribution, but the promise itself still moved — e.g. a date
+    // pushed within the month. Shown apart so the deltas keep footing.
+    if (before !== after && (before?.date || '') !== (after?.date || '')
+        && ((before?.date || '').startsWith(_cdMonth) || (after?.date || '').startsWith(_cdMonth))) {
+      flat.push({ d, before, after, bAmt, aAmt, delta: 0 });
+    }
+  }
+  return {
+    rows: out.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta)),
+    flat,
+    prevStr,
+  };
+}
+
+function cdOpenMovementDetail(dayStr) {
+  document.getElementById('cd-md-modal')?.remove();
+  const { rows, flat, prevStr } = cdMovementRows(dayStr);
+  const net = rows.reduce((s, r) => s + r.delta, 0);
+  const amt = v => '₹' + Math.round(Number(v) || 0).toLocaleString('en-IN');
+  const day = ds => { const dt = new Date(ds + 'T00:00:00'); return isNaN(dt) ? ds : dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }); };
+  const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+
+  // What moved, in the same language the PTP timeline uses
+  const reason = (r) => {
+    const bd = r.before?.date || '', ad = r.after?.date || '';
+    const bIn = bd.startsWith(_cdMonth), aIn = ad.startsWith(_cdMonth);
+    if (!bIn && aIn) return { txt: bd ? `Moved in from ${day(bd)}` : 'New promise', tone: '#0a6e4c' };
+    if (bIn && !aIn) return { txt: ad ? `Moved out to ${day(ad)}` : 'Promise removed', tone: '#b91c1c' };
+    if (bd !== ad)   return { txt: `${day(bd)} → ${day(ad)}`, tone: ad > bd ? '#b45309' : '#0a6e4c' };
+    const up = r.aAmt > r.bAmt;
+    return { txt: `Amount ${up ? 'raised' : 'cut'}`, tone: up ? '#0a6e4c' : '#b91c1c' };
+  };
+
+  const th = 'padding:.4rem .6rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:1';
+  const thR = th.replace('text-align:left', 'text-align:right');
+  const td = 'padding:.35rem .6rem;font-size:11.5px;border-bottom:1px solid var(--line);vertical-align:top';
+  const tdR = td + ';text-align:right;font-family:var(--mono);white-space:nowrap';
+
+  const body = rows.length ? `<table style="border-collapse:separate;border-spacing:0;width:100%">
+      <thead><tr>
+        <th style="${th}">Customer</th><th style="${th}">Invoice #</th>
+        <th style="${th}">BU</th><th style="${th}">POC</th>
+        <th style="${th}">What moved</th>
+        <th style="${thR}">Before</th><th style="${thR}">After</th><th style="${thR}">Δ</th>
+      </tr></thead>
+      <tbody>${rows.map(r => {
+        const rs = reason(r);
+        return `<tr>
+          <td style="${td};font-weight:600">${escHtml(r.d.customerName || '—')}</td>
+          <td style="${td};font-family:var(--mono);font-size:10.5px">${escHtml(r.d.invoiceNumber || r.d.invoiceId || '—')}</td>
+          <td style="${td}">${buCap(r.d.bu)}</td>
+          <td style="${td}">${pocCap(r.d.collector)}</td>
+          <td style="${td};color:${rs.tone};font-weight:600;white-space:nowrap">${escHtml(rs.txt)}</td>
+          <td style="${tdR};color:var(--txt3)">${r.bAmt > 0.5 ? amt(r.bAmt) : '—'}</td>
+          <td style="${tdR}">${r.aAmt > 0.5 ? amt(r.aAmt) : '—'}</td>
+          <td style="${tdR};font-weight:700;color:${r.delta > 0 ? '#166534' : 'var(--red)'}">${r.delta > 0 ? '▲' : '▼'} ${amt(Math.abs(r.delta))}</td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr style="background:#f8fafc">
+        <td colspan="5" style="${td};font-weight:700">${rows.length} invoice${rows.length === 1 ? '' : 's'} moved</td>
+        <td style="${tdR};font-weight:700;color:var(--txt3)">${amt(rows.reduce((s, r) => s + r.bAmt, 0))}</td>
+        <td style="${tdR};font-weight:700">${amt(rows.reduce((s, r) => s + r.aAmt, 0))}</td>
+        <td style="${tdR};font-weight:700;color:${net > 0 ? '#166534' : 'var(--red)'}">${net > 0 ? '▲' : '▼'} ${amt(Math.abs(net))}</td>
+      </tr></tfoot>
+    </table>`
+    : '<div style="font-size:12px;color:var(--txt3);padding:1rem 0">No invoice-level movement found for this day.</div>';
+
+  // Dates that shifted inside the month — real movement, zero net effect
+  const flatHtml = flat.length ? `
+    <div style="font-weight:700;font-size:11.5px;color:var(--txt2);margin:1rem 0 .3rem">Also moved — no effect on the ${mLbl(_cdMonth)} total (${flat.length})</div>
+    <table style="border-collapse:separate;border-spacing:0;width:100%">
+      <thead><tr>
+        <th style="${th}">Customer</th><th style="${th}">Invoice #</th>
+        <th style="${th}">BU</th><th style="${th}">POC</th>
+        <th style="${th}">What moved</th><th style="${thR}">Amount</th>
+      </tr></thead>
+      <tbody>${flat.map(r => {
+        const bd = r.before?.date || '', ad = r.after?.date || '';
+        return `<tr>
+          <td style="${td};font-weight:600">${escHtml(r.d.customerName || '—')}</td>
+          <td style="${td};font-family:var(--mono);font-size:10.5px">${escHtml(r.d.invoiceNumber || r.d.invoiceId || '—')}</td>
+          <td style="${td}">${buCap(r.d.bu)}</td>
+          <td style="${td}">${pocCap(r.d.collector)}</td>
+          <td style="${td};font-weight:600;white-space:nowrap;color:${ad > bd ? '#b45309' : '#0a6e4c'}">${day(bd)} → ${day(ad)}</td>
+          <td style="${tdR}">${amt(r.aAmt)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : '';
+
+  const ov = document.createElement('div');
+  ov.id = 'cd-md-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:940px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;padding:.9rem 1.1rem .65rem;border-bottom:1px solid var(--brd)">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">Movement on ${day(dayStr)} — promised for ${mLbl(_cdMonth)}</div>
+        <div style="font-size:11.5px;color:var(--txt3);margin-top:.1rem">Change between end of ${day(prevStr)} and end of ${day(dayStr)} · net ${net > 0 ? '▲' : '▼'} ${amt(Math.abs(net))}</div>
+      </div>
+      <button onclick="document.getElementById('cd-md-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;color:var(--txt2);flex:0 0 auto">×</button>
+    </div>
+    <div style="overflow:auto;padding:0 1.1rem .9rem">${body}${flatHtml}</div>
+  </div>`;
+  document.body.appendChild(ov);
 }
 
 function cdTlDay(ds) {
