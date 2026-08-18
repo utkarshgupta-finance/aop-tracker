@@ -1403,24 +1403,24 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
               <button type="button" class="cc-opt-btn cc-sm" data-val="no"  onclick="ccSetFullConfirm(false)">No — let me recheck</button>
             </div>
           </div>
-          <div id="cc-partial-amount" class="cc-field" style="display:none">
-            <label class="cc-label">Promised Amount (₹) <span class="cc-req">*</span></label>
-            <input type="number" id="cc-promised-amount" class="cc-input" placeholder="0" min="1" style="max-width:200px">
+          <div class="cc-field" id="cc-ptp-grid-field" style="display:none">
+            <label class="cc-label" id="cc-ptp-grid-lbl">Promise per invoice <span class="cc-req">*</span></label>
+            <div id="cc-ptp-grid-hint" style="font-size:11.5px;color:var(--txt3);margin:-.1rem 0 .4rem"></div>
+            <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:7px">
+              <table style="border-collapse:separate;border-spacing:0;width:100%;min-width:620px" id="cc-ptp-grid-tbl"></table>
+            </div>
+            <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.45rem">
+              <button type="button" onclick="ccPtpGridFillDates()" style="font-size:11.5px;padding:.25rem .7rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--navy2)">Copy 1st date to all</button>
+              <button type="button" onclick="ccPtpGridFillTds()" style="font-size:11.5px;padding:.25rem .7rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--navy2)">Copy 1st TDS % to all</button>
+              <span id="cc-ptp-grid-tot" style="font-size:12px;color:var(--txt2);margin-left:auto"></span>
+            </div>
           </div>
           <div class="cc-field">
-            <label class="cc-label">Promise Date <span class="cc-req">*</span></label>
-            <input type="date" id="cc-promised-date" class="cc-input" style="max-width:200px" oninput="ccUpdateFollowUpSuggestion()">
-          </div>
-          <div class="cc-field">
-            <label class="cc-label">Who gave this date? <span class="cc-req">*</span></label>
+            <label class="cc-label">Who gave these dates? <span class="cc-req">*</span></label>
             <div style="display:flex;gap:.5rem;max-width:340px">
               <button type="button" class="cc-opt-btn cc-sm" data-val="customer" onclick="ccSetPtpGivenBy('customer')" id="cc-gb-customer">Customer gave it</button>
               <button type="button" class="cc-opt-btn cc-sm" data-val="self"     onclick="ccSetPtpGivenBy('self')"     id="cc-gb-self">My own estimate</button>
             </div>
-          </div>
-          <div class="cc-field">
-            <label class="cc-label">TDS % (optional — deducted on base value before GST)</label>
-            <input type="number" id="cc-tds-pct" class="cc-input" placeholder="e.g. 2" min="0" max="30" step="0.01" style="max-width:200px">
           </div>
         </div>
       </div>
@@ -6487,7 +6487,7 @@ function ccMakeState() {
     connected: null, contactId: null, channel: null, outcome: null,
     paymentType: null, fullConfirmed: false, ackReason: null,
     disputeType: null, needsHelp: false, escalationNeeded: false,
-    contacts: [], fuAutoSet: false, ptpGivenBy: null,
+    contacts: [], fuAutoSet: false, ptpGivenBy: null, ptpRows: {},
   };
 }
 
@@ -6742,7 +6742,7 @@ function ccRenderDaySummary() {
 function ccResetForm() {
   _ccState = ccMakeState();
   const ids = ['cc-cust-input','cc-fu-date','cc-fu-date-nc','cc-note','cc-note-nc',
-                'cc-promised-amount','cc-promised-date','cc-tds-pct','cc-esc-who','cc-esc-what',
+                'cc-esc-who','cc-esc-what',
                 'cc-dispute-desc','cc-dispute-amount','cc-int-who','cc-int-fu-date','cc-int-note'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('cc-int-type').value = 'external';
@@ -6766,7 +6766,7 @@ function ccResetForm() {
   document.getElementById('cc-sec5').style.display            = 'none';
   document.getElementById('cc-sec6').style.display            = 'none';
   document.getElementById('cc-full-confirm').style.display    = 'none';
-  document.getElementById('cc-partial-amount').style.display  = 'none';
+  { const g = document.getElementById('cc-ptp-grid-field'); if (g) g.style.display = 'none'; }
   document.getElementById('cc-esc-fields').style.display      = 'none';
   document.getElementById('cc-esc-prompt').style.display      = '';
   const miniWrap = document.getElementById('cc-contacts-mini-wrap');
@@ -6907,6 +6907,7 @@ function ccInvCheck(invId, checked) {
   else _ccState.selectedInvIds.delete(invId);
   ccUpdateConnectedBtnState();
   ccUpdateDisputesPanel();
+  ccRenderPtpGrid();          // grid follows the invoice selection
 }
 function ccToggleInvoice(invId) { ccInvRowClick({target:{}}, invId); } // legacy compat
 
@@ -7118,6 +7119,7 @@ function ccSetOutcome(val) {
   _ccState.needsHelp    = false;
   _ccState.fuAutoSet    = false;
   _ccState.ptpGivenBy   = null;
+  _ccState.ptpRows      = {};
   document.querySelectorAll('#cc-gb-customer, #cc-gb-self').forEach(b => b.classList.remove('selected'));
   document.getElementById('cc-needs-help').checked = false;
   document.querySelectorAll('#cc-outcome-btns .cc-opt-btn').forEach(b =>
@@ -7148,7 +7150,7 @@ function ccHideBranches() {
   document.getElementById('cc-branch-ack').style.display      = 'none';
   document.getElementById('cc-branch-dispute').style.display  = 'none';
   document.getElementById('cc-full-confirm').style.display    = 'none';
-  document.getElementById('cc-partial-amount').style.display  = 'none';
+  { const g = document.getElementById('cc-ptp-grid-field'); if (g) g.style.display = 'none'; }
   document.querySelectorAll('#cc-paytype-btns .cc-opt-btn').forEach(b => b.classList.remove('selected'));
 }
 
@@ -7159,18 +7161,133 @@ function ccSetPaymentType(val) {
   document.querySelectorAll('#cc-paytype-btns .cc-opt-btn').forEach(b =>
     b.classList.toggle('selected', b.dataset.val === val)
   );
-  document.getElementById('cc-full-confirm').style.display   = val === 'full'    ? '' : 'none';
-  document.getElementById('cc-partial-amount').style.display = val === 'partial' ? '' : 'none';
+  document.getElementById('cc-full-confirm').style.display = val === 'full' ? '' : 'none';
   if (val === 'full') {
-    const total = [..._ccState.selectedInvIds].reduce((s, id) => {
-      const inv = _ccState.invoices.find(i => i.invoice_id === id);
-      return s + (inv ? (inv.balance_inr || inv.balance || 0) : 0);
-    }, 0);
+    const total = ccPtpInvoices().reduce((s, inv) => s + ccInvBal(inv), 0);
     const n = _ccState.selectedInvIds.size;
     document.getElementById('cc-full-confirm-txt').textContent =
       `Full payment = ₹${f(total)} across ${n} invoice${n !== 1 ? 's' : ''} — correct?`;
     document.querySelectorAll('#cc-full-confirm .cc-opt-btn').forEach(b => b.classList.remove('selected'));
   }
+  ccRenderPtpGrid();
+}
+
+/* ── Per-invoice PTP grid ────────────────────────────────────
+   Every selected invoice gets its own amount, date and TDS %. Full payment
+   locks each amount to that invoice's outstanding balance and includes all
+   of them; partial lets the collector pick which invoices were promised and
+   type a part amount per invoice. Dates and TDS stay per-invoice either way. */
+const ccInvBal = inv => Number(inv?.balance_inr || inv?.balance || 0);
+function ccPtpInvoices() {
+  return [..._ccState.selectedInvIds]
+    .map(id => _ccState.invoices.find(i => i.invoice_id === id))
+    .filter(Boolean);
+}
+const ccPtpRowId = (id, part) => `cc-ptp-${part}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+function ccRenderPtpGrid() {
+  const field = document.getElementById('cc-ptp-grid-field');
+  const tbl   = document.getElementById('cc-ptp-grid-tbl');
+  if (!field || !tbl) return;
+  const isPayment = _ccState.outcome === 'payment_committed';
+  const invs = ccPtpInvoices();
+  if (!isPayment || !_ccState.paymentType || !invs.length) { field.style.display = 'none'; return; }
+  field.style.display = '';
+  const full = _ccState.paymentType === 'full';
+
+  document.getElementById('cc-ptp-grid-lbl').innerHTML = full
+    ? 'Promise date per invoice <span class="cc-req">*</span>'
+    : 'Promise per invoice <span class="cc-req">*</span>';
+  document.getElementById('cc-ptp-grid-hint').textContent = full
+    ? 'All selected invoices are committed in full — set the date each one is expected on.'
+    : 'Tick the invoices that were promised, then set the amount and date for each.';
+
+  const th = 'padding:.35rem .55rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap';
+  const td = 'padding:.3rem .55rem;font-size:12px;border-bottom:1px solid var(--line);vertical-align:middle';
+  const inp = 'font-size:12px;padding:.25rem .4rem;border:1px solid var(--brd);border-radius:4px;background:#fff;color:var(--ink);width:100%;box-sizing:border-box';
+
+  tbl.innerHTML = `
+    <thead><tr>
+      ${full ? '' : `<th style="${th};width:34px"></th>`}
+      <th style="${th}">Invoice #</th>
+      <th style="${th};text-align:right">Outstanding</th>
+      <th style="${th};width:130px">Amount (₹)</th>
+      <th style="${th};width:150px">Promise Date</th>
+      <th style="${th};width:90px">TDS %</th>
+    </tr></thead>
+    <tbody>${invs.map(inv => {
+      const id = inv.invoice_id, bal = ccInvBal(inv);
+      const prev = _ccState.ptpRows?.[id] || {};
+      const on = full || prev.included !== false;
+      return `<tr data-ptp-row="${escHtml(id)}"${on ? '' : ' style="opacity:.5"'}>
+        ${full ? '' : `<td style="${td}"><input type="checkbox" id="${ccPtpRowId(id,'on')}" ${on ? 'checked' : ''} data-iid="${escHtml(id)}" onchange="ccPtpToggleRow(this.dataset.iid,this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)"></td>`}
+        <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(inv.invoice_number || id)}</td>
+        <td style="${td};text-align:right;font-family:var(--mono);color:var(--txt2)">₹${f(bal)}</td>
+        <td style="${td}">${full
+          ? `<span style="font-family:var(--mono);font-weight:600">₹${f(bal)}</span><input type="hidden" id="${ccPtpRowId(id,'amt')}" value="${bal}">`
+          : `<input type="number" id="${ccPtpRowId(id,'amt')}" value="${prev.amount != null ? prev.amount : ''}" placeholder="${Math.round(bal)}" min="1" max="${bal}" data-iid="${escHtml(id)}" oninput="ccPtpGridChanged()" style="${inp};font-family:var(--mono)">`}</td>
+        <td style="${td}"><input type="date" id="${ccPtpRowId(id,'date')}" value="${prev.date || ''}" data-iid="${escHtml(id)}" oninput="ccPtpGridChanged()" style="${inp}"></td>
+        <td style="${td}"><input type="number" id="${ccPtpRowId(id,'tds')}" value="${prev.tds != null ? prev.tds : ''}" placeholder="—" min="0" max="30" step="0.01" data-iid="${escHtml(id)}" oninput="ccPtpGridChanged()" style="${inp};font-family:var(--mono)"></td>
+      </tr>`;
+    }).join('')}</tbody>`;
+  ccPtpGridChanged();
+}
+
+// Reads the grid back into state; also drives the running total + follow-up hint
+function ccPtpGridChanged() {
+  const invs = ccPtpInvoices();
+  const rows = {};
+  let total = 0, n = 0;
+  invs.forEach(inv => {
+    const id = inv.invoice_id, bal = ccInvBal(inv);
+    const onEl = document.getElementById(ccPtpRowId(id, 'on'));
+    const included = _ccState.paymentType === 'full' ? true : (onEl ? onEl.checked : true);
+    const amtEl = document.getElementById(ccPtpRowId(id, 'amt'));
+    const raw = amtEl ? parseFloat(amtEl.value) : NaN;
+    const amount = _ccState.paymentType === 'full' ? bal : (isNaN(raw) ? null : raw);
+    rows[id] = {
+      included,
+      amount,
+      date: document.getElementById(ccPtpRowId(id, 'date'))?.value || '',
+      tds:  (() => { const v = parseFloat(document.getElementById(ccPtpRowId(id, 'tds'))?.value); return isNaN(v) ? null : v; })(),
+      balance: bal,
+      invoiceNumber: inv.invoice_number || id,
+    };
+    if (included) { n++; total += (amount != null ? amount : bal); }
+  });
+  _ccState.ptpRows = rows;
+  const totEl = document.getElementById('cc-ptp-grid-tot');
+  if (totEl) totEl.innerHTML = `<strong>${n}</strong> invoice${n === 1 ? '' : 's'} · promised <strong style="font-family:var(--mono)">₹${f(total)}</strong>`;
+  document.querySelectorAll('#cc-ptp-grid-tbl tr[data-ptp-row]').forEach(tr => {
+    const r = rows[tr.dataset.ptpRow];
+    tr.style.opacity = r && r.included ? '' : '.5';
+  });
+  ccUpdateFollowUpSuggestion();
+}
+
+function ccPtpToggleRow(id, on) {
+  if (_ccState.ptpRows?.[id]) _ccState.ptpRows[id].included = on;
+  ccPtpGridChanged();
+}
+// Bulk helpers — one conversation usually lands on one date for everything
+function ccPtpGridFillDates() {
+  const invs = ccPtpInvoices();
+  const first = invs.map(i => document.getElementById(ccPtpRowId(i.invoice_id, 'date'))?.value).find(Boolean);
+  if (!first) return;
+  invs.forEach(i => { const el = document.getElementById(ccPtpRowId(i.invoice_id, 'date')); if (el) el.value = first; });
+  ccPtpGridChanged();
+}
+function ccPtpGridFillTds() {
+  const invs = ccPtpInvoices();
+  const first = invs.map(i => document.getElementById(ccPtpRowId(i.invoice_id, 'tds'))?.value).find(v => v !== '' && v != null);
+  if (first == null || first === '') return;
+  invs.forEach(i => { const el = document.getElementById(ccPtpRowId(i.invoice_id, 'tds')); if (el) el.value = first; });
+  ccPtpGridChanged();
+}
+// The earliest promised date drives the follow-up suggestion
+function ccPtpEarliestDate() {
+  return Object.values(_ccState.ptpRows || {})
+    .filter(r => r.included && r.date).map(r => r.date).sort()[0] || '';
 }
 
 function ccSetFullConfirm(yes) {
@@ -7242,7 +7359,7 @@ function ccFuDateManualEdit() { _ccState.fuAutoSet = false; }
 
 function ccUpdateFollowUpSuggestion() {
   const outcome  = _ccState.outcome;
-  const promDate = document.getElementById('cc-promised-date').value;
+  const promDate = ccPtpEarliestDate();
   const hintEl   = document.getElementById('cc-fu-hint');
   const fuInput  = document.getElementById('cc-fu-date');
   let suggested  = null;
@@ -7287,14 +7404,20 @@ function ccValidate() {
   if (s.outcome === 'payment_committed') {
     if (!s.paymentType)                       return 'Please select Full or Partial payment.';
     if (s.paymentType === 'full' && !s.fullConfirmed) return 'Please confirm the full payment amount is correct.';
-    if (s.paymentType === 'partial') {
-      const amt = parseFloat(document.getElementById('cc-promised-amount').value);
-      if (!amt || amt <= 0) return 'Please enter the promised amount.';
+    // Each promised invoice needs its own amount and date
+    const picked = Object.values(s.ptpRows || {}).filter(r => r.included);
+    if (!picked.length) return 'Please tick at least one invoice that was promised.';
+    const today = new Date(Date.now() + 330*60000).toISOString().slice(0, 10);
+    for (const r of picked) {
+      const inv = r.invoiceNumber;
+      if (s.paymentType === 'partial') {
+        if (!r.amount || r.amount <= 0)  return `Enter the promised amount for ${inv}.`;
+        if (r.amount > r.balance + 0.5)  return `Promised amount for ${inv} exceeds its outstanding ₹${f(r.balance)}.`;
+      }
+      if (!r.date)      return `Enter a promise date for ${inv}.`;
+      if (r.date < today) return `Promise date for ${inv} must be today or in the future.`;
     }
-    const pd = document.getElementById('cc-promised-date').value;
-    if (!pd) return 'Please enter a promise date.';
-    if (pd < new Date().toISOString().slice(0,10)) return 'Promise date must be today or in the future.';
-    if (!s.ptpGivenBy) return 'Please select who gave this date — customer or your own estimate.';
+    if (!s.ptpGivenBy) return 'Please select who gave these dates — customer or your own estimate.';
   }
   if (s.outcome === 'payment_acknowledged_no_commitment' && !s.ackReason) return 'Please select an acknowledgement reason.';
   if (s.outcome === 'dispute_raised' && !s.disputeType) return 'Please select a dispute type.';
@@ -7313,12 +7436,12 @@ async function ccSubmit() {
   if (errMsg) { errEl.textContent = errMsg; return; }
   errEl.textContent = '';
   if (isConn && _ccState.outcome === 'payment_committed') {
-    const ptpVal = document.getElementById('cc-promised-date').value;
-    if (ptpVal) {
-      const [py, pm, pd] = ptpVal.split('-').map(Number);
-      const dow = new Date(py, pm - 1, pd).getDay();
-      if ((dow === 0 || dow === 6) && !confirm(`This PTP date falls on a ${dow === 0 ? 'Sunday' : 'Saturday'}. Are you sure?`)) return;
-    }
+    // Weekend warning covers every distinct promised date in the grid
+    const weekend = [...new Set(Object.values(_ccState.ptpRows || {})
+      .filter(r => r.included && r.date).map(r => r.date))]
+      .filter(dt => { const [py, pm, pd] = dt.split('-').map(Number); const w = new Date(py, pm - 1, pd).getDay(); return w === 0 || w === 6; })
+      .sort();
+    if (weekend.length && !confirm(`${weekend.length === 1 ? 'This PTP date falls' : 'These PTP dates fall'} on a weekend: ${weekend.join(', ')}. Are you sure?`)) return;
   }
   const submitBtnId = isConn ? 'cc-submit-conn' : 'cc-submit-nc';
   const btn = document.getElementById(submitBtnId);
@@ -7339,10 +7462,11 @@ async function ccSubmit() {
       channel:             isConn ? s.channel : null,
       outcome:             isConn ? s.outcome : null,
       payment_type:        (isConn && s.outcome === 'payment_committed') ? s.paymentType : null,
+      // The interaction row carries the roll-up; per-invoice detail lives in
+      // invoice_ptp / ptp_events, written from the grid below.
       promised_amount:     (isConn && s.outcome === 'payment_committed' && s.paymentType === 'partial')
-                             ? parseFloat(document.getElementById('cc-promised-amount').value) : null,
-      promised_date:       (isConn && s.outcome === 'payment_committed')
-                             ? document.getElementById('cc-promised-date').value : null,
+                             ? Object.values(s.ptpRows || {}).filter(r => r.included).reduce((t, r) => t + (r.amount || 0), 0) : null,
+      promised_date:       (isConn && s.outcome === 'payment_committed') ? ccPtpEarliestDate() : null,
       ack_reason:          (isConn && s.outcome === 'payment_acknowledged_no_commitment') ? s.ackReason : null,
       dispute_type:        (isConn && s.outcome === 'dispute_raised') ? s.disputeType : null,
       dispute_description: (isConn && s.outcome === 'dispute_raised') ? (document.getElementById('cc-dispute-desc')?.value.trim() || null) : null,
@@ -7367,14 +7491,14 @@ async function ccSubmit() {
         headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify(joinRows),
       });
-      // A promised date on the interaction moves the PTP of every linked
-      // invoice — recorded in ptp_events so PTP slippage stays trackable.
-      if (payload.promised_date) {
-        const tdsPctVal = document.getElementById('cc-tds-pct')?.value || null;
-        for (const invId of s.selectedInvIds) {
+      // Each promised invoice gets its own PTP date, amount and TDS % straight
+      // from the grid — recorded in ptp_events so slippage stays trackable.
+      if (s.outcome === 'payment_committed') {
+        for (const [invId, row] of Object.entries(s.ptpRows || {})) {
+          if (!row.included || !row.date) continue;
           const inv = s.invoices.find(i => i.invoice_id === invId);
-          const invBal = Number(inv?.balance_inr || inv?.balance || 0);
-          try { await setInvoicePtp(invId, inv?.invoice_number || invId, s.customerName, payload.promised_date, 'interaction', interaction.id, payload.promised_amount, tdsPctVal, invBal, s.ptpGivenBy); }
+          const amt = s.paymentType === 'full' ? null : row.amount;   // null = full balance
+          try { await setInvoicePtp(invId, row.invoiceNumber || invId, s.customerName, row.date, 'interaction', interaction.id, amt, row.tds, row.balance, s.ptpGivenBy); }
           catch(e) { console.warn('PTP update from interaction failed:', e); }
         }
       }
