@@ -10260,20 +10260,57 @@ async function ccLoadFollowUps() {
       internalRows = internalRows.filter(i => i.collector_id === CURRENT_USER?.id);
     }
 
-    // A follow-up commitment is superseded the moment a newer touch is logged
-    // for the same customer — doing the follow-up IS logging that next entry.
-    // So only each customer's most recent touch carries a live follow-up.
-    const touches = [
-      ...rows.map(i => ({ ...i, _internal: false })),
-      ...internalRows.map(i => ({ ...i, _internal: true })),
-    ].filter(i => i.customer_name);
-    const latestByCust = {};
-    touches.forEach(i => {
-      const k = i.customer_name;
-      if (!latestByCust[k] || new Date(i.created_at) > new Date(latestByCust[k].created_at)) latestByCust[k] = i;
+    // Which invoices each interaction discussed — follow-ups are tracked per
+    // invoice, so one interaction covering three invoices is three commitments.
+    const invByInteraction = {};
+    if (rows.length) {
+      const jr = await fetch(
+        `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${rows.map(i => encodeURIComponent(i.id)).join(',')})&select=interaction_id,invoice_id`,
+        { headers: cmrrHdr() }
+      );
+      if (jr.ok) (await jr.json()).forEach(j => { (invByInteraction[j.interaction_id] = invByInteraction[j.interaction_id] || []).push(j.invoice_id); });
+    }
+    // invoice_id → invoice_number, and the invoice set seen per customer
+    const allInvIds = [...new Set(Object.values(invByInteraction).flat())];
+    const invNumMap = {};
+    if (allInvIds.length) {
+      const nr = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?invoice_id=in.(${allInvIds.map(encodeURIComponent).join(',')})&select=invoice_id,invoice_number`,
+        { headers: cmrrHdr() }
+      );
+      if (nr.ok) (await nr.json()).forEach(x => { invNumMap[x.invoice_id] = x.invoice_number || x.invoice_id; });
+    }
+    const invoicesByCust = {};
+    rows.forEach(i => (invByInteraction[i.id] || []).forEach(id => {
+      (invoicesByCust[i.customer_name] = invoicesByCust[i.customer_name] || new Set()).add(id);
+    }));
+
+    // A commitment is superseded the moment a newer touch lands on the same
+    // invoice — doing the follow-up IS logging that next entry. So only the
+    // most recent touch per invoice carries a live follow-up. Internal
+    // discussions have no invoice link, so they count as a touch on every
+    // invoice of that customer.
+    const touches = [];
+    rows.filter(i => i.customer_name).forEach(i => {
+      const invs = invByInteraction[i.id] || [];
+      if (invs.length) invs.forEach(id => touches.push({ ...i, _internal: false, _key: 'inv::' + id, _invoiceId: id }));
+      else touches.push({ ...i, _internal: false, _key: 'cust::' + i.customer_name });
     });
-    rows = Object.values(latestByCust).filter(i => i.follow_up_date)
-      .sort((a, b) => (a.follow_up_date || '').localeCompare(b.follow_up_date || ''));
+    internalRows.filter(i => i.customer_name).forEach(i => {
+      const invs = [...(invoicesByCust[i.customer_name] || [])];
+      if (invs.length) invs.forEach(id => touches.push({ ...i, _internal: true, _key: 'inv::' + id, _invoiceId: id }));
+      else touches.push({ ...i, _internal: true, _key: 'cust::' + i.customer_name });
+    });
+
+    const latestByKey = {};
+    touches.forEach(t => {
+      const k = t._key;
+      if (!latestByKey[k] || new Date(t.created_at) > new Date(latestByKey[k].created_at)) latestByKey[k] = t;
+    });
+    rows = Object.values(latestByKey).filter(i => i.follow_up_date)
+      .map(i => ({ ...i, _invoiceNumber: i._invoiceId ? (invNumMap[i._invoiceId] || i._invoiceId) : '' }))
+      .sort((a, b) => (a.follow_up_date || '').localeCompare(b.follow_up_date || '')
+                   || (a.customer_name || '').localeCompare(b.customer_name || ''));
 
     if (!rows.length) {
       contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No open follow-ups — every logged follow-up has been actioned.</div>';
@@ -10309,7 +10346,7 @@ async function ccLoadFollowUps() {
               <div style="font-size:11px;font-weight:700;color:${color}">${i.follow_up_date}</div>
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:600;color:var(--ink)">${escHtml(i.customer_name||'')}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--ink)">${escHtml(i.customer_name||'')}${i._invoiceNumber ? `<span style="font-family:var(--mono);font-size:11px;font-weight:500;color:var(--txt3);margin-left:.4rem">${escHtml(i._invoiceNumber)}</span>` : ''}</div>
               <div style="margin-top:.2rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${opill}${buCap(arGetBu(i.customer_name||''))}${collector?pocCap(collector):''}</div>
               ${i.note?`<div style="font-size:12px;color:var(--txt2);margin-top:.2rem;font-style:italic">${escHtml(i.note)}</div>`:''}
               <div style="font-size:11px;color:var(--txt3);margin-top:.2rem">Logged: ${loggedDate}</div>
