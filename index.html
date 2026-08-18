@@ -583,6 +583,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div class="ar-card c-total"   id="ar-card-total"></div>
     </div>
     <div class="ar-aging-bar-wrap" id="ar-aging-bar-wrap" style="display:none"></div>
+    <div id="ar-upcoming-wrap" style="margin-bottom:1rem"></div>
     <div style="display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
       <select class="nret-sel" id="ar-f-entity" onchange="renderAR()" style="font-size:12px">
         <option value="">All Entities</option>
@@ -4899,6 +4900,66 @@ function renderARSummary(rows) {
 
   // render aging composition bar
   renderARAgingBar(rows);
+  renderARUpcoming(rows);
+}
+
+// Not-yet-due AR split by the month it falls due, so a month's projection can
+// be checked against what is actually collectable in that month. Overdue AR is
+// shown as its own leading column — it is collectable now, not in a future month.
+function renderARUpcoming(rows) {
+  const wrap = document.getElementById('ar-upcoming-wrap');
+  if (!wrap) return;
+  const inr = r => arInr(r);
+  const crFull = v => '₹' + Math.round(v).toLocaleString('en-IN');
+  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+
+  const overdueRows = rows.filter(r => arOverdueDays(r.due_date) > 0);
+  const overdueBal  = overdueRows.reduce((s, r) => s + inr(r), 0);
+
+  // Bucket the not-yet-due rows by due month
+  const byMonth = {};
+  rows.filter(r => arOverdueDays(r.due_date) <= 0 && r.due_date).forEach(r => {
+    const m = String(r.due_date).slice(0, 7);
+    if (!byMonth[m]) byMonth[m] = { bal: 0, count: 0 };
+    byMonth[m].bal += inr(r);
+    byMonth[m].count++;
+  });
+  const months = Object.keys(byMonth).sort();
+  if (!months.length && overdueBal <= 0) { wrap.innerHTML = ''; return; }
+
+  const mLbl = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  const notDueTotal = months.reduce((s, m) => s + byMonth[m].bal, 0);
+
+  const th = 'padding:.45rem .7rem;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:right;white-space:nowrap';
+  const td = 'padding:.45rem .7rem;font-size:12.5px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--line);white-space:nowrap';
+
+  wrap.innerHTML = `
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);margin-bottom:.4rem">Collectable AR by Month</div>
+    <div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px">
+      <table style="border-collapse:separate;border-spacing:0;width:100%;min-width:520px">
+        <thead><tr>
+          <th style="${th};text-align:left">&nbsp;</th>
+          <th style="${th};color:#b91c1c">Overdue (now)</th>
+          ${months.map(m => `<th style="${th}">${mLbl(m)}</th>`).join('')}
+          <th style="${th};background:#eef1f6">Total</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="${td};text-align:left;font-family:var(--sans);font-weight:600">Amount due</td>
+            <td style="${td};font-weight:700;color:#b91c1c" title="${crFull(overdueBal)}">${cr(overdueBal)}</td>
+            ${months.map(m => `<td style="${td};font-weight:600" title="${crFull(byMonth[m].bal)}">${cr(byMonth[m].bal)}</td>`).join('')}
+            <td style="${td};font-weight:700;background:#f8fafc" title="${crFull(overdueBal + notDueTotal)}">${cr(overdueBal + notDueTotal)}</td>
+          </tr>
+          <tr>
+            <td style="${td};text-align:left;font-family:var(--sans);color:var(--txt3)">Invoices</td>
+            <td style="${td};color:var(--txt3)">${overdueRows.length}</td>
+            ${months.map(m => `<td style="${td};color:var(--txt3)">${byMonth[m].count}</td>`).join('')}
+            <td style="${td};color:var(--txt3);background:#f8fafc">${overdueRows.length + months.reduce((s, m) => s + byMonth[m].count, 0)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--txt3);margin-top:.35rem">Not-yet-due AR grouped by the month its invoices fall due — compare a month's column against that month's collection projection. Follows the filters above.</div>`;
 }
 
 function renderARAgingBar(rows) {
@@ -7431,6 +7492,14 @@ async function ccLoadHistory() {
   if (from)     ptpUrl += `&created_at=gte.${encodeURIComponent(from)}`;
   if (to)       ptpUrl += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
 
+  // Internal discussions belong in the same timeline. They carry no outcome,
+  // so an outcome filter excludes them entirely.
+  let intUrl = `${SUPABASE_URL}/rest/v1/internal_interactions?order=created_at.desc&limit=200&select=*`;
+  if (custName)        intUrl += `&customer_name=eq.${encodeURIComponent(custName)}`;
+  if (from)            intUrl += `&created_at=gte.${encodeURIComponent(from)}`;
+  if (to)              intUrl += `&created_at=lte.${encodeURIComponent(to + 'T23:59:59')}`;
+  if (collectorFilter) intUrl += `&collector_id=eq.${encodeURIComponent(collectorFilter)}`;
+
   try {
     const r = await fetch(url, { headers: cmrrHdr() });
     let ptpEvents = [];
@@ -7440,6 +7509,13 @@ async function ccLoadHistory() {
         if (pr.ok) ptpEvents = await pr.json();
       } catch(_) {}
     }
+    let internalRows = [];
+    if (!outcome) {
+      try {
+        const ir = await fetch(intUrl, { headers: cmrrHdr() });
+        if (ir.ok) internalRows = await ir.json();
+      } catch(_) {}
+    }
     if (!r.ok) { contentEl.innerHTML = '<div style="color:var(--red);font-size:12px">Error loading history.</div>'; return; }
     let rows = await r.json();
 
@@ -7447,20 +7523,21 @@ async function ccLoadHistory() {
     const isCollectorRole = (USER_ACCESS?.role || '') === 'collector';
     if (isCollectorRole && !custName) {
       rows = rows.filter(i => _ccCustNames.includes(i.customer_name));
+      internalRows = internalRows.filter(i => !i.customer_name || _ccCustNames.includes(i.customer_name));
     }
 
-    if (!rows.length) {
+    if (!rows.length && !internalRows.length) {
       contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No interactions found for the selected filters.</div>';
       return;
     }
 
     // Fetch invoice IDs for all interactions
     const ids = rows.map(i => i.id);
-    const jr  = await fetch(
+    const jr  = ids.length ? await fetch(
       `${SUPABASE_URL}/rest/v1/interaction_invoices?interaction_id=in.(${ids.map(encodeURIComponent).join(',')})&select=interaction_id,invoice_id`,
       { headers: cmrrHdr() }
-    );
-    const joinRows = jr.ok ? await jr.json() : [];
+    ) : null;
+    const joinRows = jr && jr.ok ? await jr.json() : [];
     const invMap   = {};
     joinRows.forEach(j => { if (!invMap[j.interaction_id]) invMap[j.interaction_id] = []; invMap[j.interaction_id].push(j.invoice_id); });
 
@@ -7556,15 +7633,18 @@ async function ccLoadHistory() {
       ${analyticsHtml}
       <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
         ${heading}
-        <span style="font-size:11.5px;color:var(--txt3)">${filtered.length} interaction${filtered.length !== 1 ? 's' : ''}</span>
+        <span style="font-size:11.5px;color:var(--txt3)">${filtered.length} interaction${filtered.length !== 1 ? 's' : ''}${internalRows.length ? ` · ${internalRows.length} internal` : ''}</span>
       </div>
       <div>
         ${(() => {
           let evs = ptpEvents;
           if (kw) evs = evs.filter(e => [e.customer_name, e.invoice_number, e.changed_by].join(' ').toLowerCase().includes(kw));
+          let ints = internalRows;
+          if (kw) ints = ints.filter(i => [i.customer_name, i.spoke_with, i.note].join(' ').toLowerCase().includes(kw));
           const merged = [
             ...filtered.map(i => ({ _at: i.created_at, _html: () => ccRenderTLItem(i, invMap[i.id] || [], contactMap, collectorMap) })),
             ...evs.map(e => ({ _at: e.created_at, _html: () => renderPtpEventItem(e) })),
+            ...ints.map(i => ({ _at: i.created_at, _html: () => renderInternalItem(i, collectorMap) })),
           ].sort((a, b) => new Date(b._at) - new Date(a._at));
           return merged.map(m => m._html()).join('');
         })()}
@@ -7936,6 +8016,24 @@ function renderPtpEventItem(e) {
     <div style="min-width:0">
       <div style="font-size:12px;color:var(--ink)">${label}${e.invoice_number ? ` <span style="color:var(--ink-faint);font-size:11px">· ${escHtml(e.invoice_number)}</span>` : ''}</div>
       <div style="font-size:11px;color:var(--txt3)">${dt} · ${escHtml(e.changed_by || '')}${e.source === 'interaction' ? ' · via logged interaction' : ' · direct update'}</div>
+    </div>
+  </div>`;
+}
+
+// Internal discussions logged from the Log Interaction form (Interaction
+// Type = Internal). Same timeline treatment as PTP events.
+function renderInternalItem(i, collectorMap) {
+  const dt = new Date(i.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const who = (collectorMap || {})[i.collector_id] || '';
+  return `<div style="display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .2rem;border-bottom:1px dashed var(--brd)">
+    <span style="font-size:13px;line-height:1.3">🏢</span>
+    <div style="min-width:0">
+      <div style="font-size:12px;color:var(--ink)">
+        <span style="font-size:9.5px;font-weight:700;color:#3730a3;background:#eef2ff;border:1px solid #c7d2fe;border-radius:4px;padding:.05rem .3rem;margin-right:.3rem">INTERNAL</span>
+        Spoke with <strong>${escHtml(i.spoke_with || '')}</strong>${i.customer_name ? ` <span style="color:var(--ink-faint);font-size:11px">· re ${escHtml(i.customer_name)}</span>` : ''}
+      </div>
+      ${i.note ? `<div style="font-size:12px;color:var(--txt2);font-style:italic;margin-top:.15rem">${escHtml(i.note)}</div>` : ''}
+      <div style="font-size:11px;color:var(--txt3)">${dt}${who ? ' · ' + escHtml(who) : ''}${i.follow_up_date ? ` · follow-up ${escHtml(i.follow_up_date)}` : ''}</div>
     </div>
   </div>`;
 }
@@ -10142,20 +10240,43 @@ async function ccLoadFollowUps() {
   const contentEl = document.getElementById('cc-followups-content');
   if (!contentEl) return;
   contentEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
-  const today   = new Date().toISOString().slice(0,10);
-  const since   = new Date(); since.setDate(since.getDate() - 30);
+  const today   = new Date(Date.now() + 330*60000).toISOString().slice(0,10); // IST day
+  const since   = new Date(); since.setDate(since.getDate() - 120);
   const sinceStr = since.toISOString().slice(0,10);
   try {
-    let url = `${SUPABASE_URL}/rest/v1/interactions?follow_up_date=not.is.null&follow_up_date=gte.${sinceStr}&order=follow_up_date.asc&limit=300&select=id,customer_name,follow_up_date,outcome,connected,collector_id,note,created_at`;
-    const r = await fetch(url, { headers: cmrrHdr() });
+    // Fetch by created_at (not follow_up_date) so every recent touch is known —
+    // that is what tells us whether an older follow-up has since been actioned.
+    const [r, ir] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/interactions?created_at=gte.${sinceStr}&order=created_at.desc&limit=1000&select=id,customer_name,follow_up_date,outcome,connected,collector_id,note,created_at`, { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/internal_interactions?created_at=gte.${sinceStr}&order=created_at.desc&limit=1000&select=id,customer_name,follow_up_date,collector_id,note,created_at,spoke_with`, { headers: cmrrHdr() }),
+    ]);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     let rows = await r.json();
+    let internalRows = ir.ok ? await ir.json() : [];
 
     const isCollectorRole = (USER_ACCESS?.role || '') === 'collector';
-    if (isCollectorRole) rows = rows.filter(i => i.collector_id === CURRENT_USER?.id);
+    if (isCollectorRole) {
+      rows = rows.filter(i => i.collector_id === CURRENT_USER?.id);
+      internalRows = internalRows.filter(i => i.collector_id === CURRENT_USER?.id);
+    }
+
+    // A follow-up commitment is superseded the moment a newer touch is logged
+    // for the same customer — doing the follow-up IS logging that next entry.
+    // So only each customer's most recent touch carries a live follow-up.
+    const touches = [
+      ...rows.map(i => ({ ...i, _internal: false })),
+      ...internalRows.map(i => ({ ...i, _internal: true })),
+    ].filter(i => i.customer_name);
+    const latestByCust = {};
+    touches.forEach(i => {
+      const k = i.customer_name;
+      if (!latestByCust[k] || new Date(i.created_at) > new Date(latestByCust[k].created_at)) latestByCust[k] = i;
+    });
+    rows = Object.values(latestByCust).filter(i => i.follow_up_date)
+      .sort((a, b) => (a.follow_up_date || '').localeCompare(b.follow_up_date || ''));
 
     if (!rows.length) {
-      contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No follow-ups found in the last 30 days.</div>';
+      contentEl.innerHTML = '<div style="font-size:12.5px;color:var(--txt3);padding:.5rem 0">No open follow-ups — every logged follow-up has been actioned.</div>';
       return;
     }
 
@@ -10178,7 +10299,9 @@ async function ccLoadFollowUps() {
         <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${color};margin-bottom:.55rem">${title} (${items.length})</div>
         ${items.map(i => {
           const oc = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
-          const opill = oc ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '';
+          const opill = i._internal
+            ? `<span class="cc-tl-pill" style="background:#eef2ff;color:#3730a3">Internal · ${escHtml(i.spoke_with || '')}</span>`
+            : (oc ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${CC_OUTCOME_LABELS[i.outcome]||i.outcome}</span>` : '');
           const collector = collectorMap[i.collector_id] || '';
           const loggedDate = new Date(i.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
           return `<div style="display:flex;align-items:flex-start;gap:.75rem;padding:.6rem .75rem;background:var(--surf);border:1px solid var(--brd);border-radius:7px;margin-bottom:.4rem">
