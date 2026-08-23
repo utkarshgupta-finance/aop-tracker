@@ -180,6 +180,8 @@ tr.alt td.aopvt{background:#f2f2f2}
 tr.tot td.aopv{background:#e0e0e0;font-weight:600}
 tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem}
+/* Reachable from rows inside the aging drill overlay (1200), so it must sit above it */
+#ar-inv-modal{z-index:1400}
 .modal-overlay.hidden{display:none}
 .modal{background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(960px,calc(100vw - 2rem));max-height:calc(100vh - 2rem);display:flex;flex-direction:column;overflow:hidden}
 .modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.25rem;border-bottom:1px solid var(--brd);background:#f5f7fa;flex-shrink:0}
@@ -1789,6 +1791,26 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>
     </div>
   </div>
+
+  <!-- ── Customer Overview Pane ─────────────────────────────── -->
+  <div id="customer-overview" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Customer Overview</span>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">One customer, end to end — exposure, promises, conversations</div>
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <div class="cc-cust-wrap" style="min-width:300px">
+          <input type="text" id="co-cust-input" class="cust-input" style="font-size:12px;width:100%;box-sizing:border-box" placeholder="Type to search customer…" oninput="coFilterCustomers()" onfocus="coFilterCustomers()" autocomplete="off">
+          <div id="co-cust-dd" class="cc-cust-dd" style="display:none"></div>
+        </div>
+        <button onclick="coRefresh()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="co-content">
+      <div style="color:var(--txt3);font-size:12.5px;padding:1.5rem .25rem">Pick a customer above to see their full picture.</div>
+    </div>
+  </div>
 </main>
 </div><!-- app-content -->
 </div><!-- app-layout -->
@@ -1997,6 +2019,8 @@ const ALL_TABS_CFG = [
   { id: 'confirmed-dates',     label: 'Confirmed Dates',     abbr: 'CD',  fn: 'showConfirmedDatesTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'bank-receipts',       label: 'Bank Receipts',       abbr: 'BR',  fn: 'showBankReceiptsTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector'] },
+  { id: 'customer-overview',   label: 'Customer Overview',   abbr: 'CO',  fn: 'showCustomerOverviewTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     abbr: 'RC',  fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            abbr: 'ST',  fn: 'showSettingsTab(this)',
@@ -3992,8 +4016,16 @@ let _arCvSortDir = -1; // -1=desc, 1=asc
 // or the two fight over the same globals and DOM ids. 'main' proxies the
 // existing globals so every current call site keeps working untouched.
 let _arDrill = null; // { bucketKey, label, ...view/sort state } while modal open
+// Named contexts resolve here. An unknown name throws rather than silently
+// falling through to 'main' — that fallback would paint into the pane's
+// container and overwrite _arLastRows, which both AR exports read from.
+const AR_CTX = { drill: () => _arDrill };
 function arCtxState(ctx) {
-  if (ctx === 'drill') return _arDrill;
+  if (ctx && ctx !== 'main') {
+    const get = AR_CTX[ctx];
+    if (!get) throw new Error('arCtxState: unknown ctx ' + ctx);
+    return get();
+  }
   return {
     wrapId: 'ar-invoice-wrap', idp: '',
     get view()      { return _arInvView; },   set view(v)      { _arInvView  = v; },
@@ -4196,6 +4228,7 @@ function arTotal(r) {
 
 function arSortClick(col, ctx = 'main') {
   const st = arCtxState(ctx);
+  if (!st) return;
   if (st.sortCol === col) {
     st.sortDir = (st.sortDir + 1) % 3;
     if (st.sortDir === 0) st.sortCol = null;
@@ -4584,6 +4617,7 @@ async function applyInvTag(invNum, entity, tagName) {
     if (!_arInvTags[k]) _arInvTags[k] = [];
     if (!_arInvTags[k].includes(tagName)) _arInvTags[k].push(tagName);
     renderARInvoiceList(_arLastRows);
+    arRefreshDrill();
   } catch(e) { console.warn('applyInvTag:', e); }
 }
 
@@ -4595,6 +4629,7 @@ async function removeInvTag(invNum, entity, tagName) {
     const k = `${invNum}||${entity}`;
     _arInvTags[k] = (_arInvTags[k] || []).filter(t => t !== tagName);
     renderARInvoiceList(_arLastRows);
+    arRefreshDrill();
   } catch(e) { console.warn('removeInvTag:', e); }
 }
 
@@ -4653,7 +4688,7 @@ async function loadAR() {
     status.textContent = '';
     renderAR();
     // Fetch disputes in background and re-render
-    _loadARDisputeMap().then(() => renderARInvoiceList(_arLastRows));
+    _loadARDisputeMap().then(() => { renderARInvoiceList(_arLastRows); arRefreshDrill(); });
   } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#a32d2d'; }
 }
 
@@ -4833,6 +4868,18 @@ function renderAR() {
   renderARAgingTable(rows);
   renderARInvoiceList(rows);
   renderARBuSummary(rows);
+  arRefreshDrill(rows);
+}
+
+// The aging drill is a window onto the same filtered set, so anything that
+// re-renders the pane must re-narrow and repaint the modal too — otherwise a
+// tag or PTP edit made inside it looks like it did nothing.
+function arRefreshDrill(rows) {
+  if (!_arDrill) return;
+  const src = rows || _arLastRows || [];
+  _arDrill.rows = _arDrill.bucketKey === '__all__'
+    ? src : src.filter(r => arAgeBucket(r.due_date) === _arDrill.bucketKey);
+  renderARInvoiceList(_arDrill.rows, 'drill');
 }
 
 const AR_BUCKETS = [
@@ -5002,7 +5049,9 @@ function renderARAgingBar(rows) {
   const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
   const activeBuckets = arGetActiveBuckets();
   const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, 0]));
-  rows.forEach(r => { buckets[arAgeBucket(r.due_date)] += inr(r); });
+  // Guarded: a row whose days fall outside every configured bracket returns a
+  // key with no bin, and an unguarded += would turn the whole bar into NaN.
+  rows.forEach(r => { const bk = arAgeBucket(r.due_date); if (buckets[bk] !== undefined) buckets[bk] += inr(r); });
   const segs = activeBuckets.map(b => {
     const pct = total > 0 ? (buckets[b.key] / total * 100) : 0;
     if (pct < 0.5) return '';
@@ -5550,13 +5599,17 @@ function arSetInvView(v) {
 
 function arCvSort(col, ctx = 'main') {
   const st = arCtxState(ctx);
+  if (!st) return;
   if (st.cvSortCol === col) st.cvSortDir = st.cvSortDir === -1 ? 1 : -1;
   else { st.cvSortCol = col; st.cvSortDir = -1; }
   renderARCustomerView(st.rows, ctx);
 }
 function arToggleCust(idx, ctx = 'main') {
-  const idp  = arCtxState(ctx).idp;
+  const st = arCtxState(ctx);
+  if (!st) return;
+  const idp  = st.idp;
   const hdr  = document.getElementById(`ar-cv-h${idp}${idx}`);
+  if (!hdr) return;
   const open = hdr.dataset.open === '1';
   document.querySelectorAll(`.ar-cv-i${idp}${idx}`).forEach(r => r.style.display = open ? 'none' : '');
   hdr.dataset.open = open ? '0' : '1';
@@ -5580,8 +5633,11 @@ function arPtpCellForInvoices(invs) {
 }
 
 function renderARCustomerView(rows, ctx = 'main') {
-  const st = arCtxState(ctx), idp = st.idp;
+  const st = arCtxState(ctx);
+  if (!st) return;
+  const idp = st.idp;
   const wrap = document.getElementById(st.wrapId);
+  if (!wrap) return;
   if (!rows.length) { wrap.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--txt3)">No invoices match the current filters.</div>'; return; }
 
   // Group by customer_name
@@ -5770,6 +5826,7 @@ function arExportOpenAR() {
 
 function renderARInvoiceList(rows, ctx = 'main') {
   const st = arCtxState(ctx);
+  if (!st) return;
   st.rows = rows;
   if (st.view === 'customer') { renderARCustomerView(rows, ctx); return; }
 
@@ -6004,6 +6061,7 @@ async function addCustTag(customerName, tagName) {
   if (_arCustTags[customerName].includes(tagName)) return;
   _arCustTags[customerName].push(tagName);
   renderARInvoiceList(_arLastRows);
+  arRefreshDrill();
   await fetch(`${SUPABASE_URL}/rest/v1/ar_customer_tags`, {
     method: 'POST',
     headers: { ...cmrrHdr(), Prefer: 'return=minimal' },
@@ -6014,6 +6072,7 @@ async function addCustTag(customerName, tagName) {
 async function removeCustTag(customerName, tagName) {
   _arCustTags[customerName] = (_arCustTags[customerName] || []).filter(t => t !== tagName);
   renderARInvoiceList(_arLastRows);
+  arRefreshDrill();
   await fetch(
     `${SUPABASE_URL}/rest/v1/ar_customer_tags?customer_name=eq.${encodeURIComponent(customerName)}&tag_name=eq.${encodeURIComponent(tagName)}`,
     { method: 'DELETE', headers: cmrrHdr() }
@@ -8147,7 +8206,8 @@ function arEditPtp(invoiceId, invoiceNumber, customerName, balanceInr, opts) {
   const maxAmt = opts.maxAmount != null ? Number(opts.maxAmount) : (balInr > 0.5 ? balInr : null);
   const ov = document.createElement('div');
   ov.id = 'ptp-edit-modal';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  // Above the aging drill overlay (1200) — it is opened from rows inside it
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1400;display:flex;align-items:center;justify-content:center;padding:1rem';
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:360px;width:100%;padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
     <div style="font-weight:700;font-size:14px;margin-bottom:.15rem">Set PTP date</div>
