@@ -8385,6 +8385,21 @@ let _cdOpening = {};      // invoice_id → { 'YYYY-MM-01': balance at month sta
 let _cdSortTotal = null;  // null = by name, else 'desc' | 'asc' on the Total column
 let _cdGivenBy = 'both';  // 'both' | 'customer' | 'self' — filters on the CURRENT (latest) PTP's given_by
 let _cdBank = {};         // 'YYYY-MM' → { invoice_id: cash received in bank } | null while loading
+// How promises have actually landed historically, used to show a calibrated
+// companion figure beside the raw expectation. The raw figure is never altered.
+let _cdKept = null;       // { scored, kept, rate } | null until loaded
+async function cdLoadKeptRate() {
+  if (_cdKept) return _cdKept;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/invoice_closures?closure_basis=eq.zoho_paid&ptp_date_at_close=not.is.null&select=closed_on,ptp_date_at_close`,
+      { headers: cmrrHdr() });
+    const rows = r.ok ? await r.json() : [];
+    const kept = rows.filter(x => x.closed_on <= x.ptp_date_at_close).length;
+    _cdKept = { scored: rows.length, kept, rate: rows.length ? kept / rows.length : null };
+  } catch(_) { _cdKept = { scored: 0, kept: 0, rate: null }; }
+  return _cdKept;
+}
 let _cdInvInfo = {};      // invoice_id → invoice info (open invoices + snapshot recoveries)
 
 // Cash received in bank for a month, per invoice — from Zoho customer payments
@@ -8426,6 +8441,7 @@ let _cdLoadedAt = 0;
 let _cdRefreshTimer = null;
 
 async function cdInit(force) {
+  cdLoadKeptRate().then(() => { if (_cdInited) cdFilterAndRender(); });
   if (!_cdInited) {
     _cdInited = true;
     // await the master so BU / POC resolve on the first paint
@@ -9308,6 +9324,9 @@ function cdFilterAndRender() {
   }
   const moneyLine = `<div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:baseline;margin-bottom:.5rem;font-size:12px">
     <span><span style="color:var(--txt3)">Expected in ${mLbl(_cdMonth)} (net of TDS):</span> <strong style="font-family:var(--mono);font-size:14px">₹${fmtFull(expectedNet)}</strong></span>
+    ${(_cdKept && _cdKept.rate != null && _cdKept.scored >= 20)
+      ? `<span title="${escHtml(`Historically ${_cdKept.kept} of ${_cdKept.scored} matured promises were paid on or before the date promised. This applies that rate to the figure on the left; it does not change it.`)}"><span style="color:var(--txt3)">On past form:</span> <strong style="font-family:var(--mono);font-size:14px;color:#b45309">₹${fmtFull(expectedNet * _cdKept.rate)}</strong> <span style="color:var(--txt3);font-size:11px">(${_cdKept.kept}/${_cdKept.scored} promises kept)</span></span>`
+      : ''}
     <span><span style="color:var(--txt3)">Collected in bank:</span> <strong style="font-family:var(--mono);font-size:14px;color:#166534">₹${bankLoading ? '…' : fmtFull(plannedCash + unplannedCash)}</strong>${bankLoading ? '' : ` <span style="color:var(--txt3)">(₹${fmtFull(plannedCash)} planned + ₹${fmtFull(unplannedCash)} unplanned)</span>`}</span>
     <span style="color:var(--txt3);font-size:11px">bank cash only — CN / TDS / JV closures excluded</span>
   </div>`;
@@ -10847,6 +10866,9 @@ async function ccLoadFollowUps() {
    anything that needs one — days-to-pay, promise-kept rate, a collection
    trend — is deliberately absent rather than estimated. */
 
+// Closures are only known from the day capture began; invoices settled before
+// this were deleted at source and are not retained anywhere.
+const CO_LEDGER_FROM = '2026-08-02';
 let _coInited   = false;
 let _coCustomer = null;
 const CO = { cache: {}, feed: [], kinds: null, page: 25, ttl: 5 * 60 * 1000 };
@@ -10935,7 +10957,7 @@ async function coLoadBundle(name) {
     try { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: cmrrHdr() }); return r.ok ? await r.json() : fallback; }
     catch(_) { return fallback; }
   };
-  const [interactions, internals, ptpEvents, disputes, contacts, advances, statement] = await Promise.all([
+  const [interactions, internals, ptpEvents, disputes, contacts, advances, statement, closures] = await Promise.all([
     get(`interactions?customer_name=eq.${q}&order=created_at.desc&limit=400&select=*`, []),
     get(`internal_interactions?customer_name=eq.${q}&order=created_at.desc&limit=200&select=*`, []),
     get(`ptp_events?customer_name=eq.${q}&order=created_at.desc&limit=400&select=*`, []),
@@ -10944,6 +10966,9 @@ async function coLoadBundle(name) {
     get(`contacts?customer_name=eq.${q}&order=name&select=*`, []),
     get(`customer_advances?customer_name=eq.${q}&order=payment_date.desc&select=*`, []),
     get(`customer_statement_balances?contact_name=eq.${q}&select=*`, []),
+    // Settled invoices — the only record that an invoice was ever paid, since
+    // ar_invoices holds open ones only.
+    get(`invoice_closures?customer_name=eq.${q}&order=closed_on.desc&select=*`, []),
   ]);
   // Which invoices each interaction covered, resolved to numbers for display
   const invMap = {};
@@ -10957,7 +10982,7 @@ async function coLoadBundle(name) {
     (await get(`user_access?user_id=in.(${ids.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`, []))
       .forEach(u => { collectorMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
   }
-  return { _at: Date.now(), interactions, internals, ptpEvents, disputes, contacts, advances, statement, invMap, collectorMap };
+  return { _at: Date.now(), interactions, internals, ptpEvents, disputes, contacts, advances, statement, closures, invMap, collectorMap };
 }
 
 
@@ -11084,6 +11109,29 @@ function coAdaptAdvance(a, ctx) {
   };
 }
 
+function coAdaptClosure(c, ctx) {
+  const paid = c.closure_basis === 'zoho_paid';
+  const wo   = c.closure_basis === 'zoho_write_off';
+  return {
+    id: 'close:' + c.invoice_id, kind: 'payment',
+    at: c.closed_on, atPrec: 'day',
+    title: paid ? 'Payment received' : wo ? 'Written off' : 'Left the open book',
+    subtitle: c.days_to_pay != null
+      ? `${c.days_to_pay} days from invoice${c.days_late != null ? `, ${c.days_late > 0 ? c.days_late + 'd past due' : Math.abs(c.days_late) + 'd before due'}` : ''}`
+      : '',
+    amount: Number(c.amount_paid ?? c.last_balance_inr ?? 0),
+    amountKind: paid ? 'received' : 'other',
+    amountNote: paid ? null : (wo ? 'written off' : 'reason not recorded'),
+    pills: c.ptp_date_at_close && paid
+      ? [c.closed_on <= c.ptp_date_at_close
+          ? { label: 'Promise kept', bg: '#dcfce7', fg: '#166534' }
+          : { label: 'Promise missed', bg: '#fee2e2', fg: '#991b1b' }]
+      : [],
+    invoices: c.invoice_number ? [c.invoice_number] : [],
+    facts: [{ k: 'Promised', v: c.ptp_date_at_close || '' }],
+  };
+}
+
 function coBuildFeed(name, b) {
   const invNumMap = {};
   (_arAllRows || []).filter(r => r.customer_name === name)
@@ -11095,6 +11143,7 @@ function coBuildFeed(name, b) {
     ...b.ptpEvents.map(e => coAdaptPtpEvent(e, ctx)),
     ...b.disputes.map(d => coAdaptDispute(d, ctx)),
     ...b.advances.map(a => coAdaptAdvance(a, ctx)),
+    ...(b.closures || []).map(c => coAdaptClosure(c, ctx)),
   ].filter(x => x.at);
   // Lexicographic on the raw timestamp — no Date allocation per comparison
   feed.sort((x, y) => String(y.at).localeCompare(String(x.at)) || x.id.localeCompare(y.id));
@@ -11154,6 +11203,7 @@ function coRender(name, b) {
   const pulls  = redates.filter(e => e.new_date < e.old_date);
   const pushDays = pushes.reduce((s2, e) => s2 + Math.round((new Date(e.new_date) - new Date(e.old_date)) / 86400000), 0);
   const openDisputes = b.disputes.filter(d => d.status === 'open');
+  const ps = coPayStats(b);
 
   const tile = (lbl, val, sub, col) =>
     `<div class="co-tile"><div class="co-tile-lbl">${escHtml(lbl)}</div>
@@ -11181,6 +11231,11 @@ function coRender(name, b) {
     ${tile('Ledger variance', variance === null ? 'n/a' : money(Math.abs(variance)),
            variance === null ? 'no statement row' : (Math.abs(variance) > 1000 ? '⚠ Zoho disagrees' : 'ties to Zoho'),
            variance !== null && Math.abs(variance) > 1000 ? '#b45309' : '')}
+    ${tile('Typically pays in', ps.medDays != null ? ps.medDays + 'd' : (ps.n ? ps.n + ' settled' : '—'),
+           ps.medDays != null
+             ? `median of ${ps.n} · ${ps.kept}/${ps.scored || 0} promises kept`
+             : (ps.n ? 'too few settled to call' : 'no payment history yet'),
+           ps.medLate != null && ps.medLate > 0 ? 'var(--red)' : '')}
     ${tile('Last contact', daysSince === null ? 'never' : daysSince + 'd ago',
            lastInt ? escHtml((b.collectorMap[lastInt.collector_id] || '') + (lastInt.outcome ? ' · ' + (CC_OUTCOME_LABELS[lastInt.outcome] || lastInt.outcome) : '')) : 'no interaction logged',
            daysSince !== null && daysSince > 21 ? 'var(--red)' : '')}
@@ -11194,6 +11249,8 @@ function coRender(name, b) {
     openDisputes.length ? `${openDisputes.length} open dispute${openDisputes.length === 1 ? '' : 's'}` : null,
     daysSince !== null ? `last contact ${daysSince}d ago` : 'never contacted',
     unapplied > 0.5 ? `${money(unapplied)} unapplied cash sitting here` : null,
+    ps.medDays != null ? `typically pays in ${ps.medDays}d` : null,
+    ps.scored ? `${ps.kept}/${ps.scored} promises kept` : null,
   ].filter(Boolean).join('  ·  ');
   const diagHtml = `<div style="font-size:12.5px;color:var(--ink-soft);background:var(--surf);border:1px solid var(--brd);border-left:3px solid var(--navy2);border-radius:7px;padding:.55rem .8rem;margin-bottom:.8rem">${escHtml(diag)}</div>`;
 
@@ -11212,13 +11269,44 @@ function coRender(name, b) {
   content.innerHTML = hdr + kpi + diagHtml
     + coSec('aging', 'Aging mix', invs.length ? money(open) : '', agingHtml, false)
     + coSec('inv', 'Open invoices', `${invs.length} · ${money(open)}`, coRenderInvoices(name, invs, b), false)
-    + coSec('ptp', 'Promises & how they held', redates.length ? `${redates.length} re-dated` : 'no re-dates', coRenderPromises(b, redates, pushes, pulls, pushDays), false)
+    + coSec('ptp', 'Promises & how they held', ps.scored ? `${ps.kept} of ${ps.scored} kept` : (redates.length ? `${redates.length} re-dated` : 'no re-dates'), coRenderPromises(b, redates, pushes, pulls, pushDays, ps), false)
+    + coSec('settled', 'Settled & written off', ps.n ? `${'₹' + f(ps.collected)} collected` : ((b.closures || []).length ? `${b.closures.length} closed` : 'none yet'), coRenderSettled(b, ps), !(b.closures || []).length)
     + coSec('tl', 'Activity timeline', `${CO.feed.length} item${CO.feed.length === 1 ? '' : 's'}`, coRenderTimeline(name, b), false)
     + coSec('disp', 'Disputes', b.disputes.length ? `${openDisputes.length} open of ${b.disputes.length}` : 'none', coRenderDisputes(b), !b.disputes.length)
     + coSec('pay', 'Advances & unapplied cash', b.advances.length ? money(unapplied) + ' unapplied' : 'none', coRenderAdvances(b), unapplied <= 0.5)
     + coSec('ctc', 'Contacts', `${b.contacts.length}`, coRenderContacts(b), true);
 }
 
+
+/* ── Payment behaviour, from the closure ledger ──────────────────
+   Only 'zoho_paid' rows carry a real payment date, so every figure here is
+   computed from those alone — write-offs are cash that never arrived, and
+   snapshot-inferred rows have a date accurate only to the day we noticed.
+   Medians, not means: days-to-pay is heavily skewed (book-wide median 39 vs
+   mean 57), so a mean would overstate how slowly a typical invoice settles. */
+const CO_MIN_CLOSURES = 3;   // below this, report counts and refuse a median
+function coPayStats(b) {
+  const paid = (b.closures || []).filter(c => c.closure_basis === 'zoho_paid' && c.days_to_pay != null);
+  const wo   = (b.closures || []).filter(c => c.closure_basis === 'zoho_write_off');
+  const med = arr => {
+    if (!arr.length) return null;
+    const v = [...arr].sort((x, y) => x - y);
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : Math.round((v[m - 1] + v[m]) / 2);
+  };
+  // A promise is kept if the cash landed on or before the date promised
+  const scored = paid.filter(c => c.ptp_date_at_close);
+  const kept   = scored.filter(c => c.closed_on <= c.ptp_date_at_close);
+  return {
+    paid, wo, n: paid.length,
+    medDays:  paid.length >= CO_MIN_CLOSURES ? med(paid.map(c => Number(c.days_to_pay))) : null,
+    medLate:  paid.length >= CO_MIN_CLOSURES ? med(paid.map(c => Number(c.days_late)))   : null,
+    collected: paid.reduce((s2, c) => s2 + Number(c.amount_paid || c.last_balance_inr || 0), 0),
+    writtenOff: wo.reduce((s2, c) => s2 + Number(c.write_off_amount || 0), 0),
+    scored: scored.length, kept: kept.length, broken: scored.length - kept.length,
+    window: paid.length ? [paid.map(c => c.closed_on).sort()[0], paid.map(c => c.closed_on).sort().slice(-1)[0]] : null,
+  };
+}
 
 /* ── Section bodies ─────────────────────────────────────────── */
 function coRenderInvoices(name, invs, b) {
@@ -11261,7 +11349,7 @@ function coRenderInvoices(name, invs, b) {
   </table></div>`;
 }
 
-function coRenderPromises(b, redates, pushes, pulls, pushDays) {
+function coRenderPromises(b, redates, pushes, pulls, pushDays, ps) {
   if (!b.ptpEvents.length) return '<div style="font-size:12px;color:var(--txt3)">No promise has ever been logged for this customer.</div>';
   const mean = arr => arr.length ? Math.round(arr.reduce((s2, e) => s2 + Math.abs((new Date(e.new_date) - new Date(e.old_date)) / 86400000), 0) / arr.length) : 0;
   const head = `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.5rem">
@@ -11270,7 +11358,12 @@ function coRenderPromises(b, redates, pushes, pulls, pushDays) {
     ${pulls.length ? ` · <span style="color:#0a6e4c">${pulls.length} pulled earlier (avg −${mean(pulls)}d)</span>` : ''}
     ${!redates.length ? ' — every promise has held its original date' : ''}
   </div>
-  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.5rem">Counts logged re-datings only. Whether a promise was actually paid cannot be shown: settled invoices are removed at source, so this system holds no payment history.</div>`;
+  ${ps.scored
+    ? `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.35rem">
+         <strong>${ps.kept} of ${ps.scored}</strong> matured promise${ps.scored === 1 ? '' : 's'} paid on or before the date promised${ps.broken ? ` · <span style="color:var(--red)">${ps.broken} missed</span>` : ''}
+       </div>
+       <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.5rem">Scored against Zoho payment dates${ps.window ? ` for invoices settled ${ps.window[0]} to ${ps.window[1]}` : ''}. Shown as a count, not a rate — the sample is too small for a percentage to mean much.</div>`
+    : `<div style="font-size:10.5px;color:var(--txt3);margin-bottom:.5rem">No promise has matured into a recorded payment yet, so none can be scored kept or missed. Closure tracking began ${escHtml(CO_LEDGER_FROM)}.</div>`}`;
   return head + b.ptpEvents.slice(0, 30).map(renderPtpEventItem).join('');
 }
 
@@ -11331,6 +11424,43 @@ function coRenderContacts(b) {
         : 'never contacted'}</span>
     </div>`;
   }).join('');
+}
+
+function coRenderSettled(b, ps) {
+  if (!(b.closures || []).length)
+    return `<div style="font-size:12px;color:var(--txt3)">Nothing recorded as settled yet. Closure tracking began ${escHtml(CO_LEDGER_FROM)} — invoices paid before that are not retained anywhere.</div>`;
+  const money = v => '₹' + f(v);
+  const BASIS = {
+    zoho_paid:        { l: 'Paid',            bg: '#dcfce7', fg: '#166534' },
+    zoho_write_off:   { l: 'Written off',     bg: '#fee2e2', fg: '#991b1b' },
+    left_unpaid_book: { l: 'Left book',       bg: '#f1f5f9', fg: '#475569' },
+    snapshot_gap:     { l: 'Closed (inferred)', bg: '#fef3c7', fg: '#92400e' },
+  };
+  const head = `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.5rem">
+    ${ps.n ? `<strong>${money(ps.collected)}</strong> collected across ${ps.n} invoice${ps.n === 1 ? '' : 's'}` : 'No confirmed payments yet'}
+    ${ps.medDays != null ? ` · typically <strong>${ps.medDays} days</strong> to pay (median)` : (ps.n ? ` · too few to give a typical timeline` : '')}
+    ${ps.medLate != null ? ` · <span style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${ps.medLate > 0 ? ps.medLate + 'd past due' : Math.abs(ps.medLate) + 'd before due'}</span>` : ''}
+    ${ps.writtenOff > 0.5 ? ` · <span style="color:var(--red)">${money(ps.writtenOff)} written off</span>` : ''}
+  </div>`;
+  const rows = (b.closures || []).map(c => {
+    const bs = BASIS[c.closure_basis] || { l: c.closure_basis, bg: '#f1f5f9', fg: '#475569' };
+    const keptChip = c.ptp_date_at_close && c.closure_basis === 'zoho_paid'
+      ? (c.closed_on <= c.ptp_date_at_close
+          ? '<span class="co-pill" style="background:#dcfce7;color:#166534">promise kept</span>'
+          : '<span class="co-pill" style="background:#fee2e2;color:#991b1b">promise missed</span>')
+      : '';
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${escHtml(c.invoice_number || c.invoice_id)}</td>
+      <td style="font-size:10.5px">${escHtml(c.closed_on || '—')}</td>
+      <td class="r">${money(Number(c.amount_paid ?? c.last_balance_inr ?? 0))}</td>
+      <td class="r">${c.days_to_pay != null ? c.days_to_pay + 'd' : '—'}</td>
+      <td class="r">${c.days_late != null ? `<span style="color:${c.days_late > 0 ? 'var(--red)' : '#0a6e4c'}">${c.days_late > 0 ? '+' : ''}${c.days_late}d</span>` : '—'}</td>
+      <td><span class="co-pill" style="background:${bs.bg};color:${bs.fg}">${escHtml(bs.l)}</span>${keptChip}</td>
+    </tr>`;
+  }).join('');
+  return head + `<div style="overflow-x:auto"><table class="co-inv-tbl">
+    <thead><tr><th>Invoice #</th><th>Settled</th><th class="r">Amount</th><th class="r">Days to pay</th><th class="r">vs due</th><th>Basis</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
 }
 
 /* ── Timeline section: note box, filter chips, paging ────────── */
