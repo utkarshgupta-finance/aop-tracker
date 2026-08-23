@@ -2120,17 +2120,25 @@ function renderNav() {
     ? ALL_TABS_CFG.map(t => t.id)
     : USER_ACCESS.allowed_tabs;
   const role = USER_ACCESS.role || 'admin-edit';
+  // Roles capped to a fixed tab set, whatever else is ticked for them. A BU
+  // user gets Open AR and nothing else — not Rate Calculator, not Settings.
+  // (Tabs with no `roles` of their own are otherwise open to every role.)
+  const HARD_CAPPED_TABS = { bu: ['ar'] };
+  const hardCap = HARD_CAPPED_TABS[role] || null;
+  const roleCan = t => hardCap
+    ? hardCap.includes(t.id)
+    : (!t.roles || t.roles.includes(role));
   // Main nav excludes Settings (goes to bottom-nav)
   const mainTabIds = ALL_TABS_CFG.filter(t => t.id !== 'settings').map(t => t.id);
   const nav = document.getElementById('main-nav');
   nav.innerHTML = ALL_TABS_CFG
     .filter(t => t.id !== 'settings')
-    .filter(t => allowed.includes(t.id) || (USER_ACCESS.allowed_tabs.length === 0))
-    .filter(t => !t.roles || t.roles.includes(role) || (USER_ACCESS.allowed_tabs.length > 0 && USER_ACCESS.allowed_tabs.includes(t.id)))
+    .filter(t => hardCap ? hardCap.includes(t.id) : (allowed.includes(t.id) || (USER_ACCESS.allowed_tabs.length === 0)))
+    .filter(t => hardCap ? true : (!t.roles || t.roles.includes(role) || (USER_ACCESS.allowed_tabs.length > 0 && USER_ACCESS.allowed_tabs.includes(t.id))))
     .map(t => `<button class="tbtn" data-tab="${t.id}" data-abbr="${t.abbr||t.label.slice(0,2).toUpperCase()}" onclick="${t.fn}">${t.label}</button>`)
     .join('');
   // Settings always goes to bottom-nav for admin-edit; Rate Calculator is a direct link (no login required)
-  const canSettings = role === 'admin-edit' || (allowed.includes('settings') && (!ALL_TABS_CFG.find(t=>t.id==='settings')?.roles || ALL_TABS_CFG.find(t=>t.id==='settings').roles.includes(role)));
+  const canSettings = !hardCap && (role === 'admin-edit' || (allowed.includes('settings') && (!ALL_TABS_CFG.find(t=>t.id==='settings')?.roles || ALL_TABS_CFG.find(t=>t.id==='settings').roles.includes(role))));
   const bn = document.getElementById('bottom-nav');
   if (bn) {
     bn.innerHTML = canSettings ? '<button class="tbtn" data-tab="settings" data-abbr="ST" onclick="showSettingsTab(this)">⚙ Settings</button>' : '';
@@ -2142,8 +2150,8 @@ function renderNav() {
   }
   // Restore last-used tab, fall back to first allowed
   const saved   = getActiveTabPref();
-  const allNavIds = [...ALL_TABS_CFG.filter(t => !t.roles || t.roles.includes(role)).map(t => t.id)];
-  const firstMain = ALL_TABS_CFG.filter(t => t.id !== 'settings').find(t => !t.roles || t.roles.includes(role))?.id || 'ar';
+  const allNavIds = [...ALL_TABS_CFG.filter(roleCan).map(t => t.id)];
+  const firstMain = ALL_TABS_CFG.filter(t => t.id !== 'settings').find(roleCan)?.id || 'ar';
   const activeId = (saved && allNavIds.includes(saved)) ? saved : firstMain;
   if (activeId) {
     setActiveTabPref(activeId);   // pin this browser tab to what it restored
@@ -4138,9 +4146,10 @@ function arPassesRoleFilter(r) {
   if (role === 'admin-edit' || role === 'admin-view' || role === 'admin') return true;
   if (role === 'bu') {
     if (!arIsMapped(r.customer_name)) return false;
-    const bu = arGetBu(r.customer_name);
+    // Scoped strictly to the BUs picked for this user. No BUs picked means no
+    // data — failing open here would show a BU user the whole book.
     const allowed = USER_ACCESS.allowed_bus || [];
-    return allowed.length === 0 || allowed.includes(bu);
+    return allowed.includes(arGetBu(r.customer_name));
   }
   if (role === 'collector') {
     if (!arIsMapped(r.customer_name)) return true; // unmapped shown to all collectors
@@ -4745,9 +4754,12 @@ function renderAR() {
     !_arExcluded.some(ex => (r.customer_name||'').toLowerCase().includes(ex.toLowerCase()))
   );
 
-  // Role-filter before computing capsule options so a collector only sees their own BUs
+  // Role-filter before computing capsule options so a collector sees only their
+  // own BUs, and a BU user only the BUs they are scoped to — otherwise the
+  // capsule row leaks the names of BUs whose data they cannot open.
   const isCollector = (USER_ACCESS.role || '') === 'collector';
-  const capsuleBase = isCollector ? nonExcluded.filter(r => arPassesRoleFilter(r)) : nonExcluded;
+  const isBuRole    = (USER_ACCESS.role || '') === 'bu';
+  const capsuleBase = (isCollector || isBuRole) ? nonExcluded.filter(r => arPassesRoleFilter(r)) : nonExcluded;
 
   const allBus = [...new Set(
     capsuleBase.map(r => arGetBu(r.customer_name) || 'Uncategorised')
@@ -4764,7 +4776,7 @@ function renderAR() {
   if (collectorWrap) collectorWrap.style.display = isCollector ? 'none' : '';
   if (!isCollector) {
     const allCollectors = [...new Set(
-      nonExcluded.map(r => arGetCollector(r.customer_name)).filter(Boolean)
+      capsuleBase.map(r => arGetCollector(r.customer_name)).filter(Boolean)
     )].sort();
     _arCollectorCapsuleHTML('ar-collector-row', allCollectors);
   }
