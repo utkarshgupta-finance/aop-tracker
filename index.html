@@ -2216,7 +2216,7 @@ function renderNav() {
     document.getElementById(paneId)?.classList.add('active');
     nav.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
     document.getElementById('bottom-nav')?.querySelector(`[data-tab="${activeId}"]`)?.classList.add('active');
-    if (activeId === 'ar' && !_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadArCustMaster(); loadTagMaster(); loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets(); loadInvoicePtp().then(() => renderAR()); }
+    if (activeId === 'ar') arBootstrap();
     if (activeId === 'ar-reco') renderAdvancesReconcile();
     if (activeId === 'collector-console' && !_ccInited) { _ccInited = true; ccInit(); }
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
@@ -4107,8 +4107,23 @@ function getActiveTabPref() {
 
 function showARTab(btn) {
   showTab('ar', btn);
-  if (!_arInited) { _arInited = true; loadAR(); loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster(); loadInvTags(); loadARExcluded(); loadAgingBrackets(); loadInvoicePtp().then(() => renderAR()); }
-  loadArCustMaster();
+  if (_arInited) { loadArCustMaster(); return; }   // refresh mappings on re-entry
+  arBootstrap();
+}
+
+// One boot path for the Open AR tab, shared by the nav click and the
+// cold-start restore so the two cannot drift apart. The customer master is
+// awaited FIRST: it is what scopes every non-admin role, and until it lands
+// arPassesRoleFilter has nothing to filter on — a collector would otherwise
+// see the whole book for as long as that fetch took.
+async function arBootstrap() {
+  if (_arInited) return;
+  _arInited = true;
+  try { await loadArCustMaster(); } catch(_) {}
+  loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster();
+  loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets();
+  loadAR();
+  loadInvoicePtp().then(() => renderAR());
 }
 
 function showARRecoTab(btn) {
@@ -4227,6 +4242,11 @@ function pocCap(v) { return v ? `<span class="poc-cap">${escHtml(v)}</span>` : '
 function arPassesRoleFilter(r) {
   const role = USER_ACCESS.role || 'admin-edit';
   if (role === 'admin-edit' || role === 'admin-view' || role === 'admin') return true;
+  // Every non-admin role is scoped through the customer master. Until it has
+  // loaded, every row looks unmapped — which the collector branch below treats
+  // as "show to everyone", i.e. the entire book. Fail closed until it is in:
+  // RLS on these tables is permissive, so this function is the only guard.
+  if (!_cmData.length) return false;
   if (role === 'bu') {
     if (!arIsMapped(r.customer_name)) return false;
     // Scoped strictly to the BUs picked for this user. No BUs picked means no
