@@ -104,13 +104,43 @@ async function runSync(notify: (event: string, data: unknown) => void) {
     if (error) { notify('error', { message: 'Upsert failed: ' + error.message }); return null; }
   }
 
+  // Remove invoices Zoho no longer reports as unpaid.
+  //
+  // This used to send every KEPT id in a single `not.in.(…)` filter — roughly
+  // an 18KB URL at today's ~850 invoices, and past the request URL limit well
+  // before the 3000-row fetch cap above. When that limit is crossed the delete
+  // fails, and because the failure is only a progress note the sync still
+  // reports success: the sole symptom is paid invoices lingering in Open AR.
+  //
+  // Now the ids to remove are computed here and deleted explicitly in chunks,
+  // so the URL stays small and nothing is ever deleted by exclusion.
   if (rows.length > 0) {
-    const ids = rows.map(r => r.invoice_id as string);
-    const { error: delErr } = await supabase
-      .from('ar_invoices').delete()
-      .eq('entity', 'IN')
-      .not('invoice_id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
-    if (delErr) notify('progress', { step: 3, total: 3, message: `Cleanup warning: ${delErr.message}` });
+    const keep = new Set(rows.map(r => String(r.invoice_id)));
+    // Explicit limit: the default cap is 1000 rows, which would silently
+    // truncate this read once the book grows past it and leave stale invoices
+    // behind. Kept above the 3000-row fetch cap used for the Zoho pull.
+    const { data: heldRows, error: readErr } = await supabase
+      .from('ar_invoices').select('invoice_id').eq('entity', 'IN').limit(5000);
+
+    if (readErr) {
+      notify('progress', { step: 3, total: 3, message: `Cleanup skipped — could not read current rows: ${readErr.message}` });
+    } else {
+      const stale = (heldRows ?? []).map(r => String(r.invoice_id)).filter(id => !keep.has(id));
+      // Safety valve: a couple of dozen invoices close in a normal day. A jump
+      // this large means Zoho returned a partial book, so leave the table alone
+      // and say so loudly rather than deleting most of Open AR.
+      if (stale.length > 200) {
+        notify('progress', { step: 3, total: 3, message: `Cleanup skipped — ${stale.length} invoices would be removed, which is implausible. Zoho likely returned a partial list. No rows deleted.` });
+      } else {
+        for (let i = 0; i < stale.length; i += 200) {
+          const { error: delErr } = await supabase
+            .from('ar_invoices').delete()
+            .in('invoice_id', stale.slice(i, i + 200));
+          if (delErr) { notify('progress', { step: 3, total: 3, message: `Cleanup warning: ${delErr.message}` }); break; }
+        }
+        if (stale.length) notify('progress', { step: 3, total: 3, message: `Removed ${stale.length} settled invoice${stale.length === 1 ? '' : 's'}.` });
+      }
+    }
   }
 
   return { synced: rows.length, pages: page };
