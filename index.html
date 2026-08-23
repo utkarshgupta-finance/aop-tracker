@@ -1812,6 +1812,38 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div>
 </main>
+<style>
+/* Customer Overview */
+.co-sec{border:1px solid var(--brd);border-radius:9px;background:var(--surf);margin-bottom:.8rem;overflow:hidden}
+.co-sec-hd{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;cursor:pointer;user-select:none;background:#f6f8fb;border-bottom:1px solid var(--brd)}
+.co-sec-hd:hover{background:#eef2f7}
+.co-sec-hd .co-caret{font-size:9px;color:var(--txt3);width:10px}
+.co-sec-ttl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.co-sec-sub{font-size:11.5px;color:var(--txt3);margin-left:auto;font-family:var(--mono)}
+.co-sec-bd{padding:.7rem .85rem}
+.co-sec.collapsed .co-sec-bd{display:none}
+.co-sec.collapsed .co-sec-hd{border-bottom:none}
+.co-kpi{display:flex;gap:.55rem;flex-wrap:wrap;margin-bottom:.8rem}
+.co-tile{flex:1 1 150px;min-width:150px;border:1px solid var(--brd);border-radius:9px;background:var(--surf);padding:.55rem .75rem}
+.co-tile-lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)}
+.co-tile-val{font-size:19px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;margin-top:.15rem}
+.co-tile-sub{font-size:10.5px;color:var(--txt3);margin-top:.1rem}
+.co-tl-item{display:flex;gap:.6rem;padding:.5rem .2rem;border-bottom:1px dashed var(--brd)}
+.co-tl-item:last-child{border-bottom:none}
+.co-tl-rail{flex:0 0 3px;border-radius:2px;margin:.15rem 0}
+.co-tl-ico{flex:0 0 18px;font-size:13px;line-height:1.3;text-align:center}
+.co-tl-main{min-width:0;flex:1}
+.co-tl-ttl{font-size:12.5px;color:var(--ink);font-weight:500}
+.co-tl-sub{font-size:10.5px;color:var(--txt3);margin-top:.1rem}
+.co-tl-body{font-size:12px;color:var(--txt2);margin-top:.25rem;white-space:pre-wrap;word-break:break-word}
+.co-pill{display:inline-block;font-size:9.5px;font-weight:700;padding:.08rem .38rem;border-radius:10px;margin-right:.25rem;white-space:nowrap}
+.co-chip{display:inline-block;font-size:10.5px;font-weight:600;padding:.1rem .45rem;border-radius:12px;border:1px solid var(--brd2);background:#fff;color:var(--txt2);cursor:pointer;margin:0 .25rem .25rem 0}
+.co-chip.on{background:var(--navy2);border-color:var(--navy2);color:#fff}
+.co-inv-tbl{width:100%;border-collapse:separate;border-spacing:0}
+.co-inv-tbl th{padding:.35rem .55rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap}
+.co-inv-tbl td{padding:.35rem .55rem;font-size:11.5px;border-bottom:1px solid var(--line);vertical-align:middle}
+.co-inv-tbl td.r,.co-inv-tbl th.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+</style>
 </div><!-- app-content -->
 </div><!-- app-layout -->
 
@@ -2190,6 +2222,7 @@ function renderNav() {
     if (activeId === 'collections-analysis' && !_caInited) { _caInited = true; loadCollectionsData(); }
     if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
     if (activeId === 'confirmed-dates') cdInit();
+    if (activeId === 'customer-overview') coInit();
     if (activeId === 'disputed-invoices' && !_diInited) { _diInited = true; loadDisputedInvoices(); }
     if (activeId === 'settings') loadSettingsPane();
   }
@@ -5697,7 +5730,8 @@ function renderARCustomerView(rows, ctx = 'main') {
     const addCustTagBtn = `<button class="inv-tag-add" onclick="event.stopPropagation();openCustTagPicker(this,'${escHtml(name)}')">+ Tag</button>`;
 
     // Customer header row
-    const custIntBtn = `<button onclick="event.stopPropagation();arShowCustInteractions(this.dataset.cust)" data-cust="${escHtml(name)}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`;
+    const custIntBtn = `<button onclick="event.stopPropagation();arShowCustInteractions(this.dataset.cust)" data-cust="${escHtml(name)}" title="View interactions" style="margin-left:.35rem;background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#2563eb;font-size:11px;vertical-align:middle;line-height:1">💬</button>`
+      + (coTabAvailable() ? `<button onclick="event.stopPropagation();coOpenFor(this.dataset.cust)" data-cust="${escHtml(name)}" title="Open customer overview" style="margin-left:.25rem;background:none;border:1px solid #ddd6fe;border-radius:4px;cursor:pointer;padding:.1rem .3rem;color:#7c3aed;font-size:11px;vertical-align:middle;line-height:1">👤</button>` : '');
     body += `<tr class="ar-cv-hdr" id="ar-cv-h${idp}${idx}" data-open="0" onclick="arToggleCust(${idx},'${ctx}')">
       <td style="min-width:180px"><span class="ar-cv-arrow">▶</span> ${escHtml(name)}${custIntBtn}</td>
       <td style="white-space:nowrap">${buBadge}</td>
@@ -10780,6 +10814,588 @@ async function ccLoadFollowUps() {
   } catch(e) {
     contentEl.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${escHtml(e.message || 'failed')}</div>`;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   CUSTOMER OVERVIEW — one customer, end to end
+   ══════════════════════════════════════════════════════════════
+   Constraint that shapes this whole page: ar_invoices holds ONLY unpaid
+   invoices (verified: zero rows with status 'paid' — a collected invoice is
+   deleted, and ar_invoice_snapshots is a daily copy of the open book, not a
+   ledger). So there is no payment history anywhere in the schema, and
+   anything that needs one — days-to-pay, promise-kept rate, a collection
+   trend — is deliberately absent rather than estimated. */
+
+let _coInited   = false;
+let _coCustomer = null;
+const CO = { cache: {}, feed: [], kinds: null, page: 25, ttl: 5 * 60 * 1000 };
+
+function showCustomerOverviewTab(btn) {
+  showTab('customer-overview', btn);
+  coInit();
+}
+
+function coInit() {
+  if (_coInited) return;
+  _coInited = true;
+  if (!_cmData.length) loadArCustMaster();
+  if (!Object.keys(_arPtpMap || {}).length) loadInvoicePtp();
+}
+
+/* ── Customer picker (scoped to what this user may see) ─────── */
+function coVisibleCustomers() {
+  return [...new Set(_cmData.map(c => c.customer_name).filter(Boolean))]
+    .filter(n => arPassesRoleFilter({ customer_name: n }))
+    .sort();
+}
+function coFilterCustomers() {
+  const q = (document.getElementById('co-cust-input').value || '').toLowerCase().trim();
+  if (!q) { document.getElementById('co-cust-dd').style.display = 'none'; return; }
+  ccOpenDD('co-cust-dd', 'co-cust-input', coVisibleCustomers().filter(n => n.toLowerCase().includes(q)).slice(0, 25), 'coSelectCustomer');
+}
+function coSelectCustomer(name) {
+  document.getElementById('co-cust-input').value = name;
+  document.getElementById('co-cust-dd').style.display = 'none';
+  coOpenCustomer(name);
+}
+function coRefresh() { if (_coCustomer) { delete CO.cache[_coCustomer]; coOpenCustomer(_coCustomer, true); } }
+
+// Entry point usable from any other tab
+function coOpenFor(name) {
+  const btn = document.querySelector('#main-nav .tbtn[data-tab="customer-overview"]');
+  if (!btn) return;                       // tab not available to this role
+  showCustomerOverviewTab(btn);
+  const inp = document.getElementById('co-cust-input');
+  if (inp) inp.value = name;
+  coOpenCustomer(name);
+}
+function coTabAvailable() { return !!document.querySelector('#main-nav .tbtn[data-tab="customer-overview"]'); }
+
+function coFail(msg) {
+  document.getElementById('co-content').innerHTML =
+    `<div style="padding:1.25rem .25rem;font-size:12.5px;color:var(--txt3)">${escHtml(msg)}</div>`;
+}
+
+/* ── Load + render ──────────────────────────────────────────── */
+async function coOpenCustomer(name, force) {
+  if (!name) return;
+  _coCustomer = name;
+  const content = document.getElementById('co-content');
+  content.innerHTML = '<div style="padding:1.25rem .25rem;font-size:12.5px;color:var(--txt3)">Loading…</div>';
+
+  // The customer master is what scopes a collector to their own book, and
+  // arPassesRoleFilter fails OPEN while it is still empty. Never gate before
+  // it has loaded, and never fetch for a customer that fails the gate.
+  if (!_cmData.length) { try { await loadArCustMaster(); } catch(_) {} }
+  if (!_cmData.length) return coFail('Customer master unavailable — cannot scope this page.');
+  if (!arPassesRoleFilter({ customer_name: name })) return coFail('That customer is not in your book.');
+
+  try {
+    await Promise.all([
+      _arExcluded.length ? null : loadARExcluded(),
+      _arCurrentRate ? null : loadFxRates(),
+      _agingBrackets.length ? null : loadAgingBrackets(),
+      Object.keys(_arPtpMap || {}).length ? null : loadInvoicePtp(),
+    ].filter(Boolean));
+  } catch(_) {}
+
+  const cached = CO.cache[name];
+  const bundle = (!force && cached && (Date.now() - cached._at) < CO.ttl)
+    ? cached
+    : await coLoadBundle(name);
+  if (_coCustomer !== name) return;        // a newer selection won the race
+  CO.cache[name] = bundle;
+  coRender(name, bundle);
+}
+
+async function coLoadBundle(name) {
+  const q = encodeURIComponent(name);
+  const get = async (path, fallback) => {
+    try { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: cmrrHdr() }); return r.ok ? await r.json() : fallback; }
+    catch(_) { return fallback; }
+  };
+  const [interactions, internals, ptpEvents, disputes, contacts, advances, statement] = await Promise.all([
+    get(`interactions?customer_name=eq.${q}&order=created_at.desc&limit=400&select=*`, []),
+    get(`internal_interactions?customer_name=eq.${q}&order=created_at.desc&limit=200&select=*`, []),
+    get(`ptp_events?customer_name=eq.${q}&order=created_at.desc&limit=400&select=*`, []),
+    // by customer_name, not invoice ids — a dispute outlives its invoice
+    get(`invoice_disputes?customer_name=eq.${q}&order=opened_at.desc&select=*`, []),
+    get(`contacts?customer_name=eq.${q}&order=name&select=*`, []),
+    get(`customer_advances?customer_name=eq.${q}&order=payment_date.desc&select=*`, []),
+    get(`customer_statement_balances?contact_name=eq.${q}&select=*`, []),
+  ]);
+  // Which invoices each interaction covered, resolved to numbers for display
+  const invMap = {};
+  if (interactions.length) {
+    const rows = await get(`interaction_invoices?interaction_id=in.(${interactions.map(i => encodeURIComponent(i.id)).join(',')})&select=interaction_id,invoice_id`, []);
+    rows.forEach(j => { (invMap[j.interaction_id] = invMap[j.interaction_id] || []).push(j.invoice_id); });
+  }
+  const collectorMap = {};
+  const ids = [...new Set([...interactions, ...internals].map(i => i.collector_id).filter(Boolean))];
+  if (ids.length) {
+    (await get(`user_access?user_id=in.(${ids.map(encodeURIComponent).join(',')})&select=user_id,collector_name,display_name`, []))
+      .forEach(u => { collectorMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+  }
+  return { _at: Date.now(), interactions, internals, ptpEvents, disputes, contacts, advances, statement, invMap, collectorMap };
+}
+
+
+/* ── Unified activity item ──────────────────────────────────────
+   Every source is adapted into this one shape, and coRenderActivity is the
+   only thing that turns it into markup. Adding Gmail later means writing one
+   more adapter and one more CO_KIND entry — nothing in the renderer moves.
+   Adapters emit RAW strings; the renderer escapes every field. */
+const CO_KIND = {
+  call:     { icon: '📞', accent: '#2563eb', label: 'Call' },
+  whatsapp: { icon: '💬', accent: '#16a34a', label: 'WhatsApp' },
+  email:    { icon: '✉',  accent: '#7c3aed', label: 'Email' },
+  internal: { icon: '🏢', accent: '#4f46e5', label: 'Internal' },
+  ptp:      { icon: '🗓', accent: '#b45309', label: 'Promise' },
+  dispute:  { icon: '⚠',  accent: '#b91c1c', label: 'Dispute' },
+  payment:  { icon: '₹',  accent: '#0a6e4c', label: 'Payment' },
+};
+const CO_KIND_FALLBACK = { icon: '•', accent: '#9ca3af', label: 'Activity' };
+
+// Pure: no fetch, no DOM, no clock. Reads only escHtml / f / CO_KIND.
+function coRenderActivity(a) {
+  const K = CO_KIND[a.kind] || CO_KIND_FALLBACK;
+  const pills = (a.pills || []).map(p =>
+    `<span class="co-pill" style="background:${escHtml(p.bg)};color:${escHtml(p.fg)}">${escHtml(p.label)}</span>`).join('');
+  const invs = (a.invoices || []).map(n =>
+    `<span class="co-pill" style="background:#f1f5f9;color:#475569;font-family:var(--mono);font-weight:600">${escHtml(n)}</span>`).join('');
+  const facts = (a.facts || []).filter(x => x && x.v).map(x =>
+    `<span style="font-size:10.5px;color:var(--txt3);margin-right:.6rem">${escHtml(x.k)} <strong style="color:var(--ink-soft)">${escHtml(x.v)}</strong></span>`).join('');
+  const amt = a.amount != null && a.amount > 0
+    ? `<span style="font-family:var(--mono);font-weight:600;color:${a.amountKind === 'received' ? '#166534' : 'var(--ink)'}">₹${f(a.amount)}</span>${a.amountNote ? `<span style="font-size:10px;color:var(--txt3)"> (${escHtml(a.amountNote)})</span>` : ''}`
+    : '';
+  return `<div class="co-tl-item">
+    <div class="co-tl-rail" style="background:${escHtml(K.accent)}"></div>
+    <div class="co-tl-ico">${escHtml(K.icon)}</div>
+    <div class="co-tl-main">
+      <div class="co-tl-ttl">${escHtml(a.title)}${amt ? ' · ' + amt : ''}</div>
+      ${a.subtitle ? `<div class="co-tl-sub">${escHtml(a.subtitle)}</div>` : ''}
+      ${(pills || invs) ? `<div style="margin-top:.25rem">${pills}${invs}</div>` : ''}
+      ${a.body ? `<div class="co-tl-body">${escHtml(a.body)}</div>` : ''}
+      ${facts ? `<div style="margin-top:.2rem">${facts}</div>` : ''}
+      <div class="co-tl-sub">${escHtml(coWhen(a.at, a.atPrec))}${a.actor ? ' · ' + escHtml(a.actor) : ''}</div>
+    </div>
+  </div>`;
+}
+function coWhen(at, prec) {
+  if (!at) return '—';
+  const d = new Date(at);
+  if (isNaN(d)) return String(at);
+  if (prec === 'month') return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  if (prec === 'day')   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+/* Adapters — one per source, each pure */
+function coAdaptInteraction(i, ctx) {
+  // channel already carries 'email', so the email lane renders from day one
+  const kind = i.channel === 'whatsapp' ? 'whatsapp' : i.channel === 'email' ? 'email' : 'call';
+  const oc = i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
+  const contact = (ctx.contacts || []).find(c => c.id === i.contact_id);
+  const conn = i.connected === 'yes';
+  return {
+    id: 'int:' + i.id, kind, at: i.created_at, atPrec: 'instant',
+    title: conn ? (CC_OUTCOME_LABELS[i.outcome] || i.outcome || 'Spoke with customer')
+                : (CC_CONNECTED_LABELS[i.connected] || 'Could not reach'),
+    subtitle: [contact ? contact.name + (contact.role ? ' (' + contact.role + ')' : '') : null,
+               (CO_KIND[kind] || CO_KIND_FALLBACK).label].filter(Boolean).join(' · '),
+    pills: [ ...(oc ? [{ label: CC_OUTCOME_LABELS[i.outcome] || i.outcome, bg: oc.bg, fg: oc.fg }] : []),
+             ...(i.escalation_needed ? [{ label: 'Escalated', bg: '#fef3c7', fg: '#92400e' }] : []),
+             ...(i.needs_internal_help ? [{ label: 'Needs help', bg: '#fff7ed', fg: '#b45309' }] : []) ],
+    invoices: (ctx.invMap[i.id] || []).map(id => ctx.invNumMap[id] || id),
+    body: i.note || i.dispute_description || '',
+    facts: [ { k: 'Promise', v: i.promised_date || '' },
+             { k: 'Follow-up', v: i.follow_up_date || '' },
+             { k: 'Escalated to', v: i.escalation_needed ? (i.escalation_who || '') : '' } ],
+    actor: ctx.collectorMap[i.collector_id] || '',
+  };
+}
+function coAdaptInternal(i, ctx) {
+  return {
+    id: 'internal:' + i.id, kind: 'internal', at: i.created_at, atPrec: 'instant',
+    title: 'Internal discussion with ' + (i.spoke_with || '—'),
+    pills: [{ label: 'Internal', bg: '#eef2ff', fg: '#3730a3' }],
+    body: i.note || '',
+    facts: [{ k: 'Follow-up', v: i.follow_up_date || '' }],
+    actor: ctx.collectorMap[i.collector_id] || '',
+  };
+}
+function coAdaptPtpEvent(e, ctx) {
+  const moved = e.old_date && e.new_date && e.new_date !== e.old_date;
+  return {
+    id: 'ptp:' + e.id, kind: 'ptp', at: e.created_at, atPrec: 'instant',
+    title: !e.new_date ? 'Promise removed'
+         : moved ? `Promise moved ${e.old_date} → ${e.new_date}`
+         : `Promised ${e.new_date}`,
+    subtitle: e.source === 'interaction' ? 'via logged interaction' : 'direct update',
+    amount: e.promised_amount != null ? Number(e.promised_amount) : null, amountKind: 'promised',
+    pills: e.given_by ? [{ label: e.given_by === 'self' ? 'Own estimate' : 'Customer gave it',
+                           bg: e.given_by === 'self' ? '#f5f0ff' : '#eefdf3',
+                           fg: e.given_by === 'self' ? '#6b21a8' : '#0a6e4c' }] : [],
+    invoices: e.invoice_number ? [e.invoice_number] : [],
+    facts: [{ k: 'TDS', v: e.tds_pct ? e.tds_pct + '%' : '' }],
+    actor: e.changed_by || '',
+  };
+}
+function coAdaptDispute(d, ctx) {
+  return {
+    id: 'disp:' + d.id, kind: 'dispute', at: d.opened_at, atPrec: 'instant',
+    title: 'Dispute raised — ' + String(d.dispute_type || '').replace(/_/g, ' '),
+    amount: d.disputed_amount != null ? Number(d.disputed_amount) : null, amountKind: 'disputed',
+    pills: [{ label: d.status === 'open' ? 'Open' : 'Closed',
+              bg: d.status === 'open' ? '#fee2e2' : '#dcfce7',
+              fg: d.status === 'open' ? '#991b1b' : '#166534' }],
+    invoices: d.invoice_number ? [d.invoice_number] : [],
+    body: d.dispute_description || '',
+  };
+}
+function coAdaptAdvance(a, ctx) {
+  return {
+    id: 'adv:' + a.payment_id, kind: 'payment', at: a.payment_date, atPrec: 'day',
+    title: 'Advance received' + (a.payment_number ? ' · ' + a.payment_number : ''),
+    amount: Number(a.amount_inr || a.amount || 0), amountKind: 'received',
+    subtitle: Number(a.unused_amount_inr || 0) > 0 ? `₹${f(Number(a.unused_amount_inr))} still unapplied` : 'fully applied',
+    body: a.description || '',
+  };
+}
+
+function coBuildFeed(name, b) {
+  const invNumMap = {};
+  (_arAllRows || []).filter(r => r.customer_name === name)
+    .forEach(r => { invNumMap[r.invoice_id] = r.invoice_number || r.invoice_id; });
+  const ctx = { ...b, invNumMap };
+  const feed = [
+    ...b.interactions.map(i => coAdaptInteraction(i, ctx)),
+    ...b.internals.map(i => coAdaptInternal(i, ctx)),
+    ...b.ptpEvents.map(e => coAdaptPtpEvent(e, ctx)),
+    ...b.disputes.map(d => coAdaptDispute(d, ctx)),
+    ...b.advances.map(a => coAdaptAdvance(a, ctx)),
+  ].filter(x => x.at);
+  // Lexicographic on the raw timestamp — no Date allocation per comparison
+  feed.sort((x, y) => String(y.at).localeCompare(String(x.at)) || x.id.localeCompare(y.id));
+  return feed;
+}
+
+
+/* ── Page render ────────────────────────────────────────────── */
+function coSec(key, title, sub, body, collapsed) {
+  return `<div class="co-sec${collapsed ? ' collapsed' : ''}" id="co-sec-${key}">
+    <div class="co-sec-hd" data-act="toggle-sec" data-arg="${escHtml(key)}">
+      <span class="co-caret">${collapsed ? '▶' : '▼'}</span>
+      <span class="co-sec-ttl">${escHtml(title)}</span>
+      ${sub ? `<span class="co-sec-sub">${escHtml(sub)}</span>` : ''}
+    </div>
+    <div class="co-sec-bd">${body}</div>
+  </div>`;
+}
+
+function coRender(name, b) {
+  const content = document.getElementById('co-content');
+  if (!content) return;
+  // Re-check on every render, not just on entry
+  if (!arPassesRoleFilter({ customer_name: name })) return coFail('That customer is not in your book.');
+
+  const invs = (_arAllRows || []).filter(r => r.customer_name === name);
+  const money = v => '₹' + f(v);
+  const open = invs.reduce((s2, r) => s2 + arInr(r), 0);
+  const overdue = invs.filter(r => arOverdueDays(r.due_date) > 0);
+  const overdueBal = overdue.reduce((s2, r) => s2 + arInr(r), 0);
+  const oldest = invs.reduce((m, r) => arOverdueDays(r.due_date) > arOverdueDays(m?.due_date ?? '9999-12-31') ? r : m, null);
+  const unapplied = b.advances.reduce((s2, a) => s2 + Number(a.unused_amount_inr || 0), 0);
+  const isExcluded = _arExcluded.some(ex => (name || '').toLowerCase().includes(String(ex).toLowerCase()));
+
+  // Ledger variance: Zoho's statement figure vs our frozen balance_inr. Both
+  // sides must be the frozen number — arInr revalues at today's FX rate.
+  const stmt = b.statement.filter(x => (x.contact_name || '') === name)
+    .reduce((s2, x) => s2 + Number(x.outstanding_receivable_amount_bcy || 0), 0);
+  const frozen = invs.reduce((s2, r) => s2 + Number(r.balance_inr || 0), 0);
+  const variance = b.statement.length ? stmt - frozen : null;
+
+  const lastInt = b.interactions[0];
+  const daysSince = lastInt ? Math.floor((Date.now() - new Date(lastInt.created_at)) / 86400000) : null;
+
+  // Buckets, using the same helpers the AR pane uses so figures tie exactly
+  const activeBuckets = arGetActiveBuckets();
+  const bBal = {}; activeBuckets.forEach(x => bBal[x.key] = 0);
+  let unbucketed = 0;
+  invs.forEach(r => { const k = arAgeBucket(r.due_date); if (bBal[k] !== undefined) bBal[k] += arInr(r); else unbucketed += arInr(r); });
+  const worst = [...activeBuckets].reverse().find(x => bBal[x.key] > 0.5);
+
+  // Re-promises: only real date moves. 40 of 124 events book-wide carry an
+  // old_date but the same new_date (amount/TDS-only re-logs) — counting those
+  // would inflate the number by ~30%.
+  const redates = b.ptpEvents.filter(e => e.old_date && e.new_date && e.new_date !== e.old_date);
+  const pushes = redates.filter(e => e.new_date > e.old_date);
+  const pulls  = redates.filter(e => e.new_date < e.old_date);
+  const pushDays = pushes.reduce((s2, e) => s2 + Math.round((new Date(e.new_date) - new Date(e.old_date)) / 86400000), 0);
+  const openDisputes = b.disputes.filter(d => d.status === 'open');
+
+  const tile = (lbl, val, sub, col) =>
+    `<div class="co-tile"><div class="co-tile-lbl">${escHtml(lbl)}</div>
+      <div class="co-tile-val"${col ? ` style="color:${col}"` : ''}>${val}</div>
+      <div class="co-tile-sub">${sub}</div></div>`;
+
+  /* 0 · identity */
+  const hdr = `<div style="display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin-bottom:.7rem">
+    <span style="font-size:17px;font-weight:700;color:var(--ink)">${escHtml(name)}</span>
+    ${buCap(arGetBu(name))}${pocCap(arGetCollector(name))}
+    ${isExcluded ? '<span class="co-pill" style="background:#f1f5f9;color:#64748b">Excluded from AR</span>' : ''}
+    <span style="margin-left:auto;display:flex;gap:.4rem">
+      <button class="co-chip" data-act="open-ar">Open in AR ↗</button>
+      <button class="co-chip" data-act="log-int">Log interaction ↗</button>
+    </span>
+  </div>`;
+
+  /* 1 · KPI strip */
+  const kpi = `<div class="co-kpi">
+    ${tile('Open AR', money(open), `${invs.length} invoice${invs.length === 1 ? '' : 's'}${open > 0 ? ` · ${Math.round(overdueBal / open * 100)}% overdue` : ''}`)}
+    ${tile('Overdue', money(overdueBal), worst ? `worst: ${escHtml(worst.label)}` : 'nothing overdue', overdueBal > 0.5 ? 'var(--red)' : '')}
+    ${tile('Oldest open', oldest && arOverdueDays(oldest.due_date) > 0 ? arOverdueDays(oldest.due_date) + 'd' : '—',
+           oldest ? `${escHtml(oldest.invoice_number || '')} · ${money(arInr(oldest))}` : '')}
+    ${tile('Unapplied cash', money(unapplied), unapplied > 0.5 ? `net exposure ${money(open - unapplied)}` : 'none sitting here', unapplied > 0.5 ? '#0a6e4c' : '')}
+    ${tile('Ledger variance', variance === null ? 'n/a' : money(Math.abs(variance)),
+           variance === null ? 'no statement row' : (Math.abs(variance) > 1000 ? '⚠ Zoho disagrees' : 'ties to Zoho'),
+           variance !== null && Math.abs(variance) > 1000 ? '#b45309' : '')}
+    ${tile('Last contact', daysSince === null ? 'never' : daysSince + 'd ago',
+           lastInt ? escHtml((b.collectorMap[lastInt.collector_id] || '') + (lastInt.outcome ? ' · ' + (CC_OUTCOME_LABELS[lastInt.outcome] || lastInt.outcome) : '')) : 'no interaction logged',
+           daysSince !== null && daysSince > 21 ? 'var(--red)' : '')}
+  </div>`;
+
+  /* 2 · diagnosis — facts only, no verdict */
+  const diag = [
+    `${money(open)} open`,
+    open > 0.5 ? `${Math.round(overdueBal / open * 100)}% overdue` : null,
+    redates.length ? `${redates.length} promise re-dated${pushDays > 0 ? ` (+${pushDays}d pushed)` : ''}` : null,
+    openDisputes.length ? `${openDisputes.length} open dispute${openDisputes.length === 1 ? '' : 's'}` : null,
+    daysSince !== null ? `last contact ${daysSince}d ago` : 'never contacted',
+    unapplied > 0.5 ? `${money(unapplied)} unapplied cash sitting here` : null,
+  ].filter(Boolean).join('  ·  ');
+  const diagHtml = `<div style="font-size:12.5px;color:var(--ink-soft);background:var(--surf);border:1px solid var(--brd);border-left:3px solid var(--navy2);border-radius:7px;padding:.55rem .8rem;margin-bottom:.8rem">${escHtml(diag)}</div>`;
+
+  /* 3 · aging mini-bar */
+  const agingSegs = activeBuckets.filter(x => bBal[x.key] > 0.5).map(x => {
+    const pct = open > 0 ? bBal[x.key] / open * 100 : 0;
+    return `<div title="${escHtml(x.label)}: ${money(bBal[x.key])} (${pct.toFixed(1)}%)" style="flex:${pct};background:${x.color}"></div>`;
+  }).join('') + (unbucketed > 0.5 ? `<div title="Outside every configured bracket: ${money(unbucketed)}" style="flex:${open > 0 ? unbucketed / open * 100 : 1};background:#9ca3af"></div>` : '');
+  const agingLeg = activeBuckets.filter(x => bBal[x.key] > 0.5).map(x =>
+    `<span style="font-size:10.5px;color:var(--txt2);margin-right:.7rem"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${x.color};vertical-align:-1px;margin-right:.25rem"></span>${escHtml(x.label.split('(')[0].trim())} ${money(bBal[x.key])}</span>`).join('')
+    + (unbucketed > 0.5 ? `<span style="font-size:10.5px;color:var(--txt2)"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#9ca3af;vertical-align:-1px;margin-right:.25rem"></span>Unbucketed ${money(unbucketed)}</span>` : '');
+  const agingHtml = invs.length
+    ? `<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:#eef1f6;margin-bottom:.4rem">${agingSegs}</div><div>${agingLeg}</div>`
+    : '<div style="font-size:12px;color:var(--txt3)">No open invoices.</div>';
+
+  content.innerHTML = hdr + kpi + diagHtml
+    + coSec('aging', 'Aging mix', invs.length ? money(open) : '', agingHtml, false)
+    + coSec('inv', 'Open invoices', `${invs.length} · ${money(open)}`, coRenderInvoices(name, invs, b), false)
+    + coSec('ptp', 'Promises & how they held', redates.length ? `${redates.length} re-dated` : 'no re-dates', coRenderPromises(b, redates, pushes, pulls, pushDays), false)
+    + coSec('tl', 'Activity timeline', `${CO.feed.length} item${CO.feed.length === 1 ? '' : 's'}`, coRenderTimeline(name, b), false)
+    + coSec('disp', 'Disputes', b.disputes.length ? `${openDisputes.length} open of ${b.disputes.length}` : 'none', coRenderDisputes(b), !b.disputes.length)
+    + coSec('pay', 'Advances & unapplied cash', b.advances.length ? money(unapplied) + ' unapplied' : 'none', coRenderAdvances(b), unapplied <= 0.5)
+    + coSec('ctc', 'Contacts', `${b.contacts.length}`, coRenderContacts(b), true);
+}
+
+
+/* ── Section bodies ─────────────────────────────────────────── */
+function coRenderInvoices(name, invs, b) {
+  if (!invs.length) return '<div style="font-size:12px;color:var(--txt3)">No open invoices. (Settled invoices are removed at source, so nothing is retained here once paid.)</div>';
+  const money = v => '₹' + f(v);
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const dispByInv = {};
+  b.disputes.filter(d => d.status === 'open').forEach(d => { if (d.invoice_id) dispByInv[d.invoice_id] = d; });
+  const sorted = [...invs].sort((x, y) => arInr(y) - arInr(x));
+  const rows = sorted.map(r => {
+    const days = arOverdueDays(r.due_date);
+    const ptp = _arPtpMap[r.invoice_id] || {};
+    const disputed = !!dispByInv[r.invoice_id];
+    const ptpLate = ptp.ptp_date && ptp.ptp_date < today;
+    const edge = disputed ? 'var(--red)' : ptpLate ? '#d97706' : (ptp.ptp_date ? '#16a34a' : 'transparent');
+    const tags = (_arInvTags[`${r.invoice_number}||${r.entity}`] || []);
+    return `<tr>
+      <td style="border-left:3px solid ${edge}">${r.invoice_url
+        ? `<a href="${escHtml(r.invoice_url)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--action);text-decoration:none">${escHtml(r.invoice_number || '')}</a>`
+        : `<span style="font-family:var(--mono);font-size:11px">${escHtml(r.invoice_number || '')}</span>`}</td>
+      <td style="color:var(--ink-faint);font-size:10.5px">${escHtml(r.invoice_date || '—')}</td>
+      <td style="font-size:10.5px">${escHtml(r.due_date || '—')}</td>
+      <td class="r">${days > 0 ? `<span style="color:var(--red);font-weight:600">${days}d</span>` : days === 0 ? '<span style="color:var(--amber);font-weight:600">today</span>' : `<span style="color:var(--ink-faint)">in ${-days}d</span>`}</td>
+      <td style="font-size:10.5px;color:var(--txt2)">${escHtml(String(arAgeBucket(r.due_date)))}</td>
+      <td class="r" style="font-weight:600${days > 0 ? ';color:var(--red)' : ''}">${money(arInr(r))}</td>
+      <td>${ptp.ptp_date
+        ? `<span class="co-pill" style="background:${ptpLate ? 'var(--red-bg)' : '#fef3c7'};color:${ptpLate ? 'var(--red)' : '#92400e'}">${escHtml(ptp.ptp_date)}</span>${ptp.promised_amount != null ? `<span style="font-family:var(--mono);font-size:10px;color:var(--txt3)">₹${f(Number(ptp.promised_amount))}</span>` : ''}`
+        : '<span style="color:var(--ink-faint);font-size:11px">—</span>'}
+        <button class="co-chip" style="padding:0 .3rem;margin:0 0 0 .25rem" data-act="edit-ptp" data-arg="${escHtml(r.invoice_id || '')}" title="Set / change PTP">✎</button></td>
+      <td>${disputed ? '<span class="co-pill" style="background:#fee2e2;color:#991b1b">Disputed</span>' : ''}${tags.map(t =>
+        `<span class="co-pill" style="background:#f1f5f9;color:#475569">${escHtml(t)}</span>`).join('')}</td>
+      <td><button class="co-chip" style="padding:0 .35rem;margin:0" data-act="inv-int" data-arg="${escHtml(r.invoice_id || '')}" data-arg2="${escHtml(r.invoice_number || '')}" title="Interactions on this invoice">💬</button></td>
+    </tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="co-inv-tbl">
+    <thead><tr><th>Invoice #</th><th>Invoice date</th><th>Due</th><th class="r">Overdue</th><th>Bucket</th><th class="r">Balance</th><th>Committed (PTP)</th><th>Flags</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr style="background:#f8fafc"><td colspan="5" style="font-weight:700;font-size:11.5px">${invs.length} invoice${invs.length === 1 ? '' : 's'}</td>
+      <td class="r" style="font-weight:700">${money(invs.reduce((s2, r) => s2 + arInr(r), 0))}</td><td colspan="3"></td></tr></tfoot>
+  </table></div>`;
+}
+
+function coRenderPromises(b, redates, pushes, pulls, pushDays) {
+  if (!b.ptpEvents.length) return '<div style="font-size:12px;color:var(--txt3)">No promise has ever been logged for this customer.</div>';
+  const mean = arr => arr.length ? Math.round(arr.reduce((s2, e) => s2 + Math.abs((new Date(e.new_date) - new Date(e.old_date)) / 86400000), 0) / arr.length) : 0;
+  const head = `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.5rem">
+    <strong>${redates.length}</strong> promise${redates.length === 1 ? '' : 's'} re-dated
+    ${pushes.length ? ` · <span style="color:#b45309">${pushes.length} pushed later (avg +${mean(pushes)}d, ${pushDays > 0 ? '+' + pushDays : pushDays}d total)</span>` : ''}
+    ${pulls.length ? ` · <span style="color:#0a6e4c">${pulls.length} pulled earlier (avg −${mean(pulls)}d)</span>` : ''}
+    ${!redates.length ? ' — every promise has held its original date' : ''}
+  </div>
+  <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.5rem">Counts logged re-datings only. Whether a promise was actually paid cannot be shown: settled invoices are removed at source, so this system holds no payment history.</div>`;
+  return head + b.ptpEvents.slice(0, 30).map(renderPtpEventItem).join('');
+}
+
+function coRenderDisputes(b) {
+  if (!b.disputes.length) return '<div style="font-size:12px;color:var(--txt3)">No disputes raised.</div>';
+  const money = v => '₹' + f(v);
+  return `<div style="overflow-x:auto"><table class="co-inv-tbl">
+    <thead><tr><th>Invoice #</th><th>Type</th><th class="r">Disputed ₹</th><th class="r">Age</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>${b.disputes.map(d => {
+      const age = d.opened_at ? Math.floor((Date.now() - new Date(d.opened_at)) / 86400000) : null;
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:11px">${escHtml(d.invoice_number || '—')}</td>
+        <td>${escHtml(String(d.dispute_type || '').replace(/_/g, ' '))}</td>
+        <td class="r">${d.disputed_amount != null ? money(Number(d.disputed_amount)) : '<span style="color:var(--ink-faint)">—</span>'}</td>
+        <td class="r">${age === null ? '—' : age + 'd'}</td>
+        <td><span class="co-pill" style="background:${d.status === 'open' ? '#fee2e2' : '#dcfce7'};color:${d.status === 'open' ? '#991b1b' : '#166534'}">${escHtml(d.status || '')}</span></td>
+        <td style="font-size:11.5px;color:var(--txt2);max-width:320px;white-space:normal">${escHtml(d.dispute_description || '')}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+function coRenderAdvances(b) {
+  if (!b.advances.length) return '<div style="font-size:12px;color:var(--txt3)">No advances recorded against this customer name.</div>';
+  const money = v => '₹' + f(v);
+  return `<div style="overflow-x:auto"><table class="co-inv-tbl">
+    <thead><tr><th>Payment #</th><th>Date</th><th class="r">Amount</th><th class="r">Unapplied</th><th>Note</th></tr></thead>
+    <tbody>${b.advances.map(a => `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${escHtml(a.payment_number || '—')}</td>
+      <td style="font-size:10.5px">${escHtml(a.payment_date || '—')}</td>
+      <td class="r">${money(Number(a.amount_inr || a.amount || 0))}</td>
+      <td class="r" style="font-weight:600;color:${Number(a.unused_amount_inr || 0) > 0.5 ? '#0a6e4c' : 'var(--ink-faint)'}">${money(Number(a.unused_amount_inr || 0))}</td>
+      <td style="font-size:11.5px;color:var(--txt2);max-width:320px;white-space:normal">${escHtml(a.description || '')}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function coRenderContacts(b) {
+  if (!b.contacts.length) return '<div style="font-size:12px;color:var(--txt3)">No contacts on file. Add them from the Contacts tab.</div>';
+  // Raw counts, never a rate: the median contact has ~2 logged interactions,
+  // so any percentage here would be noise dressed up as a signal.
+  const byContact = {};
+  b.interactions.forEach(i => {
+    if (!i.contact_id) return;
+    const c = byContact[i.contact_id] = byContact[i.contact_id] || { n: 0, conn: 0, last: null };
+    c.n++; if (i.connected === 'yes') c.conn++;
+    if (!c.last || i.created_at > c.last) c.last = i.created_at;
+  });
+  return b.contacts.map(c => {
+    const st = byContact[c.id];
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid var(--brd)${c.is_active === false ? ';opacity:.55' : ''}">
+      <div style="flex:1;min-width:0">
+        <span style="font-size:12.5px;font-weight:600">${escHtml(c.name || '')}</span>
+        ${c.role ? `<span style="font-size:11px;color:var(--txt3)"> · ${escHtml(c.role)}</span>` : ''}
+        ${c.phone ? `<span style="font-size:11px;color:var(--txt3)"> · ${escHtml(c.phone)}</span>` : ''}
+        ${c.email ? `<span style="font-size:11px;color:var(--txt3)"> · ${escHtml(c.email)}</span>` : ''}
+      </div>
+      <span style="font-size:10.5px;color:var(--txt3);white-space:nowrap">${st
+        ? `${st.n} attempt${st.n === 1 ? '' : 's'}, ${st.conn} connected · last ${coWhen(st.last, 'day')}`
+        : 'never contacted'}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── Timeline section: note box, filter chips, paging ────────── */
+function coRenderTimeline(name, b) {
+  CO.feed = coBuildFeed(name, b);
+  const counts = {};
+  CO.feed.forEach(a => { counts[a.kind] = (counts[a.kind] || 0) + 1; });
+  const chips = Object.keys(CO_KIND).filter(k => counts[k]).map(k =>
+    `<button class="co-chip${CO.kinds && CO.kinds.has(k) ? ' on' : ''}" data-act="filter-kind" data-arg="${k}">${escHtml(CO_KIND[k].label)} ${counts[k]}</button>`).join('');
+  const note = `<div style="display:flex;gap:.4rem;margin-bottom:.6rem">
+    <input type="text" id="co-note-inp" class="cust-input" style="flex:1;font-size:12px" placeholder="Add an internal note about this customer…">
+    <button class="co-chip" style="background:var(--navy2);color:#fff;border-color:var(--navy2)" data-act="add-note">Post note</button>
+  </div>`;
+  return note
+    + (chips ? `<div style="margin-bottom:.5rem">${chips}${CO.kinds ? '<button class="co-chip" data-act="filter-clear">Clear</button>' : ''}</div>` : '')
+    + `<div id="co-tl-list">${coTimelineHtml()}</div>`;
+}
+function coVisibleFeed() {
+  return CO.kinds ? CO.feed.filter(a => CO.kinds.has(a.kind)) : CO.feed;
+}
+function coTimelineHtml() {
+  const vis = coVisibleFeed();
+  if (!vis.length) return '<div style="font-size:12px;color:var(--txt3)">Nothing logged yet.</div>';
+  const shown = vis.slice(0, CO.page);
+  return shown.map(coRenderActivity).join('')
+    + (vis.length > shown.length
+      ? `<div style="text-align:center;padding:.5rem 0"><button class="co-chip" data-act="tl-more">Load ${Math.min(25, vis.length - shown.length)} more of ${vis.length - shown.length}</button></div>`
+      : '');
+}
+
+/* ── One delegated listener. No inline handlers anywhere in this
+   page: escHtml does not escape apostrophes, and customer names,
+   bucket labels and (later) email subjects all flow into markup. ── */
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('#customer-overview [data-act]');
+  if (!el) return;
+  const act = el.dataset.act, arg = el.dataset.arg;
+  const b = CO.cache[_coCustomer];
+  if (act === 'toggle-sec') {
+    const sec = document.getElementById('co-sec-' + arg);
+    if (sec) { sec.classList.toggle('collapsed'); const c = sec.querySelector('.co-caret'); if (c) c.textContent = sec.classList.contains('collapsed') ? '▶' : '▼'; }
+  } else if (act === 'filter-kind') {
+    CO.kinds = CO.kinds || new Set();
+    if (CO.kinds.has(arg)) CO.kinds.delete(arg); else CO.kinds.add(arg);
+    if (!CO.kinds.size) CO.kinds = null;
+    CO.page = 25;
+    if (b) coRender(_coCustomer, b);
+  } else if (act === 'filter-clear') {
+    CO.kinds = null; CO.page = 25;
+    if (b) coRender(_coCustomer, b);
+  } else if (act === 'tl-more') {
+    CO.page += 25;
+    const list = document.getElementById('co-tl-list');
+    if (list) list.innerHTML = coTimelineHtml();
+  } else if (act === 'open-ar') {
+    const arBtn = document.querySelector('#main-nav .tbtn[data-tab="ar"]');
+    const sInp = document.getElementById('ar-search');
+    if (sInp) sInp.value = _coCustomer;
+    if (arBtn) showARTab(arBtn);
+    renderAR();
+  } else if (act === 'log-int') {
+    const ccBtn = document.querySelector('#main-nav .tbtn[data-tab="collector-console"]');
+    if (ccBtn) { showCollectorConsoleTab(ccBtn); ccShowSubTab('log'); ccSelectCustomer(_coCustomer); }
+  } else if (act === 'inv-int') {
+    arShowInvInteractions(arg, el.dataset.arg2 || '');
+  } else if (act === 'edit-ptp') {
+    const r = (_arAllRows || []).find(x => x.invoice_id === arg);
+    if (r) arEditPtp(r.invoice_id, r.invoice_number || '', r.customer_name || '', arInr(r),
+      { onSaved: () => coRefresh() });
+  } else if (act === 'add-note') {
+    coAddNote();
+  }
+});
+
+async function coAddNote() {
+  const inp = document.getElementById('co-note-inp');
+  const txt = (inp?.value || '').trim();
+  if (!txt || !_coCustomer) return;
+  const fu = new Date(Date.now() + 330 * 60000 + 3 * 86400000).toISOString().slice(0, 10);
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/internal_interactions`, {
+    method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ collector_id: CURRENT_USER.id, customer_name: _coCustomer,
+                           spoke_with: 'Note', follow_up_date: fu, note: txt }),
+  });
+  if (r.ok) { inp.value = ''; coRefresh(); }
 }
 
 async function createTagAndAddCust(customerName, rawName) {
