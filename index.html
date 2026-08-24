@@ -539,7 +539,58 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <input type="password" id="login-password" class="cust-input" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button class="modal-csv" id="login-btn" onclick="doLogin()" style="width:100%">Sign In</button>
+    <div style="text-align:center;margin-top:.6rem">
+      <button onclick="sendPasswordReset()" style="background:none;border:none;color:var(--navy2);font-size:12px;cursor:pointer;text-decoration:underline;font-family:var(--sans)">Forgot password?</button>
+    </div>
     <div id="login-err" style="color:#a32d2d;font-size:12px;margin-top:.55rem;text-align:center;min-height:1rem"></div>
+    <div id="login-msg" style="color:#166534;font-size:12px;margin-top:.2rem;text-align:center;min-height:1rem"></div>
+  </div>
+</div>
+
+<!-- Landing for the link in a password-reset email -->
+<div id="recovery-screen" style="display:none;position:fixed;inset:0;background:#f0f4f9;align-items:center;justify-content:center;z-index:10000">
+  <div class="login-box">
+    <div style="font-size:19px;font-weight:700;color:var(--navy);margin-bottom:.2rem">Set a new password</div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:1.5rem" id="rec-for"></div>
+    <div style="margin-bottom:.7rem">
+      <div class="flabel">New password</div>
+      <input type="password" id="rec-pw1" class="cust-input" placeholder="At least 8 characters" onkeydown="if(event.key==='Enter')completePasswordRecovery()">
+    </div>
+    <div style="margin-bottom:1.2rem">
+      <div class="flabel">Confirm new password</div>
+      <input type="password" id="rec-pw2" class="cust-input" placeholder="Repeat it" onkeydown="if(event.key==='Enter')completePasswordRecovery()">
+    </div>
+    <button class="modal-csv" id="rec-btn" onclick="completePasswordRecovery()" style="width:100%">Save password</button>
+    <div id="rec-err" style="color:#a32d2d;font-size:12px;margin-top:.55rem;text-align:center;min-height:1rem"></div>
+  </div>
+</div>
+
+<!-- Change password (self-service, available to every role) -->
+<div id="pw-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)closePwModal()">
+  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:380px;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <span style="font-size:14px;font-weight:600;color:var(--navy)">Change password</span>
+      <button onclick="closePwModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.65rem">
+      <div>
+        <label class="cc-label">Current password <span class="cc-req">*</span></label>
+        <input type="password" id="pw-current" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem">
+      </div>
+      <div>
+        <label class="cc-label">New password <span class="cc-req">*</span></label>
+        <input type="password" id="pw-new" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem" placeholder="At least 8 characters">
+      </div>
+      <div>
+        <label class="cc-label">Confirm new password <span class="cc-req">*</span></label>
+        <input type="password" id="pw-new2" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem">
+      </div>
+    </div>
+    <div id="pw-err" style="font-size:11.5px;color:var(--red);margin-top:.6rem;min-height:1rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.6rem">
+      <button onclick="closePwModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="savePassword()" class="modal-csv" id="pw-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Update password</button>
+    </div>
   </div>
 </div>
 <div class="app-layout">
@@ -555,6 +606,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
   <div id="bottom-nav" style="border-top:1px solid rgba(255,255,255,.1);padding:.3rem 0"></div>
   <div class="sb-foot" id="logout-area" style="display:none">
     <span id="logout-name" class="sb-username"></span>
+    <button class="sb-signout-btn" onclick="openPwModal()" title="Change your password" style="margin-bottom:.3rem">Change password</button>
     <button class="sb-signout-btn" onclick="doLogout()">Sign out</button>
   </div>
 </aside>
@@ -2087,13 +2139,129 @@ async function initAuth() {
   const { createClient } = supabase;
   SUPABASE_CLIENT = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   SUPABASE_CLIENT.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) await onSignIn(session);
+    // Arriving from a reset email: Supabase has established a short-lived
+    // session, but the only thing to do with it is set a new password.
+    if (event === 'PASSWORD_RECOVERY') { showRecoveryScreen(session); return; }
+    if (event === 'SIGNED_IN' && session) { if (_inRecovery) return; await onSignIn(session); }
     if (event === 'SIGNED_OUT') { USER_JWT = null; CURRENT_USER = null; USER_ACCESS = null; showLoginScreen(); }
     if (event === 'TOKEN_REFRESHED' && session) USER_JWT = session.access_token;
   });
+  // On a cold load the recovery fragment is in the URL before any auth event
+  if (/[#&]type=recovery/.test(location.hash)) {
+    const { data: { session: recSession } } = await SUPABASE_CLIENT.auth.getSession();
+    showRecoveryScreen(recSession);
+    return;
+  }
   const { data: { session } } = await SUPABASE_CLIENT.auth.getSession();
   if (session) await onSignIn(session);
   else showLoginScreen();
+}
+
+/* ─── PASSWORD MANAGEMENT ────────────────────────────────────────
+   Three routes to a new password:
+     · a signed-in user changing their own (current password required)
+     · an admin resetting someone else's (no current password needed, done
+       server-side by the user-admin function which verifies the caller)
+     · a forgotten password, via an emailed recovery link
+   Supabase Auth holds the credentials; nothing here stores a password. */
+let _inRecovery = false;
+
+function pwValidate(a, b) {
+  if (!a || !b) return 'Enter the new password twice.';
+  if (a.length < 8) return 'Use at least 8 characters.';
+  if (a !== b)      return 'The two new passwords do not match.';
+  return null;
+}
+
+function openPwModal() {
+  ['pw-current', 'pw-new', 'pw-new2'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  document.getElementById('pw-err').textContent = '';
+  document.getElementById('pw-modal-ov').style.display = 'flex';
+  document.getElementById('pw-current').focus();
+}
+function closePwModal() { document.getElementById('pw-modal-ov').style.display = 'none'; }
+
+async function savePassword() {
+  const cur = document.getElementById('pw-current').value;
+  const a   = document.getElementById('pw-new').value;
+  const b   = document.getElementById('pw-new2').value;
+  const err = document.getElementById('pw-err');
+  if (!cur) { err.textContent = 'Enter your current password.'; return; }
+  const bad = pwValidate(a, b);
+  if (bad) { err.textContent = bad; return; }
+  if (a === cur) { err.textContent = 'The new password is the same as the current one.'; return; }
+  const btn = document.getElementById('pw-save-btn');
+  btn.disabled = true; btn.textContent = 'Updating…'; err.textContent = '';
+  try {
+    // Supabase has no "verify my password" call, so prove the current one by
+    // signing in with it. Same user, so the session is simply refreshed.
+    const { error: authErr } = await SUPABASE_CLIENT.auth.signInWithPassword({
+      email: CURRENT_USER.email, password: cur,
+    });
+    if (authErr) { err.textContent = 'Current password is incorrect.'; return; }
+    const { error } = await SUPABASE_CLIENT.auth.updateUser({ password: a });
+    if (error) { err.textContent = error.message || 'Could not update the password.'; return; }
+    closePwModal();
+    alert('Password updated. Use it next time you sign in.');
+  } catch(e) {
+    err.textContent = e.message || 'Could not update the password.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Update password';
+  }
+}
+
+/* ── Forgotten password ── */
+async function sendPasswordReset() {
+  const email = document.getElementById('login-email').value.trim();
+  const err   = document.getElementById('login-err');
+  const msg   = document.getElementById('login-msg');
+  err.textContent = ''; msg.textContent = '';
+  if (!email) { err.textContent = 'Enter your email address first, then click Forgot password.'; return; }
+  try {
+    const { error } = await SUPABASE_CLIENT.auth.resetPasswordForEmail(email, {
+      redirectTo: location.origin + location.pathname,
+    });
+    if (error) throw error;
+    // Deliberately not confirming whether the address exists.
+    msg.textContent = 'If that address has an account, a reset link is on its way. Check your inbox and spam.';
+  } catch(e) {
+    err.textContent = e.message || 'Could not send the reset email.';
+  }
+}
+
+function showRecoveryScreen(session) {
+  _inRecovery = true;
+  document.getElementById('login-screen').style.display = 'none';
+  const scr = document.getElementById('recovery-screen');
+  scr.style.display = 'flex';
+  const who = session?.user?.email || '';
+  document.getElementById('rec-for').textContent = who ? 'for ' + who : '';
+  document.getElementById('rec-pw1').focus();
+}
+
+async function completePasswordRecovery() {
+  const a = document.getElementById('rec-pw1').value;
+  const b = document.getElementById('rec-pw2').value;
+  const err = document.getElementById('rec-err');
+  const bad = pwValidate(a, b);
+  if (bad) { err.textContent = bad; return; }
+  const btn = document.getElementById('rec-btn');
+  btn.disabled = true; btn.textContent = 'Saving…'; err.textContent = '';
+  try {
+    const { error } = await SUPABASE_CLIENT.auth.updateUser({ password: a });
+    if (error) throw error;
+    // Drop the recovery session so the new password is actually exercised
+    await SUPABASE_CLIENT.auth.signOut();
+    _inRecovery = false;
+    history.replaceState(null, '', location.pathname);
+    document.getElementById('recovery-screen').style.display = 'none';
+    showLoginScreen();
+    document.getElementById('login-msg').textContent = 'Password saved. Sign in with it now.';
+  } catch(e) {
+    err.textContent = e.message || 'Could not save the password. The link may have expired — request a new one.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save password';
+  }
 }
 
 function showLoginScreen() {
@@ -2101,6 +2269,7 @@ function showLoginScreen() {
   document.getElementById('login-email').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-err').textContent = '';
+  const m = document.getElementById('login-msg'); if (m) m.textContent = '';
 }
 
 async function onSignIn(session) {
@@ -2204,6 +2373,7 @@ function renderNav() {
       const el = document.getElementById(id); if (el) el.style.display = '';
     });
   }
+  applyWriteActionVisibility();
   // Restore last-used tab, fall back to first allowed
   const saved   = getActiveTabPref();
   const allNavIds = [...ALL_TABS_CFG.filter(roleCan).map(t => t.id)];
@@ -2292,10 +2462,32 @@ async function loadUsersPanel() {
       '</div>' +
       '<div style="display:flex;gap:.35rem;flex-shrink:0">' +
         '<button class="rbtn" style="font-size:11px" onclick=\'openUserModal(' + userJson + ')\'>Edit</button>' +
+        '<button class="rbtn" style="font-size:11px" data-uid="' + escHtml(u.user_id) + '" data-uname="' + escHtml(u.display_name) + '" onclick="adminResetPassword(this.dataset.uid, this.dataset.uname)">Reset password</button>' +
         '<button class="rbtn" style="font-size:11px;color:#a32d2d" onclick="deleteUser(\'' + u.user_id + '\',\'' + escHtml(u.display_name) + '\')">Delete</button>' +
       '</div>' +
     '</div>';
   }).join('');
+}
+
+// Admins set a password directly. The current one is never needed and never
+// knowable: user-admin does it with the service key after checking the caller
+// is an admin, so nothing privileged happens in the browser.
+async function adminResetPassword(userId, displayName) {
+  const pw = prompt('New password for ' + displayName + '\n\nAt least 8 characters. Tell them to change it after signing in.');
+  if (pw === null) return;
+  if (pw.length < 8) { alert('Password must be at least 8 characters. Nothing was changed.'); return; }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/user-admin`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operation: 'update_user', user_id: userId, password: pw }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    alert('Password reset for ' + displayName + '. They can sign in with it now.');
+  } catch(e) {
+    alert('Could not reset the password: ' + (e.message || e));
+  }
 }
 
 let _editingUserId = null;
@@ -4083,6 +4275,19 @@ async function loadARExcluded() {
 let _arBuSelected        = new Set(); // empty = all BUs
 let _arCollectorSelected = new Set(); // empty = all collectors
 let _arCustTags          = {};        // { customer_name: [tag_name, ...] }
+
+// Sync and snapshot controls pull from Zoho and rewrite shared tables, so
+// they are hidden from roles that are only meant to read. A BU user sees Open
+// AR and its sub-tabs, which is where all of these live.
+const NO_WRITE_ACTION_ROLES = ['bu'];
+function applyWriteActionVisibility() {
+  const hide = NO_WRITE_ACTION_ROLES.includes(USER_ACCESS?.role || '');
+  ['ar-sync-btn-in', 'ar-upload-uk-btn', 'ar-snap-take-btn',
+   'adv-sync-btn', 'arreco-balances-btn', 'adv-sync-btn-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hide ? 'none' : '';
+  });
+}
 
 function showTab(id, btn) {
   const paneId = id;
