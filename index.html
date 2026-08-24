@@ -11233,7 +11233,7 @@ function coRender(name, b) {
            variance !== null && Math.abs(variance) > 1000 ? '#b45309' : '')}
     ${tile('Typically pays in', ps.medDays != null ? ps.medDays + 'd' : (ps.n ? ps.n + ' settled' : '—'),
            ps.medDays != null
-             ? `median of ${ps.n} · ${ps.kept}/${ps.scored || 0} promises kept`
+             ? `from invoice date · median of ${ps.n}${ps.medLate != null ? ` · ${ps.medLate > 0 ? ps.medLate + 'd past due' : Math.abs(ps.medLate) + 'd early'}` : ''}`
              : (ps.n ? 'too few settled to call' : 'no payment history yet'),
            ps.medLate != null && ps.medLate > 0 ? 'var(--red)' : '')}
     ${tile('Last contact', daysSince === null ? 'never' : daysSince + 'd ago',
@@ -11249,7 +11249,7 @@ function coRender(name, b) {
     openDisputes.length ? `${openDisputes.length} open dispute${openDisputes.length === 1 ? '' : 's'}` : null,
     daysSince !== null ? `last contact ${daysSince}d ago` : 'never contacted',
     unapplied > 0.5 ? `${money(unapplied)} unapplied cash sitting here` : null,
-    ps.medDays != null ? `typically pays in ${ps.medDays}d` : null,
+    ps.medDays != null ? `typically pays ${ps.medDays}d after invoice date` : null,
     ps.scored ? `${ps.kept}/${ps.scored} promises kept` : null,
   ].filter(Boolean).join('  ·  ');
   const diagHtml = `<div style="font-size:12.5px;color:var(--ink-soft);background:var(--surf);border:1px solid var(--brd);border-left:3px solid var(--navy2);border-radius:7px;padding:.55rem .8rem;margin-bottom:.8rem">${escHtml(diag)}</div>`;
@@ -11438,8 +11438,8 @@ function coRenderSettled(b, ps) {
   };
   const head = `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.5rem">
     ${ps.n ? `<strong>${money(ps.collected)}</strong> collected across ${ps.n} invoice${ps.n === 1 ? '' : 's'}` : 'No confirmed payments yet'}
-    ${ps.medDays != null ? ` · typically <strong>${ps.medDays} days</strong> to pay (median)` : (ps.n ? ` · too few to give a typical timeline` : '')}
-    ${ps.medLate != null ? ` · <span style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${ps.medLate > 0 ? ps.medLate + 'd past due' : Math.abs(ps.medLate) + 'd before due'}</span>` : ''}
+    ${ps.medDays != null ? ` · typically <strong>${ps.medDays} days</strong> from invoice date to payment (median)` : (ps.n ? ` · too few to give a typical timeline` : '')}
+    ${ps.medLate != null ? ` · and <span style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${ps.medLate > 0 ? ps.medLate + 'd past the due date' : Math.abs(ps.medLate) + 'd before the due date'}</span> (median)` : ''}
     ${ps.writtenOff > 0.5 ? ` · <span style="color:var(--red)">${money(ps.writtenOff)} written off</span>` : ''}
   </div>`;
   const rows = (b.closures || []).map(c => {
@@ -11459,7 +11459,7 @@ function coRenderSettled(b, ps) {
     </tr>`;
   }).join('');
   return head + `<div style="overflow-x:auto"><table class="co-inv-tbl">
-    <thead><tr><th>Invoice #</th><th>Settled</th><th class="r">Amount</th><th class="r">Days to pay</th><th class="r">vs due</th><th>Basis</th></tr></thead>
+    <thead><tr><th>Invoice #</th><th>Settled</th><th class="r">Amount</th><th class="r" title="Days from the invoice date to the payment date">From invoice</th><th class="r" title="Days from the due date to the payment date; negative means paid early">vs due date</th><th>Basis</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
