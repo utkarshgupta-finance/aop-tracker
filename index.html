@@ -11205,8 +11205,9 @@ function coRender(name, b) {
   const openDisputes = b.disputes.filter(d => d.status === 'open');
   const ps = coPayStats(b);
 
-  const tile = (lbl, val, sub, col) =>
-    `<div class="co-tile"><div class="co-tile-lbl">${escHtml(lbl)}</div>
+  const tile = (lbl, val, sub, col, act) =>
+    `<div class="co-tile"${act ? ` data-act="${act}" style="cursor:pointer" title="Click for the invoice-by-invoice detail"` : ''}>
+      <div class="co-tile-lbl">${escHtml(lbl)}</div>
       <div class="co-tile-val"${col ? ` style="color:${col}"` : ''}>${val}</div>
       <div class="co-tile-sub">${sub}</div></div>`;
 
@@ -11231,11 +11232,12 @@ function coRender(name, b) {
     ${tile('Ledger variance', variance === null ? 'n/a' : money(Math.abs(variance)),
            variance === null ? 'no statement row' : (Math.abs(variance) > 1000 ? '⚠ Zoho disagrees' : 'ties to Zoho'),
            variance !== null && Math.abs(variance) > 1000 ? '#b45309' : '')}
-    ${tile('Typically pays in', ps.medDays != null ? ps.medDays + 'd' : (ps.n ? ps.n + ' settled' : '—'),
-           ps.medDays != null
-             ? `from invoice date · median of ${ps.n}${ps.medLate != null ? ` · ${ps.medLate > 0 ? ps.medLate + 'd past due' : Math.abs(ps.medLate) + 'd early'}` : ''}`
+    ${tile('Typically pays', ps.medLate != null ? coDueLabel(ps.medLate) : (ps.n ? ps.n + ' settled' : '—'),
+           ps.medLate != null
+             ? `vs due date · median of ${ps.n}${ps.medDays != null ? ` · ${ps.medDays}d from invoice` : ''}`
              : (ps.n ? 'too few settled to call' : 'no payment history yet'),
-           ps.medLate != null && ps.medLate > 0 ? 'var(--red)' : '')}
+           ps.medLate != null ? (ps.medLate > 0 ? 'var(--red)' : '#0a6e4c') : '',
+           ps.n ? 'pay-detail' : null)}
     ${tile('Last contact', daysSince === null ? 'never' : daysSince + 'd ago',
            lastInt ? escHtml((b.collectorMap[lastInt.collector_id] || '') + (lastInt.outcome ? ' · ' + (CC_OUTCOME_LABELS[lastInt.outcome] || lastInt.outcome) : '')) : 'no interaction logged',
            daysSince !== null && daysSince > 21 ? 'var(--red)' : '')}
@@ -11249,7 +11251,7 @@ function coRender(name, b) {
     openDisputes.length ? `${openDisputes.length} open dispute${openDisputes.length === 1 ? '' : 's'}` : null,
     daysSince !== null ? `last contact ${daysSince}d ago` : 'never contacted',
     unapplied > 0.5 ? `${money(unapplied)} unapplied cash sitting here` : null,
-    ps.medDays != null ? `typically pays ${ps.medDays}d after invoice date` : null,
+    ps.medLate != null ? `typically pays ${coDueLabel(ps.medLate)}` : null,
     ps.scored ? `${ps.kept}/${ps.scored} promises kept` : null,
   ].filter(Boolean).join('  ·  ');
   const diagHtml = `<div style="font-size:12.5px;color:var(--ink-soft);background:var(--surf);border:1px solid var(--brd);border-left:3px solid var(--navy2);border-radius:7px;padding:.55rem .8rem;margin-bottom:.8rem">${escHtml(diag)}</div>`;
@@ -11285,6 +11287,10 @@ function coRender(name, b) {
    Medians, not means: days-to-pay is heavily skewed (book-wide median 39 vs
    mean 57), so a mean would overstate how slowly a typical invoice settles. */
 const CO_MIN_CLOSURES = 3;   // below this, report counts and refuse a median
+// Relative to the due date, which is the figure that says whether terms are
+// respected. A signed integer reads badly here ("-105d"), so name the direction.
+const coDueLabel = d => d == null ? null
+  : d > 0 ? `${d}d late` : d < 0 ? `${Math.abs(d)}d early` : 'on due date';
 function coPayStats(b) {
   const paid = (b.closures || []).filter(c => c.closure_basis === 'zoho_paid' && c.days_to_pay != null);
   const wo   = (b.closures || []).filter(c => c.closure_basis === 'zoho_write_off');
@@ -11438,8 +11444,8 @@ function coRenderSettled(b, ps) {
   };
   const head = `<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:.5rem">
     ${ps.n ? `<strong>${money(ps.collected)}</strong> collected across ${ps.n} invoice${ps.n === 1 ? '' : 's'}` : 'No confirmed payments yet'}
-    ${ps.medDays != null ? ` · typically <strong>${ps.medDays} days</strong> from invoice date to payment (median)` : (ps.n ? ` · too few to give a typical timeline` : '')}
-    ${ps.medLate != null ? ` · and <span style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${ps.medLate > 0 ? ps.medLate + 'd past the due date' : Math.abs(ps.medLate) + 'd before the due date'}</span> (median)` : ''}
+    ${ps.medLate != null ? ` · typically <strong style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${coDueLabel(ps.medLate)}</strong> against the due date (median)` : (ps.n ? ` · too few to give a typical timeline` : '')}
+    ${ps.medDays != null ? ` · ${ps.medDays}d from invoice date (median)` : ''}
     ${ps.writtenOff > 0.5 ? ` · <span style="color:var(--red)">${money(ps.writtenOff)} written off</span>` : ''}
   </div>`;
   const rows = (b.closures || []).map(c => {
@@ -11461,6 +11467,77 @@ function coRenderSettled(b, ps) {
   return head + `<div style="overflow-x:auto"><table class="co-inv-tbl">
     <thead><tr><th>Invoice #</th><th>Settled</th><th class="r">Amount</th><th class="r" title="Days from the invoice date to the payment date">From invoice</th><th class="r" title="Days from the due date to the payment date; negative means paid early">vs due date</th><th>Basis</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+
+/* ── Payment-timing detail popup ─────────────────────────────────
+   The working behind the "Typically pays" tile: every settled invoice with
+   its terms, when it was paid, and how that landed against both dates. */
+function coOpenPayDetail() {
+  const b = CO.cache[_coCustomer];
+  if (!b) return;
+  document.getElementById('co-pay-modal')?.remove();
+  const ps = coPayStats(b);
+  const money = v => '₹' + f(v);
+  const paid = [...ps.paid].sort((x, y) => String(x.closed_on).localeCompare(String(y.closed_on)));
+
+  const rows = paid.map(c => {
+    const terms = (c.due_date && c.invoice_date)
+      ? Math.round((new Date(c.due_date) - new Date(c.invoice_date)) / 86400000) : null;
+    const late = c.days_late;
+    const kept = c.ptp_date_at_close
+      ? (c.closed_on <= c.ptp_date_at_close
+          ? '<span class="co-pill" style="background:#dcfce7;color:#166534">kept</span>'
+          : '<span class="co-pill" style="background:#fee2e2;color:#991b1b">missed</span>')
+      : '<span style="color:var(--ink-faint)">—</span>';
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${escHtml(c.invoice_number || c.invoice_id)}</td>
+      <td style="font-size:10.5px">${escHtml(c.invoice_date || '—')}</td>
+      <td style="font-size:10.5px">${escHtml(c.due_date || '—')}</td>
+      <td class="r">${terms != null ? terms + 'd' : '—'}</td>
+      <td style="font-size:10.5px;font-weight:600">${escHtml(c.closed_on || '—')}</td>
+      <td class="r">${money(Number(c.amount_paid ?? c.last_balance_inr ?? 0))}</td>
+      <td class="r">${c.days_to_pay != null ? c.days_to_pay + 'd' : '—'}</td>
+      <td class="r" style="font-weight:700;color:${late == null ? 'var(--ink-faint)' : late > 0 ? 'var(--red)' : '#0a6e4c'}">${late == null ? '—' : escHtml(coDueLabel(late))}</td>
+      <td>${kept}</td>
+    </tr>`;
+  }).join('');
+
+  const th = 'padding:.4rem .55rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap;position:sticky;top:0';
+  const ov = document.createElement('div');
+  ov.id = 'co-pay-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1300;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:1000px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;padding:.9rem 1.1rem .65rem;border-bottom:1px solid var(--brd)">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">Payment timing — ${escHtml(_coCustomer || '')}</div>
+        <div style="font-size:11.5px;color:var(--txt3);margin-top:.15rem">
+          ${ps.n} settled invoice${ps.n === 1 ? '' : 's'} · ${money(ps.collected)} collected
+          ${ps.medLate != null ? ` · typically <strong style="color:${ps.medLate > 0 ? 'var(--red)' : '#0a6e4c'}">${escHtml(coDueLabel(ps.medLate))}</strong> against the due date` : ''}
+          ${ps.medDays != null ? ` · ${ps.medDays}d from invoice date` : ''}
+          ${ps.scored ? ` · ${ps.kept} of ${ps.scored} promise${ps.scored === 1 ? '' : 's'} kept` : ''}
+        </div>
+      </div>
+      <button onclick="document.getElementById('co-pay-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;color:var(--txt2);flex:0 0 auto">×</button>
+    </div>
+    <div style="overflow:auto;padding:0 1.1rem .5rem">
+      ${paid.length ? `<table class="co-inv-tbl">
+        <thead><tr>
+          <th style="${th}">Invoice #</th><th style="${th}">Invoice date</th><th style="${th}">Due date</th>
+          <th style="${th};text-align:right" title="Days the customer was given">Terms</th>
+          <th style="${th}">Paid on</th><th style="${th};text-align:right">Amount</th>
+          <th style="${th};text-align:right" title="Invoice date to payment">From invoice</th>
+          <th style="${th};text-align:right" title="Against the due date">vs due date</th>
+          <th style="${th}">Promise</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<div style="font-size:12px;color:var(--txt3);padding:1rem 0">No confirmed payments yet for this customer.</div>'}
+    </div>
+    <div style="padding:.55rem 1.1rem .8rem;border-top:1px solid var(--brd);font-size:10.5px;color:var(--txt3)">
+      Medians, not averages — a single unusual invoice would otherwise move the figure. Only invoices Zoho gave a payment date for are counted; write-offs and closures of unknown cause are excluded. Recorded from ${escHtml(CO_LEDGER_FROM)} onward.
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
 }
 
 /* ── Timeline section: note box, filter chips, paging ────────── */
@@ -11530,6 +11607,8 @@ document.addEventListener('click', (e) => {
     const r = (_arAllRows || []).find(x => x.invoice_id === arg);
     if (r) arEditPtp(r.invoice_id, r.invoice_number || '', r.customer_name || '', arInr(r),
       { onSaved: () => coRefresh() });
+  } else if (act === 'pay-detail') {
+    coOpenPayDetail();
   } else if (act === 'add-note') {
     coAddNote();
   }
