@@ -904,6 +904,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <!-- ── Collector Level ───────────────────────────────── -->
     <div id="ca-sec-collector" style="display:none">
       <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;flex-wrap:wrap">
+        <div id="cl-updated" style="font-size:11px;color:var(--txt3);font-family:var(--mono)"></div>
         <div style="margin-left:auto;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
           <div style="display:flex">
             <button id="cl-view-heatmap" class="ca-view-btn active" onclick="clSetView('heatmap')">Heatmap</button>
@@ -2040,6 +2041,50 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.3rem">
       <button onclick="ecnCloseForm()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="ecnSave()" class="modal-csv" id="ecn-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Expected Credit Note: edit one row ───────────────────── -->
+<div id="ecn-edit-ov" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)ecnCloseEdit()">
+  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:460px;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+      <span style="font-size:14px;font-weight:600;color:var(--navy)">Edit expected credit note</span>
+      <button onclick="ecnCloseEdit()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+    </div>
+    <div id="ecn-edit-info" style="font-size:12px;color:var(--txt2);background:#f9fafb;border:1px solid var(--brd);border-radius:6px;padding:.55rem .7rem;margin-bottom:.85rem"></div>
+    <div style="display:flex;flex-direction:column;gap:.65rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div>
+          <label class="cc-label">Expected CN (₹) <span class="cc-req">*</span></label>
+          <input type="number" id="ecn-e-amount" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" min="1">
+          <div id="ecn-e-hint" style="font-size:10.5px;color:var(--txt3);margin-top:.2rem"></div>
+        </div>
+        <div>
+          <label class="cc-label">Revenue loss (₹)</label>
+          <input type="number" id="ecn-e-revenue" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" min="0">
+        </div>
+      </div>
+      <div>
+        <label class="cc-label">Reason <span class="cc-req">*</span></label>
+        <select id="ecn-e-reason" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
+      </div>
+      <div>
+        <label class="cc-label">Details <span class="cc-req">*</span></label>
+        <textarea id="ecn-e-details" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;resize:vertical"></textarea>
+      </div>
+      <div>
+        <label class="cc-label">Email subject</label>
+        <input type="text" id="ecn-e-subject" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem">
+      </div>
+    </div>
+    <div id="ecn-edit-err" style="font-size:11.5px;color:var(--red);margin-top:.6rem;min-height:1rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:space-between;align-items:center">
+      <button onclick="ecnDelete()" id="ecn-del-btn" style="padding:.35rem .8rem;font-size:12px;border:1px solid #fca5a5;border-radius:6px;background:#fff;color:#dc2626;cursor:pointer">Delete</button>
+      <span style="display:flex;gap:.5rem">
+        <button onclick="ecnCloseEdit()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+        <button onclick="ecnSaveEdit()" class="modal-csv" id="ecn-edit-btn" style="padding:.35rem .9rem;font-size:12.5px">Save changes</button>
+      </span>
     </div>
   </div>
 </div>
@@ -6805,6 +6850,16 @@ async function loadCollectorLevel() {
     );
     if (!r.ok) throw new Error(await r.text());
     _clData = await r.json();
+    // The Apps Script stamps updated_at on every row it pushes, so the newest
+    // one is the time the sheet was last pushed.
+    const up = document.getElementById('cl-updated');
+    if (up) {
+      const latest = _clData.reduce((m, x) => (x.updated_at && x.updated_at > m ? x.updated_at : m), '');
+      up.textContent = latest
+        ? 'Last pushed from Google Sheet: ' + new Date(latest).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+        : 'Last push time not recorded';
+      up.title = latest ? 'Time the Apps Script last wrote collector performance data' : '';
+    }
     if (!_clData.length) {
       if (hmMom)  hmMom.innerHTML  = '<div style="padding:1.2rem;color:var(--txt3);font-size:13px">No data yet — run the Apps Script to push collector performance data.</div>';
       if (hmRoll) hmRoll.innerHTML = '';
@@ -12216,7 +12271,8 @@ function ecnRender() {
           <td style="${td};white-space:nowrap;color:var(--txt3);font-size:11px">${escHtml(String(x.created_at).slice(0,10))}${x.created_by_name ? `<div style="font-size:10px">${escHtml(x.created_by_name)}</div>` : ''}</td>
           <td style="${td}">${statusCell}</td>
           <td style="${td};white-space:nowrap">${!closed && canEdit
-            ? `<button class="rbtn" style="font-size:11px" data-id="${escHtml(x.id)}" onclick="ecnOpenCloseModal(this.dataset.id)">Mark closed</button>` : ''}</td>
+            ? `<button class="rbtn" style="font-size:11px" data-id="${escHtml(x.id)}" onclick="ecnOpenEdit(this.dataset.id)">Edit</button>
+               <button class="rbtn" style="font-size:11px" data-id="${escHtml(x.id)}" onclick="ecnOpenCloseModal(this.dataset.id)">Mark closed</button>` : ''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
@@ -12229,10 +12285,12 @@ function ecnRender() {
    the credit note is capped by that invoice's balance, the revenue loss is
    not, because it is what the business gives up rather than what is owed. */
 let _ecnInvoices = [];   // invoices offered for the chosen customer
+let _ecnExistingForCust = {};   // invoice_id -> open CN already raised
 
 function ecnOpenForm() {
   ['ecn-cust','ecn-details','ecn-subject'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  _ecnInvoices = [];
+  _ecnInvoices = []; _ecnExistingForCust = {};
+  _ecnEditingId = null;
   document.getElementById('ecn-inv-wrap').style.display = 'none';
   document.getElementById('ecn-inv-hint').textContent = 'Pick a customer to list their open invoices.';
   document.getElementById('ecn-inv-tot').textContent = '';
@@ -12257,6 +12315,23 @@ async function ecnSelectCustomer(name) {
   document.getElementById('ecn-cust').value = name;
   document.getElementById('ecn-cust-dd').style.display = 'none';
   document.getElementById('ecn-inv-hint').textContent = 'Loading invoices…';
+  // Refresh what is already outstanding for this customer, so an invoice that
+  // already carries an open expected CN cannot be raised against twice.
+  try {
+    const er = await fetch(
+      `${SUPABASE_URL}/rest/v1/expected_credit_notes?customer_name=eq.${encodeURIComponent(name)}&status=eq.open&select=invoice_id,expected_amount,reason,status`,
+      { headers: cmrrHdr() });
+    if (er.ok) {
+      const rows = (await er.json()).filter(x => x.status === 'open');
+      _ecnExistingForCust = {};
+      rows.forEach(x => {
+        if (!x.invoice_id) return;
+        const m = _ecnExistingForCust[x.invoice_id] = _ecnExistingForCust[x.invoice_id] || { amount: 0, count: 0, reasons: [] };
+        m.amount += Number(x.expected_amount || 0); m.count++;
+        if (x.reason && !m.reasons.includes(x.reason)) m.reasons.push(x.reason);
+      });
+    }
+  } catch(_) { _ecnExistingForCust = {}; }
   let invs = (_arAllRows || []).filter(r => r.customer_name === name);
   if (!invs.length) {
     try {
@@ -12279,7 +12354,9 @@ function ecnRenderInvoicePicker() {
     hint.textContent = 'No open invoices for this customer.';
     return;
   }
-  hint.textContent = 'Tick each invoice this applies to, then enter its amounts.';
+  const lockedCount = _ecnInvoices.filter(i => _ecnExistingForCust[i.invoice_id]).length;
+  hint.textContent = 'Tick each invoice this applies to, then enter its amounts.'
+    + (lockedCount ? ` ${lockedCount} invoice${lockedCount === 1 ? '' : 's'} already carr${lockedCount === 1 ? 'ies' : 'y'} an open expected CN and cannot be picked again — edit the existing entry instead.` : '');
   wrap.style.display = '';
   const th = 'padding:.35rem .5rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap';
   const td = 'padding:.3rem .5rem;font-size:12px;border-bottom:1px solid var(--line);vertical-align:middle';
@@ -12295,6 +12372,20 @@ function ecnRenderInvoicePicker() {
     </tr></thead>
     <tbody>${_ecnInvoices.map(inv => {
       const id = inv.invoice_id, bal = Number(inv.balance_inr || inv.balance || 0);
+      const taken = _ecnExistingForCust[id];
+      if (taken) {
+        // Already has an open expected CN — say what and by how much, and give
+        // no tick box, so the same claim cannot be entered twice.
+        return `<tr data-ecn-row="${escHtml(id)}" style="background:#fffbeb">
+          <td style="${td};text-align:center;color:#b45309">✓</td>
+          <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(inv.invoice_number || id)}</td>
+          <td style="${td};text-align:right;font-family:var(--mono);color:var(--txt2)">₹${f(bal)}</td>
+          <td style="${td}" colspan="2"><span style="font-size:11.5px;color:#92400e">Already raised — ₹${f(taken.amount)}${taken.count > 1 ? ` across ${taken.count}` : ''}${taken.reasons.length ? ' · ' + escHtml(taken.reasons.map(cnReasonLabel).join(', ')) : ''}</span></td>
+          <td style="${td};text-align:center">${inv.invoice_url
+            ? `<a href="${escHtml(inv.invoice_url)}" target="_blank" rel="noopener" title="Open this invoice in Zoho" style="color:var(--action);text-decoration:none;font-size:13px">↗</a>`
+            : '<span style="color:var(--ink-faint)">—</span>'}</td>
+        </tr>`;
+      }
       return `<tr data-ecn-row="${escHtml(id)}" style="opacity:.55">
         <td style="${td}"><input type="checkbox" id="${ecnRowId(id,'on')}" data-iid="${escHtml(id)}" onchange="ecnToggleInvoice(this.dataset.iid)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)"></td>
         <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(inv.invoice_number || id)}</td>
@@ -12323,7 +12414,8 @@ function ecnToggleInvoice(id) {
 
 // Which invoices are ticked, and what was typed against each
 function ecnPicked() {
-  return _ecnInvoices.filter(inv => document.getElementById(ecnRowId(inv.invoice_id, 'on'))?.checked)
+  return _ecnInvoices.filter(inv => !_ecnExistingForCust[inv.invoice_id]
+      && document.getElementById(ecnRowId(inv.invoice_id, 'on'))?.checked)
     .map(inv => {
       const amt = parseFloat(document.getElementById(ecnRowId(inv.invoice_id, 'amt'))?.value);
       const rev = parseFloat(document.getElementById(ecnRowId(inv.invoice_id, 'rev'))?.value);
@@ -12393,6 +12485,91 @@ async function ecnSave() {
   } catch(e) {
     err.textContent = 'Could not save: ' + (e.message || e);
   } finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+/* ── Editing one row ──────────────────────────────────────────
+   Only open rows are editable. A closed one is a settled record with its CN
+   number or its reason for not needing one, and rewriting that would quietly
+   change history. */
+let _ecnEditingId = null;
+
+function ecnOpenEdit(id) {
+  const x = _ecnRows.find(r => r.id === id);
+  if (!x || x.status !== 'open') return;
+  _ecnEditingId = id;
+  const inv = (_arAllRows || []).find(r => r.invoice_id === x.invoice_id);
+  const bal = inv ? Number(inv.balance_inr || inv.balance || 0) : 0;
+  document.getElementById('ecn-edit-info').innerHTML =
+    `<strong>${escHtml(x.customer_name)}</strong> · ${inv?.invoice_url
+      ? `<a href="${escHtml(inv.invoice_url)}" target="_blank" rel="noopener" style="color:var(--action);text-decoration:none">${escHtml(x.invoice_number || '')} ↗</a>`
+      : escHtml(x.invoice_number || '')}`
+    + (bal > 0 ? `<br>₹${f(bal)} still open on this invoice` : '');
+  const rs = document.getElementById('ecn-e-reason');
+  const active = _cnReasons.filter(r => r.is_active !== false || r.value === x.reason);
+  rs.innerHTML = active.map(r => `<option value="${escHtml(r.value)}"${r.value === x.reason ? ' selected' : ''}>${escHtml(r.label)}</option>`).join('');
+  document.getElementById('ecn-e-amount').value  = x.expected_amount ?? '';
+  document.getElementById('ecn-e-amount').max    = bal > 0 ? bal : '';
+  document.getElementById('ecn-e-revenue').value = x.revenue_loss ?? '';
+  document.getElementById('ecn-e-details').value = x.details || '';
+  document.getElementById('ecn-e-subject').value = x.email_subject || '';
+  document.getElementById('ecn-e-hint').textContent = bal > 0 ? `Cannot exceed ₹${f(bal)}.` : '';
+  document.getElementById('ecn-edit-err').textContent = '';
+  document.getElementById('ecn-edit-ov').style.display = 'flex';
+}
+function ecnCloseEdit() { document.getElementById('ecn-edit-ov').style.display = 'none'; _ecnEditingId = null; }
+
+async function ecnSaveEdit() {
+  const err = document.getElementById('ecn-edit-err');
+  const x = _ecnRows.find(r => r.id === _ecnEditingId);
+  if (!x) return;
+  const inv = (_arAllRows || []).find(r => r.invoice_id === x.invoice_id);
+  const bal = inv ? Number(inv.balance_inr || inv.balance || 0) : 0;
+  const amt = parseFloat(document.getElementById('ecn-e-amount').value);
+  const rev = parseFloat(document.getElementById('ecn-e-revenue').value);
+  const reason  = document.getElementById('ecn-e-reason').value;
+  const details = document.getElementById('ecn-e-details').value.trim();
+  const subject = document.getElementById('ecn-e-subject').value.trim();
+  if (!amt || amt <= 0) { err.textContent = 'Enter the expected CN amount.'; return; }
+  if (bal > 0 && amt > bal + 0.5) { err.textContent = `That is more than the ₹${f(bal)} still open on this invoice.`; return; }
+  if (!isNaN(rev) && rev < 0) { err.textContent = 'Revenue loss cannot be negative.'; return; }
+  if (!reason)  { err.textContent = 'Pick a reason.'; return; }
+  if (!details) { err.textContent = 'Details cannot be empty.'; return; }
+  err.textContent = '';
+  const btn = document.getElementById('ecn-edit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?id=eq.${encodeURIComponent(_ecnEditingId)}`, {
+      method: 'PATCH', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        expected_amount: amt, revenue_loss: isNaN(rev) ? null : rev,
+        reason, details, email_subject: subject || null,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    ecnCloseEdit();
+    await ecnLoad(true);
+    if (_arLastRows && _arLastRows.length) renderAR();
+  } catch(e) {
+    err.textContent = 'Could not save: ' + (e.message || e);
+  } finally { btn.disabled = false; btn.textContent = 'Save changes'; }
+}
+
+async function ecnDelete() {
+  const x = _ecnRows.find(r => r.id === _ecnEditingId);
+  if (!x) return;
+  if (!confirm(`Delete this expected credit note?\n\n${x.customer_name} · ${x.invoice_number || ''} · ₹${f(Number(x.expected_amount || 0))}\n\nUse "Mark closed" instead if it was settled — that keeps the record.`)) return;
+  const btn = document.getElementById('ecn-del-btn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?id=eq.${encodeURIComponent(_ecnEditingId)}`, {
+      method: 'DELETE', headers: { ...cmrrHdr(), Prefer: 'return=minimal' } });
+    if (!r.ok) throw new Error(await r.text());
+    ecnCloseEdit();
+    await ecnLoad(true);
+    if (_arLastRows && _arLastRows.length) renderAR();
+  } catch(e) {
+    document.getElementById('ecn-edit-err').textContent = 'Could not delete: ' + (e.message || e);
+  } finally { btn.disabled = false; btn.textContent = 'Delete'; }
 }
 
 /* ── Closing one out ── */
