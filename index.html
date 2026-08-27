@@ -958,6 +958,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-aging-brackets" onclick="showSettingsSubTab('aging-brackets')">Aging Brackets</button>
       <button class="st-stbtn"        id="st-tab-adv-actions"    onclick="showSettingsSubTab('adv-actions')">Advance Actions</button>
       <button class="st-stbtn"        id="st-tab-options"   onclick="showSettingsSubTab('options')"    style="display:none">Outcome Options</button>
+      <button class="st-stbtn"        id="st-tab-cn-reasons" onclick="showSettingsSubTab('cn-reasons')">CN Reasons</button>
       <button class="st-stbtn"        id="st-tab-escalation" onclick="showSettingsSubTab('escalation')" style="display:none">Escalation Persons</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')"     style="display:none">Manage Users</button>
     </div>
@@ -1245,6 +1246,20 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
 
     <!-- Escalation Persons (admin only) -->
+    <div id="st-pane-cn-reasons" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:560px">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.35rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Credit Note Reasons</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.85rem">These appear in the Reason dropdown when someone records an expected credit note. Deactivating one keeps it on existing records but hides it from the dropdown.</div>
+        <div id="cn-reasons-list" style="margin-bottom:.75rem"></div>
+        <div style="display:flex;gap:.5rem">
+          <input type="text" id="cn-reason-new" class="cc-input" style="flex:1;font-size:13px" placeholder="New reason, e.g. Duplicate Invoice" onkeydown="if(event.key==='Enter')addCnReason()">
+          <button onclick="addCnReason()" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;white-space:nowrap">+ Add</button>
+        </div>
+      </div>
+    </div>
+
     <div id="st-pane-escalation" class="st-pane" style="display:none">
       <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf);max-width:640px">
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
@@ -1844,6 +1859,32 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div>
 
+  <!-- ── Expected Credit Notes Pane ─────────────────────────── -->
+  <div id="expected-cn" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
+      <div>
+        <span class="slabel" style="margin:0">Expected Credit Notes</span>
+        <div style="font-size:10px;color:var(--ink-faint);font-family:var(--mono);margin-top:.2rem">Credit notes we expect to raise — reduces what is realistically collectable</div>
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <button class="modal-csv" onclick="ecnOpenForm()" style="padding:.32rem .85rem;font-size:12px">+ Add expected CN</button>
+        <button onclick="ecnLoad(true)" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;margin-bottom:.7rem">
+      <div class="ar-view-tog" style="margin:0">
+        <button id="ecn-vt-open"   class="ar-vtbtn active" onclick="ecnSetView('open')">Open</button>
+        <button id="ecn-vt-closed" class="ar-vtbtn"        onclick="ecnSetView('closed')">Closed</button>
+        <button id="ecn-vt-all"    class="ar-vtbtn"        onclick="ecnSetView('all')">All</button>
+      </div>
+      <input type="text" id="ecn-search" class="cust-input" style="font-size:12px;min-width:220px" placeholder="Search customer / invoice / reason / subject…" oninput="ecnRender()">
+      <span id="ecn-summary" style="font-size:12px;color:var(--txt2);margin-left:auto"></span>
+    </div>
+    <div id="ecn-content">
+      <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>
+    </div>
+  </div>
+
   <!-- ── Customer Overview Pane ─────────────────────────────── -->
   <div id="customer-overview" class="pane">
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.85rem;flex-wrap:wrap">
@@ -1951,6 +1992,86 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
       <button onclick="closeContactModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
       <button onclick="saveContact()" class="modal-csv" id="ctc-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Expected Credit Note: add ────────────────────────────── -->
+<div id="ecn-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)ecnCloseForm()">
+  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <span style="font-size:14px;font-weight:600;color:var(--navy)">Add expected credit note</span>
+      <button onclick="ecnCloseForm()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.7rem">
+      <div>
+        <label class="cc-label">Customer <span class="cc-req">*</span></label>
+        <div class="cc-cust-wrap" style="margin-top:.25rem">
+          <input type="text" id="ecn-cust" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem" placeholder="Type to search customer…" oninput="ecnFilterCustomers()" onfocus="ecnFilterCustomers()" autocomplete="off">
+          <div id="ecn-cust-dd" class="cc-cust-dd" style="display:none"></div>
+        </div>
+      </div>
+      <div>
+        <label class="cc-label">Invoice <span class="cc-req">*</span></label>
+        <select id="ecn-invoice" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem" onchange="ecnInvoiceChanged()">
+          <option value="">— Pick a customer first —</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div>
+          <label class="cc-label">Reason <span class="cc-req">*</span></label>
+          <select id="ecn-reason" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
+        </div>
+        <div>
+          <label class="cc-label">Expected CN amount (₹) <span class="cc-req">*</span></label>
+          <input type="number" id="ecn-amount" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" min="1" placeholder="0">
+          <div id="ecn-amt-hint" style="font-size:10.5px;color:var(--txt3);margin-top:.2rem"></div>
+        </div>
+      </div>
+      <div>
+        <label class="cc-label">Details <span class="cc-req">*</span></label>
+        <textarea id="ecn-details" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;resize:vertical" placeholder="What happened, and what the credit note is for…"></textarea>
+      </div>
+      <div>
+        <label class="cc-label">Email subject</label>
+        <input type="text" id="ecn-subject" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem" placeholder="Subject of the email this was agreed on">
+      </div>
+    </div>
+    <div id="ecn-err" style="font-size:11.5px;color:var(--red);margin-top:.7rem;min-height:1rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.3rem">
+      <button onclick="ecnCloseForm()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="ecnSave()" class="modal-csv" id="ecn-save-btn" style="padding:.35rem .9rem;font-size:12.5px">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Expected Credit Note: close ──────────────────────────── -->
+<div id="ecn-close-ov" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)ecnCloseCloseModal()">
+  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:440px;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem">
+      <span style="font-size:14px;font-weight:600;color:var(--navy)">Mark as closed</span>
+      <button onclick="ecnCloseCloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+    </div>
+    <div id="ecn-close-info" style="font-size:12px;color:var(--txt2);background:#f9fafb;border:1px solid var(--brd);border-radius:6px;padding:.55rem .7rem;margin-bottom:.85rem"></div>
+    <div class="cc-field">
+      <label class="cc-label">How was it settled? <span class="cc-req">*</span></label>
+      <div style="display:flex;gap:.5rem;margin-top:.25rem">
+        <button type="button" class="cc-opt-btn cc-sm" id="ecn-ct-issued" onclick="ecnSetClosureType('cn_issued')">Credit note raised</button>
+        <button type="button" class="cc-opt-btn cc-sm" id="ecn-ct-notreq" onclick="ecnSetClosureType('not_required')">CN not required</button>
+      </div>
+    </div>
+    <div id="ecn-cn-num-wrap" class="cc-field" style="display:none">
+      <label class="cc-label">Credit note number <span class="cc-req">*</span></label>
+      <input type="text" id="ecn-cn-number" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" placeholder="e.g. CN-00123">
+    </div>
+    <div id="ecn-notreq-wrap" class="cc-field" style="display:none">
+      <label class="cc-label">Why was no credit note needed? <span class="cc-req">*</span></label>
+      <textarea id="ecn-close-reason" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;resize:vertical" placeholder="Why this was raised as an expected CN and then did not need one…"></textarea>
+    </div>
+    <div id="ecn-close-err" style="font-size:11.5px;color:var(--red);margin-top:.6rem;min-height:1rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button onclick="ecnCloseCloseModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+      <button onclick="ecnSaveClosure()" class="modal-csv" id="ecn-close-btn" style="padding:.35rem .9rem;font-size:12.5px">Mark closed</button>
     </div>
   </div>
 </div>
@@ -2105,6 +2226,8 @@ const ALL_TABS_CFG = [
   { id: 'bank-receipts',       label: 'Bank Receipts',       abbr: 'BR',  fn: 'showBankReceiptsTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'customer-overview',   label: 'Customer Overview',   abbr: 'CO',  fn: 'showCustomerOverviewTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector'] },
+  { id: 'expected-cn',         label: 'Expected CNs',        abbr: 'CN',  fn: 'showExpectedCnTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'rate-calculator',     label: 'Rate Calculator',     abbr: 'RC',  fn: 'showRateCalcTab(this)' },
   { id: 'settings',            label: 'Settings',            abbr: 'ST',  fn: 'showSettingsTab(this)',
@@ -2393,6 +2516,7 @@ function renderNav() {
     if (activeId === 'contacts' && !_ctcTabInited) { _ctcTabInited = true; if (!_cmData.length) loadArCustMaster(); loadContactsMaster(); }
     if (activeId === 'confirmed-dates') cdInit();
     if (activeId === 'customer-overview') coInit();
+    if (activeId === 'expected-cn') ecnInit();
     if (activeId === 'disputed-invoices' && !_diInited) { _diInited = true; loadDisputedInvoices(); }
     if (activeId === 'settings') loadSettingsPane();
   }
@@ -2575,7 +2699,7 @@ function showSettingsSubTab(tab) {
   // always hide option sub-panes first
   const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
   const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
-  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','adv-actions','options','escalation','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','adv-actions','options','cn-reasons','escalation','users']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
@@ -2587,6 +2711,7 @@ function showSettingsSubTab(tab) {
     if (dsp) dsp.style.display = '';
     if (ccp) ccp.style.display = '';
   }
+  if (tab === 'cn-reasons') renderCnReasonsList();
   if (tab === 'escalation') renderEscalationPersonsList();
   if (tab === 'users')      renderPermsSettings();
 }
@@ -4327,6 +4452,8 @@ async function arBootstrap() {
   try { await loadArCustMaster(); } catch(_) {}
   loadFxRates(); loadBuList(); loadCollectorList(); loadTagMaster();
   loadInvTags(); loadARCustTags(); loadARExcluded(); loadAgingBrackets();
+  ecnLoadReasons();
+  loadExpectedCnMap().then(() => { if (_arLastRows.length) renderARInvoiceList(_arLastRows); });
   loadAR();
   loadInvoicePtp().then(() => renderAR());
 }
@@ -6106,6 +6233,7 @@ function renderARInvoiceList(rows, ctx = 'main') {
           case 'due_date': va = a.due_date||''; vb = b.due_date||''; break;
           case 'days':     va = arOverdueDays(a.due_date); vb = arOverdueDays(b.due_date); break;
           case 'ptp':      va = (_arPtpMap[a.invoice_id]?.ptp_date) || ''; vb = (_arPtpMap[b.invoice_id]?.ptp_date) || ''; break;
+          case 'ecn':      va = _ecnByInvoice[a.invoice_id]?.amount || 0; vb = _ecnByInvoice[b.invoice_id]?.amount || 0; break;
           case 'balance':  va = arInr(a); vb = arInr(b); break;
           case 'total':    va = arTotal(a); vb = arTotal(b); break;
           case 'type':     va = a.revenue_type||''; vb = b.revenue_type||''; break;
@@ -6183,6 +6311,12 @@ function renderARInvoiceList(rows, ctx = 'main') {
     const ptpAmtChip = ptpRec?.ptp_date
       ? `<span style="display:inline-block;margin-left:.3rem;font-size:10px;font-weight:600;color:var(--ink-soft);font-family:var(--mono);white-space:nowrap;vertical-align:middle">₹${Math.round(ptpGross).toLocaleString('en-IN')}</span>`
       : '';
+    // Open expected credit notes against this invoice — money we do not expect
+    // to collect, so it is shown beside the balance rather than buried.
+    const ecn = r.invoice_id ? _ecnByInvoice[r.invoice_id] : null;
+    const ecnCell = ecn && ecn.amount > 0
+      ? `<span data-iid="${escHtml(r.invoice_id)}" onclick="arOpenExpectedCnDetail(this.dataset.iid)" title="${escHtml(ecn.count + ' expected credit note' + (ecn.count === 1 ? '' : 's') + ' — click for details')}" style="cursor:pointer;font-family:var(--mono);font-size:11.5px;font-weight:600;color:#b45309;text-decoration:underline dotted;text-underline-offset:2px">₹${f(ecn.amount)}</span>${ecn.count > 1 ? `<span style="font-size:9.5px;color:var(--txt3);margin-left:.2rem">×${ecn.count}</span>` : ''}`
+      : '<span style="color:var(--ink-faint);font-size:11px">—</span>';
     const ptpCell = r.invoice_id
       ? `${ptpRec?.ptp_date
           ? `<span title="${escHtml('Set by ' + (ptpRec.set_by || '') + (ptpRec.source === 'interaction' ? ' via interaction' : '') + (ptpRec.given_by === 'self' ? ' · collector\'s own estimate, not confirmed by the customer' : ' · customer committed to this date'))}" style="font-size:11px;font-weight:600;padding:.15rem .45rem;border-radius:4px;background:${ptpPast ? 'var(--red-bg)' : '#fef3c7'};color:${ptpPast ? 'var(--red)' : '#92400e'};white-space:nowrap">${escHtml(ptpRec.ptp_date)}</span>${ptpAmtChip}${ptpTdsChip}`
@@ -6197,6 +6331,7 @@ function renderARInvoiceList(rows, ctx = 'main') {
       <td class="td-date">${r.due_date || '—'}</td>
       <td class="td-days" style="text-align:right">${daysCell}</td>
       <td style="white-space:nowrap">${ptpCell}</td>
+      <td style="white-space:nowrap">${ecnCell}</td>
       <td class="td-amt" style="${balStyle}">₹${f(balINR)}${fxBal}</td>
       <td class="td-tot">₹${f(totINR)}${fxTot}</td>
       <td>${rev}</td>
@@ -6216,6 +6351,7 @@ function renderARInvoiceList(rows, ctx = 'main') {
       ${th('Due Date','due_date')}
       ${th('Overdue','days','r')}
       ${th('PTP','ptp')}
+      ${th('Expected CN','ecn','r')}
       ${th('Balance (INR)','balance','r')}
       ${th('Total (INR)','total','r')}
       ${th('Type','type')}
@@ -11905,6 +12041,368 @@ async function coAddNote() {
                            spoke_with: 'Note', follow_up_date: fu, note: txt }),
   });
   if (r.ok) { inp.value = ''; coRefresh(); }
+}
+
+
+/* ─── CN REASON OPTIONS (Settings) ──────────────────────────── */
+async function renderCnReasonsList() {
+  const el = document.getElementById('cn-reasons-list');
+  if (!el) return;
+  await ecnLoadReasons();
+  if (!_cnReasons.length) { el.innerHTML = '<div style="font-size:12px;color:var(--txt3)">No reasons configured.</div>'; return; }
+  el.innerHTML = _cnReasons.map(r => `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;border:1px solid var(--brd);border-radius:6px;margin-bottom:.3rem;background:#fff${r.is_active === false ? ';opacity:.55' : ''}">
+    <span style="flex:1;font-size:13px;color:var(--ink)">${escHtml(r.label)}</span>
+    <span style="font-size:10px;color:var(--txt3);font-family:var(--mono)">${escHtml(r.value)}</span>
+    <button data-id="${escHtml(r.id)}" data-act="${r.is_active === false ? '1' : '0'}" onclick="toggleCnReason(this.dataset.id, this.dataset.act === '1')"
+      style="font-size:10px;font-weight:600;padding:.15rem .45rem;border-radius:20px;cursor:pointer;border:none;background:${r.is_active === false ? '#fee2e2' : '#d1fae5'};color:${r.is_active === false ? '#991b1b' : '#065f46'}">${r.is_active === false ? 'Inactive' : 'Active'}</button>
+  </div>`).join('');
+}
+
+async function addCnReason() {
+  const inp = document.getElementById('cn-reason-new');
+  const label = (inp?.value || '').trim();
+  if (!label) return;
+  // A stable machine value, since existing rows store it
+  const value = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  if (!value) { alert('Give the reason a name with some letters or numbers in it.'); return; }
+  const nextOrder = (_cnReasons.reduce((m, r) => Math.max(m, r.sort_order || 0), 0)) + 1;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/cn_reason_options`, {
+    method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ value, label, sort_order: nextOrder }),
+  });
+  if (!r.ok) { alert('Could not add it — that reason may already exist.'); return; }
+  inp.value = '';
+  renderCnReasonsList();
+}
+
+async function toggleCnReason(id, makeActive) {
+  await fetch(`${SUPABASE_URL}/rest/v1/cn_reason_options?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ is_active: makeActive }),
+  });
+  renderCnReasonsList();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXPECTED CREDIT NOTES
+   ══════════════════════════════════════════════════════════════
+   A credit note the team expects to raise against an invoice. Open ones
+   reduce what is realistically collectable, so Open AR surfaces them per
+   invoice. Zoho stays the system of record for credit notes actually
+   issued — this records the expectation and how it was settled. */
+
+let _ecnInited = false;
+let _ecnRows   = [];
+let _ecnView   = 'open';
+let _ecnClosureType = null;
+let _ecnClosingId   = null;
+let _cnReasons = [];              // from cn_reason_options
+let _ecnByInvoice = {};           // invoice_id -> { amount, count } for OPEN rows (Open AR column)
+
+function showExpectedCnTab(btn) { showTab('expected-cn', btn); ecnInit(); }
+
+function ecnInit() {
+  if (!_ecnInited) {
+    _ecnInited = true;
+    if (!_cmData.length) loadArCustMaster();
+  }
+  ecnLoadReasons().then(() => ecnLoad());
+}
+
+const cnReasonLabel = v => (_cnReasons.find(r => r.value === v)?.label) || String(v || '').replace(/_/g, ' ');
+
+async function ecnLoadReasons() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/cn_reason_options?select=*&order=sort_order`, { headers: cmrrHdr() });
+    if (r.ok) _cnReasons = await r.json();
+  } catch(_) {}
+}
+
+// Open expected CNs per invoice — feeds the Open AR column, so it is loaded
+// with the AR data rather than only when this tab is opened.
+async function loadExpectedCnMap() {
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/expected_credit_notes?status=eq.open&select=invoice_id,expected_amount,status`,
+      { headers: cmrrHdr() });
+    if (!r.ok) return;
+    const map = {};
+    (await r.json()).forEach(x => {
+      if (!x.invoice_id || x.status !== 'open') return;
+      const m = map[x.invoice_id] = map[x.invoice_id] || { amount: 0, count: 0 };
+      m.amount += Number(x.expected_amount || 0);
+      m.count++;
+    });
+    _ecnByInvoice = map;
+  } catch(_) {}
+}
+
+async function ecnLoad(force) {
+  const el = document.getElementById('ecn-content');
+  if (el && (force || !_ecnRows.length)) el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?select=*&order=created_at.desc`, { headers: cmrrHdr() });
+    _ecnRows = r.ok ? await r.json() : [];
+  } catch(_) { _ecnRows = []; }
+  await loadExpectedCnMap();
+  ecnRender();
+}
+
+function ecnSetView(v) {
+  _ecnView = v;
+  ['open','closed','all'].forEach(k => document.getElementById('ecn-vt-' + k)?.classList.toggle('active', k === v));
+  ecnRender();
+}
+
+// Collectors only see their own customers here, same rule as everywhere else
+function ecnVisible() {
+  return _ecnRows.filter(x => arPassesRoleFilter({ customer_name: x.customer_name }));
+}
+
+function ecnRender() {
+  const el = document.getElementById('ecn-content');
+  if (!el) return;
+  const q = (document.getElementById('ecn-search')?.value || '').toLowerCase().trim();
+  let rows = ecnVisible();
+  if (_ecnView !== 'all') rows = rows.filter(x => x.status === _ecnView);
+  if (q) rows = rows.filter(x => [x.customer_name, x.invoice_number, cnReasonLabel(x.reason), x.email_subject, x.details, x.cn_number]
+    .join(' ').toLowerCase().includes(q));
+
+  const openRows = ecnVisible().filter(x => x.status === 'open');
+  const openAmt  = openRows.reduce((t, x) => t + Number(x.expected_amount || 0), 0);
+  const sum = document.getElementById('ecn-summary');
+  if (sum) sum.innerHTML = `<strong>${openRows.length}</strong> open · <strong style="font-family:var(--mono)">₹${f(openAmt)}</strong> expected`;
+
+  if (!rows.length) {
+    el.innerHTML = `<div style="padding:1.5rem .25rem;font-size:12.5px;color:var(--txt3)">No ${_ecnView === 'all' ? '' : _ecnView + ' '}expected credit notes${q ? ' match that search' : ''}.</div>`;
+    return;
+  }
+
+  const th = 'padding:.45rem .6rem;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap';
+  const td = 'padding:.45rem .6rem;font-size:12px;border-bottom:1px solid var(--line);vertical-align:top';
+  const canEdit = (USER_ACCESS?.role || '') !== 'admin-view';
+
+  el.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px">
+    <table style="border-collapse:separate;border-spacing:0;width:100%;min-width:960px">
+      <thead><tr>
+        <th style="${th}">Customer</th><th style="${th}">Invoice #</th>
+        <th style="${th};text-align:right">Expected ₹</th>
+        <th style="${th}">Reason</th><th style="${th}">Details</th>
+        <th style="${th}">Email subject</th><th style="${th}">Raised</th>
+        <th style="${th}">Status</th><th style="${th}"></th>
+      </tr></thead>
+      <tbody>${rows.map(x => {
+        const closed = x.status === 'closed';
+        const statusCell = closed
+          ? `<span class="co-pill" style="background:${x.closure_type === 'cn_issued' ? '#dcfce7' : '#f1f5f9'};color:${x.closure_type === 'cn_issued' ? '#166534' : '#475569'}">${x.closure_type === 'cn_issued' ? 'CN ' + escHtml(x.cn_number || '') : 'Not required'}</span>`
+            + (x.closure_reason ? `<div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem;max-width:200px;white-space:normal">${escHtml(x.closure_reason)}</div>` : '')
+            + (x.closed_at ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:.15rem">${escHtml(String(x.closed_at).slice(0,10))}${x.closed_by_name ? ' · ' + escHtml(x.closed_by_name) : ''}</div>` : '')
+          : '<span class="co-pill" style="background:#fef3c7;color:#92400e">Open</span>';
+        return `<tr>
+          <td style="${td};font-weight:600;white-space:normal">${escHtml(x.customer_name || '')}</td>
+          <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(x.invoice_number || '—')}</td>
+          <td style="${td};text-align:right;font-family:var(--mono);font-weight:600">₹${f(Number(x.expected_amount || 0))}</td>
+          <td style="${td};white-space:nowrap">${escHtml(cnReasonLabel(x.reason))}</td>
+          <td style="${td};color:var(--txt2);max-width:240px;white-space:normal">${escHtml(x.details || '')}</td>
+          <td style="${td};color:var(--txt2);max-width:200px;white-space:normal">${escHtml(x.email_subject || '')}</td>
+          <td style="${td};white-space:nowrap;color:var(--txt3);font-size:11px">${escHtml(String(x.created_at).slice(0,10))}${x.created_by_name ? `<div style="font-size:10px">${escHtml(x.created_by_name)}</div>` : ''}</td>
+          <td style="${td}">${statusCell}</td>
+          <td style="${td};white-space:nowrap">${!closed && canEdit
+            ? `<button class="rbtn" style="font-size:11px" data-id="${escHtml(x.id)}" onclick="ecnOpenCloseModal(this.dataset.id)">Mark closed</button>` : ''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+/* ── Add form ── */
+function ecnOpenForm() {
+  ['ecn-cust','ecn-amount','ecn-details','ecn-subject'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  document.getElementById('ecn-invoice').innerHTML = '<option value="">— Pick a customer first —</option>';
+  document.getElementById('ecn-amt-hint').textContent = '';
+  document.getElementById('ecn-err').textContent = '';
+  const rs = document.getElementById('ecn-reason');
+  const active = _cnReasons.filter(r => r.is_active !== false);
+  rs.innerHTML = '<option value="">— Select reason —</option>'
+    + active.map(r => `<option value="${escHtml(r.value)}">${escHtml(r.label)}</option>`).join('');
+  document.getElementById('ecn-modal-ov').style.display = 'flex';
+}
+function ecnCloseForm() { document.getElementById('ecn-modal-ov').style.display = 'none'; }
+
+function ecnFilterCustomers() {
+  const q = (document.getElementById('ecn-cust').value || '').toLowerCase().trim();
+  if (!q) { document.getElementById('ecn-cust-dd').style.display = 'none'; return; }
+  const names = [...new Set(_cmData.map(c => c.customer_name).filter(Boolean))]
+    .filter(n => arPassesRoleFilter({ customer_name: n }) && n.toLowerCase().includes(q)).sort().slice(0, 25);
+  ccOpenDD('ecn-cust-dd', 'ecn-cust', names, 'ecnSelectCustomer');
+}
+
+async function ecnSelectCustomer(name) {
+  document.getElementById('ecn-cust').value = name;
+  document.getElementById('ecn-cust-dd').style.display = 'none';
+  const sel = document.getElementById('ecn-invoice');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  let invs = (_arAllRows || []).filter(r => r.customer_name === name);
+  if (!invs.length) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&select=invoice_id,invoice_number,balance_inr,due_date,entity&order=due_date`, { headers: cmrrHdr() });
+      if (r.ok) invs = await r.json();
+    } catch(_) {}
+  }
+  sel.innerHTML = '<option value="">— Select invoice —</option>' + invs.map(r =>
+    `<option value="${escHtml(r.invoice_id)}" data-num="${escHtml(r.invoice_number || '')}" data-bal="${Number(r.balance_inr || r.balance || 0)}" data-ent="${escHtml(r.entity || 'IN')}">${escHtml(r.invoice_number || r.invoice_id)} · ₹${f(Number(r.balance_inr || r.balance || 0))} open</option>`
+  ).join('');
+  if (!invs.length) sel.innerHTML = '<option value="">No open invoices for this customer</option>';
+}
+
+function ecnInvoiceChanged() {
+  const o = document.getElementById('ecn-invoice').selectedOptions[0];
+  const bal = Number(o?.dataset.bal || 0);
+  document.getElementById('ecn-amt-hint').textContent = bal > 0 ? `Invoice is ₹${f(bal)} open — the CN cannot exceed it.` : '';
+}
+
+async function ecnSave() {
+  const err  = document.getElementById('ecn-err');
+  const cust = document.getElementById('ecn-cust').value.trim();
+  const invO = document.getElementById('ecn-invoice').selectedOptions[0];
+  const invId = document.getElementById('ecn-invoice').value;
+  const reason = document.getElementById('ecn-reason').value;
+  const amount = parseFloat(document.getElementById('ecn-amount').value);
+  const details = document.getElementById('ecn-details').value.trim();
+  const subject = document.getElementById('ecn-subject').value.trim();
+  const bal = Number(invO?.dataset.bal || 0);
+
+  if (!cust)   { err.textContent = 'Pick a customer.'; return; }
+  if (!invId)  { err.textContent = 'Pick the invoice this credit note is against.'; return; }
+  if (!reason) { err.textContent = 'Pick a reason.'; return; }
+  if (!amount || amount <= 0) { err.textContent = 'Enter the expected credit note amount.'; return; }
+  if (bal > 0 && amount > bal + 0.5) { err.textContent = `That is more than the ₹${f(bal)} still open on this invoice.`; return; }
+  if (!details) { err.textContent = 'Add the details — this is what someone reads months later.'; return; }
+  err.textContent = '';
+
+  const btn = document.getElementById('ecn-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes`, {
+      method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        customer_name: cust, invoice_id: invId,
+        invoice_number: invO?.dataset.num || null, entity: invO?.dataset.ent || 'IN',
+        reason, details, email_subject: subject || null, expected_amount: amount,
+        created_by: CURRENT_USER?.id || null,
+        created_by_name: USER_ACCESS?.display_name || CURRENT_USER?.email || null,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    ecnCloseForm();
+    await ecnLoad(true);
+    if (_arLastRows && _arLastRows.length) renderAR();   // Open AR column follows
+  } catch(e) {
+    err.textContent = 'Could not save: ' + (e.message || e);
+  } finally { btn.disabled = false; btn.textContent = 'Save'; }
+}
+
+/* ── Closing one out ── */
+function ecnOpenCloseModal(id) {
+  const x = _ecnRows.find(r => r.id === id);
+  if (!x) return;
+  _ecnClosingId = id;
+  _ecnClosureType = null;
+  document.getElementById('ecn-close-info').innerHTML =
+    `<strong>${escHtml(x.customer_name)}</strong> · ${escHtml(x.invoice_number || '')}<br>`
+    + `₹${f(Number(x.expected_amount || 0))} expected · ${escHtml(cnReasonLabel(x.reason))}`;
+  document.getElementById('ecn-cn-number').value = '';
+  document.getElementById('ecn-close-reason').value = '';
+  document.getElementById('ecn-close-err').textContent = '';
+  document.getElementById('ecn-cn-num-wrap').style.display = 'none';
+  document.getElementById('ecn-notreq-wrap').style.display = 'none';
+  ['ecn-ct-issued','ecn-ct-notreq'].forEach(i => document.getElementById(i).classList.remove('selected'));
+  document.getElementById('ecn-close-ov').style.display = 'flex';
+}
+function ecnCloseCloseModal() { document.getElementById('ecn-close-ov').style.display = 'none'; _ecnClosingId = null; }
+
+function ecnSetClosureType(t) {
+  _ecnClosureType = t;
+  document.getElementById('ecn-ct-issued').classList.toggle('selected', t === 'cn_issued');
+  document.getElementById('ecn-ct-notreq').classList.toggle('selected', t === 'not_required');
+  document.getElementById('ecn-cn-num-wrap').style.display = t === 'cn_issued'    ? '' : 'none';
+  document.getElementById('ecn-notreq-wrap').style.display = t === 'not_required' ? '' : 'none';
+}
+
+async function ecnSaveClosure() {
+  const err = document.getElementById('ecn-close-err');
+  if (!_ecnClosureType) { err.textContent = 'Say how it was settled.'; return; }
+  const cn  = document.getElementById('ecn-cn-number').value.trim();
+  const rsn = document.getElementById('ecn-close-reason').value.trim();
+  if (_ecnClosureType === 'cn_issued' && !cn)  { err.textContent = 'The credit note number is required.'; return; }
+  if (_ecnClosureType === 'not_required' && !rsn) { err.textContent = 'Record why no credit note was needed.'; return; }
+  err.textContent = '';
+  const btn = document.getElementById('ecn-close-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?id=eq.${encodeURIComponent(_ecnClosingId)}`, {
+      method: 'PATCH', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        status: 'closed', closure_type: _ecnClosureType,
+        cn_number: _ecnClosureType === 'cn_issued' ? cn : null,
+        closure_reason: _ecnClosureType === 'not_required' ? rsn : null,
+        closed_by: CURRENT_USER?.id || null,
+        closed_by_name: USER_ACCESS?.display_name || CURRENT_USER?.email || null,
+        closed_at: new Date().toISOString(),
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    ecnCloseCloseModal();
+    await ecnLoad(true);
+    if (_arLastRows && _arLastRows.length) renderAR();
+  } catch(e) {
+    err.textContent = 'Could not close it: ' + (e.message || e);
+  } finally { btn.disabled = false; btn.textContent = 'Mark closed'; }
+}
+
+/* ── Open AR column: the expected CNs behind one invoice ── */
+async function arOpenExpectedCnDetail(invoiceId) {
+  let rows = _ecnRows.filter(x => x.invoice_id === invoiceId && x.status === 'open');
+  // Open AR can be the first tab someone opens, in which case _ecnRows has
+  // never been loaded — fetch just this invoice's rows rather than showing
+  // nothing after a click that clearly should do something.
+  if (!rows.length) {
+    if (!_cnReasons.length) await ecnLoadReasons();
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/expected_credit_notes?invoice_id=eq.${encodeURIComponent(invoiceId)}&status=eq.open&select=*`,
+        { headers: cmrrHdr() });
+      if (r.ok) rows = (await r.json()).filter(x => x.status === 'open');
+    } catch(_) {}
+  }
+  if (!rows.length) return;
+  document.getElementById('ecn-detail-modal')?.remove();
+  const total = rows.reduce((t, x) => t + Number(x.expected_amount || 0), 0);
+  const inv = (_arAllRows || []).find(r => r.invoice_id === invoiceId);
+  const ov = document.createElement('div');
+  ov.id = 'ecn-detail-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1400;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:600px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;padding:.9rem 1.1rem .65rem;border-bottom:1px solid var(--brd)">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">Expected credit notes — ${escHtml(inv?.invoice_number || invoiceId)}</div>
+        <div style="font-size:11.5px;color:var(--txt3);margin-top:.1rem">${escHtml(inv?.customer_name || '')} · ${rows.length} open · ₹${f(total)} expected${inv ? ` against ₹${f(arInr(inv))} outstanding` : ''}</div>
+      </div>
+      <button onclick="document.getElementById('ecn-detail-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;color:var(--txt2);flex:0 0 auto">×</button>
+    </div>
+    <div style="overflow-y:auto;padding:.4rem 1.1rem .9rem">
+      ${rows.map(x => `<div style="padding:.55rem 0;border-bottom:1px dashed var(--brd)">
+        <div style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-weight:700;font-size:13px">₹${f(Number(x.expected_amount || 0))}</span>
+          <span class="co-pill" style="background:#eef1f6;color:#475569">${escHtml(cnReasonLabel(x.reason))}</span>
+          <span style="font-size:10.5px;color:var(--txt3);margin-left:auto">${escHtml(String(x.created_at).slice(0,10))}${x.created_by_name ? ' · ' + escHtml(x.created_by_name) : ''}</span>
+        </div>
+        ${x.details ? `<div style="font-size:12px;color:var(--txt2);margin-top:.25rem">${escHtml(x.details)}</div>` : ''}
+        ${x.email_subject ? `<div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem">Email: ${escHtml(x.email_subject)}</div>` : ''}
+      </div>`).join('')}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
 }
 
 async function createTagAndAddCust(customerName, rawName) {
