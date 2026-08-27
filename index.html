@@ -6954,7 +6954,8 @@ function ccShowSubTab(tab) {
 }
 
 /* ── Day Summary sub-tab ─────────────────────────────────────── */
-let _ccDsData        = [];   // raw interactions for summary
+let _ccDsData        = [];   // customer interactions
+let _ccDsInternal    = [];   // internal discussions / escalations
 let _ccDsSelectedCol = '__all__';
 let _ccDsMonth       = null; // 'YYYY-MM' in IST; null = current IST month
 
@@ -6970,15 +6971,18 @@ async function ccLoadDaySummary() {
     // Fetch last 6 months of interactions with collector info
     const since = new Date(); since.setDate(since.getDate() - 185);
     const sinceStr = since.toISOString().split('T')[0];
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/interactions?created_at=gte.${sinceStr}&order=created_at.desc&select=id,created_at,customer_name,connected,outcome,collector_id`,
-      { headers: cmrrHdr() }
-    );
+    const [r, ir] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/interactions?created_at=gte.${sinceStr}&order=created_at.desc&limit=2000&select=id,created_at,customer_name,connected,outcome,collector_id,note,follow_up_date,escalation_needed,escalation_who`,
+        { headers: cmrrHdr() }),
+      fetch(`${SUPABASE_URL}/rest/v1/internal_interactions?created_at=gte.${sinceStr}&order=created_at.desc&limit=2000&select=id,created_at,customer_name,collector_id,spoke_with,note,follow_up_date`,
+        { headers: cmrrHdr() }),
+    ]);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    _ccDsData = await r.json();
+    _ccDsData     = await r.json();
+    _ccDsInternal = ir.ok ? await ir.json() : [];
 
-    // Build collector list from data
-    const collectorIds = [...new Set(_ccDsData.map(i => i.collector_id).filter(Boolean))];
+    // Build collector list from both sources
+    const collectorIds = [...new Set([..._ccDsData, ..._ccDsInternal].map(i => i.collector_id).filter(Boolean))];
     // Fetch display names for collectors
     let collNameMap = {};
     if (collectorIds.length) {
@@ -7010,7 +7014,7 @@ async function ccLoadDaySummary() {
 
     // Month tabs (IST months present in the data, plus the current one)
     const curMonth = ccDsIstToday().slice(0, 7);
-    const months = [...new Set(_ccDsData.map(i => ccDsIstDay(i.created_at).slice(0, 7)))];
+    const months = [...new Set([..._ccDsData, ..._ccDsInternal].map(i => ccDsIstDay(i.created_at).slice(0, 7)))];
     if (!months.includes(curMonth)) months.push(curMonth);
     months.sort();
     if (!_ccDsMonth || !months.includes(_ccDsMonth)) _ccDsMonth = curMonth;
@@ -7045,6 +7049,56 @@ function ccDsSelectCollector(id, btn) {
   ccRenderDaySummary();
 }
 
+// The entries behind a Day Summary number: one day, one collector (or all),
+// either customer follow-ups or internal escalations.
+function ccDsOpenDetail(day, collectorId, kind) {
+  document.getElementById('cc-ds-modal')?.remove();
+  const isCust = kind === 'c';
+  const src = isCust ? _ccDsData : _ccDsInternal;
+  const rows = src.filter(i => ccDsIstDay(i.created_at) === day
+    && (collectorId === '__all__' || i.collector_id === collectorId))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const who = collectorId === '__all__' ? 'All collectors' : (_ccDsCollNameMap[collectorId] || collectorId);
+  const dLbl = new Date(day + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', weekday:'short' });
+  const time = ts => new Date(ts).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+
+  const body = rows.length ? rows.map(i => {
+    const oc = isCust && i.outcome ? CC_OUTCOME_COLORS[i.outcome] : null;
+    return `<div style="display:flex;gap:.6rem;padding:.5rem .2rem;border-bottom:1px dashed var(--brd)">
+      <div style="flex:0 0 46px;font-size:10.5px;color:var(--txt3);font-family:var(--mono);padding-top:.1rem">${escHtml(time(i.created_at))}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink)">${escHtml(i.customer_name || '(no customer)')}</div>
+        <div style="margin-top:.2rem;display:flex;gap:.3rem;flex-wrap:wrap;align-items:center">
+          ${isCust
+            ? `${oc ? `<span class="cc-tl-pill" style="background:${oc.bg};color:${oc.fg}">${escHtml(CC_OUTCOME_LABELS[i.outcome] || i.outcome)}</span>` : ''}
+               <span style="font-size:10.5px;color:${i.connected === 'yes' ? '#166534' : 'var(--txt3)'}">${escHtml(CC_CONNECTED_LABELS[i.connected] || i.connected || '')}</span>
+               ${i.escalation_needed ? `<span class="cc-tl-pill" style="background:#fef3c7;color:#92400e">Escalated${i.escalation_who ? ' → ' + escHtml(i.escalation_who) : ''}</span>` : ''}`
+            : `<span class="cc-tl-pill" style="background:#eef2ff;color:#3730a3">Internal · ${escHtml(i.spoke_with || '')}</span>`}
+          ${collectorId === '__all__' ? `<span style="font-size:10.5px;color:var(--txt3)">${escHtml(_ccDsCollNameMap[i.collector_id] || '')}</span>` : ''}
+        </div>
+        ${i.note ? `<div style="font-size:12px;color:var(--txt2);font-style:italic;margin-top:.2rem">${escHtml(i.note)}</div>` : ''}
+        ${i.follow_up_date ? `<div style="font-size:10.5px;color:var(--txt3);margin-top:.15rem">Follow-up ${escHtml(i.follow_up_date)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--txt3);padding:1rem 0">Nothing logged.</div>';
+
+  const ov = document.createElement('div');
+  ov.id = 'cc-ds-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1300;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div style="background:#fff;border-radius:10px;max-width:620px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;padding:.9rem 1.1rem .65rem;border-bottom:1px solid var(--brd)">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">${isCust ? 'Customer follow-ups' : 'Internal escalations'} — ${escHtml(dLbl)}</div>
+        <div style="font-size:11.5px;color:var(--txt3);margin-top:.1rem">${escHtml(who)} · ${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}</div>
+      </div>
+      <button onclick="document.getElementById('cc-ds-modal').remove()" style="border:1px solid var(--brd2);background:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1;color:var(--txt2);flex:0 0 auto">×</button>
+    </div>
+    <div style="overflow-y:auto;padding:.2rem 1.1rem .9rem">${body}</div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
 function ccRenderDaySummary() {
   const contentEl = document.getElementById('cc-ds-content');
   if (!contentEl) return;
@@ -7054,47 +7108,68 @@ function ccRenderDaySummary() {
   const dtLbl = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', weekday:'short' });
 
   if (_ccDsSelectedCol === '__all__') {
-    // Comparative view: one row per IST day, one column per collector,
-    // cells = that collector's total interactions logged that day.
-    if (!monthRows.length) { contentEl.innerHTML = '<span style="color:var(--txt3)">No interactions in this month.</span>'; return; }
-    const collectors = [...new Set(monthRows.map(i => i.collector_id).filter(Boolean))]
-      .sort((a, b) => (_ccDsCollNameMap[a] || a).localeCompare(_ccDsCollNameMap[b] || b));
-    const byDate = {};
-    monthRows.forEach(i => {
+    // Comparative view: a row per IST day, and per collector two figures —
+    // customer follow-ups logged, and internal escalations raised. Every
+    // number opens the entries behind it.
+    const monthInt = _ccDsInternal.filter(i => ccDsIstDay(i.created_at).slice(0, 7) === _ccDsMonth);
+    if (!monthRows.length && !monthInt.length) {
+      contentEl.innerHTML = '<span style="color:var(--txt3)">No activity in this month.</span>'; return;
+    }
+    const collectors = [...new Set([...monthRows, ...monthInt].map(i => i.collector_id).filter(Boolean))]
+      .sort((x, y) => (_ccDsCollNameMap[x] || x).localeCompare(_ccDsCollNameMap[y] || y));
+    const cell = {};
+    const bump = (i, k) => {
       const d = ccDsIstDay(i.created_at);
-      if (!byDate[d]) byDate[d] = {};
-      byDate[d][i.collector_id] = (byDate[d][i.collector_id] || 0) + 1;
+      ((cell[d] = cell[d] || {})[i.collector_id] = cell[d][i.collector_id] || { c: 0, i: 0 })[k]++;
+    };
+    monthRows.forEach(i => bump(i, 'c'));
+    monthInt.forEach(i => bump(i, 'i'));
+    const dates = Object.keys(cell).sort((x, y) => y.localeCompare(x));
+
+    const num = (v, d, col, kind) => v
+      ? `<span data-d="${escHtml(d)}" data-c="${escHtml(col)}" data-k="${kind}" onclick="ccDsOpenDetail(this.dataset.d,this.dataset.c,this.dataset.k)" title="Click to see the entries behind this" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;font-weight:600;color:${kind === 'c' ? 'var(--navy)' : '#4f46e5'}">${v}</span>`
+      : '<span style="color:var(--ink-faint)">—</span>';
+
+    const totC = {}, totI = {};
+    collectors.forEach(c => {
+      totC[c] = monthRows.filter(i => i.collector_id === c).length;
+      totI[c] = monthInt.filter(i => i.collector_id === c).length;
     });
-    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-    const colTotals = {};
-    collectors.forEach(c => { colTotals[c] = monthRows.filter(i => i.collector_id === c).length; });
 
     contentEl.innerHTML = `<div style="overflow-x:auto">
       <table class="ar-tbl" style="width:100%">
-        <thead><tr>
-          <th style="text-align:left">Date</th>
-          ${collectors.map(c => `<th style="text-align:right">${escHtml(_ccDsCollNameMap[c] || c)}</th>`).join('')}
-          <th style="text-align:right">Total</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th rowspan="2" style="text-align:left;vertical-align:bottom">Date</th>
+            ${collectors.map(c => `<th colspan="2" style="text-align:center;border-left:1px solid var(--brd2)">${escHtml(_ccDsCollNameMap[c] || c)}</th>`).join('')}
+            <th colspan="2" style="text-align:center;border-left:1px solid var(--brd2);background:#eef1f6">All</th>
+          </tr>
+          <tr>
+            ${collectors.map(() => `<th class="r" style="border-left:1px solid var(--brd2);font-weight:500" title="Customer follow-ups logged">Cust</th><th class="r" style="font-weight:500" title="Internal escalations raised">Int</th>`).join('')}
+            <th class="r" style="border-left:1px solid var(--brd2);background:#eef1f6;font-weight:500">Cust</th>
+            <th class="r" style="background:#eef1f6;font-weight:500">Int</th>
+          </tr>
+        </thead>
         <tbody>
           ${dates.map(d => {
-            const dayTot = collectors.reduce((s, c) => s + (byDate[d][c] || 0), 0);
+            const dc = collectors.reduce((t, c) => t + (cell[d][c]?.c || 0), 0);
+            const di = collectors.reduce((t, c) => t + (cell[d][c]?.i || 0), 0);
             return `<tr>
-              <td style="font-size:12px;white-space:nowrap;font-weight:500">${dtLbl(d)}</td>
-              ${collectors.map(c => {
-                const v = byDate[d][c] || 0;
-                return `<td style="text-align:right;font-size:12.5px;${v ? 'font-weight:600;color:var(--navy)' : 'color:var(--ink-faint)'}">${v || '—'}</td>`;
-              }).join('')}
-              <td style="text-align:right;font-size:13px;font-weight:700;color:var(--navy)">${dayTot}</td>
+              <td style="font-size:12px;white-space:nowrap;font-weight:500">${escHtml(dtLbl(d))}</td>
+              ${collectors.map(c => `<td style="text-align:right;border-left:1px solid var(--brd2)">${num(cell[d][c]?.c || 0, d, c, 'c')}</td><td style="text-align:right">${num(cell[d][c]?.i || 0, d, c, 'i')}</td>`).join('')}
+              <td style="text-align:right;border-left:1px solid var(--brd2);background:#f8fafc">${num(dc, d, '__all__', 'c')}</td>
+              <td style="text-align:right;background:#f8fafc">${num(di, d, '__all__', 'i')}</td>
             </tr>`;
           }).join('')}
         </tbody>
         <tfoot><tr style="background:#f8fafc">
           <td style="font-weight:700;font-size:12px">Month total</td>
-          ${collectors.map(c => `<td style="text-align:right;font-weight:700;font-size:12.5px;color:var(--navy)">${colTotals[c]}</td>`).join('')}
-          <td style="text-align:right;font-weight:700;font-size:13px;color:var(--navy)">${monthRows.length}</td>
+          ${collectors.map(c => `<td style="text-align:right;border-left:1px solid var(--brd2);font-weight:700">${totC[c] || '—'}</td><td style="text-align:right;font-weight:700;color:#4f46e5">${totI[c] || '—'}</td>`).join('')}
+          <td style="text-align:right;border-left:1px solid var(--brd2);font-weight:700">${monthRows.length}</td>
+          <td style="text-align:right;font-weight:700;color:#4f46e5">${monthInt.length}</td>
         </tr></tfoot>
-      </table></div>`;
+      </table></div>
+      <div style="font-size:11px;color:var(--txt3);margin-top:.5rem"><strong>Cust</strong> — customer follow-ups logged that day. <strong style="color:#4f46e5">Int</strong> — internal escalations raised. Click any number to see the entries behind it.</div>`;
     return;
   }
 
