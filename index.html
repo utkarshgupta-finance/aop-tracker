@@ -1998,43 +1998,42 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
 
 <!-- ── Expected Credit Note: add ────────────────────────────── -->
 <div id="ecn-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)ecnCloseForm()">
-  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <div style="background:#fff;border-radius:12px;padding:1.4rem;width:100%;max-width:720px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem">
       <span style="font-size:14px;font-weight:600;color:var(--navy)">Add expected credit note</span>
       <button onclick="ecnCloseForm()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
     </div>
+    <div style="font-size:11.5px;color:var(--txt3);margin-bottom:1rem">Reason, details and subject apply to every invoice you tick. Amounts are entered per invoice.</div>
     <div style="display:flex;flex-direction:column;gap:.7rem">
       <div>
         <label class="cc-label">Customer <span class="cc-req">*</span></label>
-        <div class="cc-cust-wrap" style="margin-top:.25rem">
+        <div class="cc-cust-wrap" style="margin-top:.25rem;max-width:420px">
           <input type="text" id="ecn-cust" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem" placeholder="Type to search customer…" oninput="ecnFilterCustomers()" onfocus="ecnFilterCustomers()" autocomplete="off">
           <div id="ecn-cust-dd" class="cc-cust-dd" style="display:none"></div>
         </div>
       </div>
       <div>
-        <label class="cc-label">Invoice <span class="cc-req">*</span></label>
-        <select id="ecn-invoice" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem" onchange="ecnInvoiceChanged()">
-          <option value="">— Pick a customer first —</option>
-        </select>
+        <label class="cc-label">Invoices <span class="cc-req">*</span></label>
+        <div id="ecn-inv-hint" style="font-size:11.5px;color:var(--txt3);margin:.1rem 0 .35rem">Pick a customer to list their open invoices.</div>
+        <div id="ecn-inv-wrap" style="border:1px solid var(--brd);border-radius:7px;overflow:hidden;display:none">
+          <table style="border-collapse:separate;border-spacing:0;width:100%" id="ecn-inv-tbl"></table>
+        </div>
+        <div id="ecn-inv-tot" style="font-size:12px;color:var(--txt2);margin-top:.4rem;text-align:right"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
         <div>
           <label class="cc-label">Reason <span class="cc-req">*</span></label>
           <select id="ecn-reason" class="nret-sel" style="width:100%;font-size:12.5px;margin-top:.25rem"></select>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem">Applies to every invoice ticked. For a different reason, save these first and add another entry.</div>
         </div>
         <div>
-          <label class="cc-label">Expected CN amount (₹) <span class="cc-req">*</span></label>
-          <input type="number" id="ecn-amount" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" min="1" placeholder="0">
-          <div id="ecn-amt-hint" style="font-size:10.5px;color:var(--txt3);margin-top:.2rem"></div>
+          <label class="cc-label">Email subject</label>
+          <input type="text" id="ecn-subject" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem" placeholder="Subject of the email this was agreed on">
         </div>
       </div>
       <div>
         <label class="cc-label">Details <span class="cc-req">*</span></label>
         <textarea id="ecn-details" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;resize:vertical" placeholder="What happened, and what the credit note is for…"></textarea>
-      </div>
-      <div>
-        <label class="cc-label">Email subject</label>
-        <input type="text" id="ecn-subject" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem" placeholder="Subject of the email this was agreed on">
       </div>
     </div>
     <div id="ecn-err" style="font-size:11.5px;color:var(--red);margin-top:.7rem;min-height:1rem"></div>
@@ -12170,8 +12169,10 @@ function ecnRender() {
 
   const openRows = ecnVisible().filter(x => x.status === 'open');
   const openAmt  = openRows.reduce((t, x) => t + Number(x.expected_amount || 0), 0);
+  const openRev  = openRows.reduce((t, x) => t + Number(x.revenue_loss || 0), 0);
   const sum = document.getElementById('ecn-summary');
-  if (sum) sum.innerHTML = `<strong>${openRows.length}</strong> open · <strong style="font-family:var(--mono)">₹${f(openAmt)}</strong> expected`;
+  if (sum) sum.innerHTML = `<strong>${openRows.length}</strong> open · CN <strong style="font-family:var(--mono)">₹${f(openAmt)}</strong>`
+    + (openRev > 0 ? ` · revenue loss <strong style="font-family:var(--mono);color:var(--red)">₹${f(openRev)}</strong>` : '');
 
   if (!rows.length) {
     el.innerHTML = `<div style="padding:1.5rem .25rem;font-size:12.5px;color:var(--txt3)">No ${_ecnView === 'all' ? '' : _ecnView + ' '}expected credit notes${q ? ' match that search' : ''}.</div>`;
@@ -12186,7 +12187,8 @@ function ecnRender() {
     <table style="border-collapse:separate;border-spacing:0;width:100%;min-width:960px">
       <thead><tr>
         <th style="${th}">Customer</th><th style="${th}">Invoice #</th>
-        <th style="${th};text-align:right">Expected ₹</th>
+        <th style="${th};text-align:right">Expected CN ₹</th>
+        <th style="${th};text-align:right" title="What the business gives up — separate from the credit note">Revenue loss ₹</th>
         <th style="${th}">Reason</th><th style="${th}">Details</th>
         <th style="${th}">Email subject</th><th style="${th}">Raised</th>
         <th style="${th}">Status</th><th style="${th}"></th>
@@ -12200,8 +12202,14 @@ function ecnRender() {
           : '<span class="co-pill" style="background:#fef3c7;color:#92400e">Open</span>';
         return `<tr>
           <td style="${td};font-weight:600;white-space:normal">${escHtml(x.customer_name || '')}</td>
-          <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(x.invoice_number || '—')}</td>
+          <td style="${td};font-family:var(--mono);font-size:11px">${(() => {
+            const iv = (_arAllRows || []).find(r => r.invoice_id === x.invoice_id);
+            return iv?.invoice_url
+              ? `<a href="${escHtml(iv.invoice_url)}" target="_blank" rel="noopener" style="color:var(--action);text-decoration:none">${escHtml(x.invoice_number || '—')} ↗</a>`
+              : escHtml(x.invoice_number || '—');
+          })()}</td>
           <td style="${td};text-align:right;font-family:var(--mono);font-weight:600">₹${f(Number(x.expected_amount || 0))}</td>
+          <td style="${td};text-align:right;font-family:var(--mono);color:${Number(x.revenue_loss || 0) > 0 ? 'var(--red)' : 'var(--ink-faint)'}">${Number(x.revenue_loss || 0) > 0 ? '₹' + f(Number(x.revenue_loss)) : '—'}</td>
           <td style="${td};white-space:nowrap">${escHtml(cnReasonLabel(x.reason))}</td>
           <td style="${td};color:var(--txt2);max-width:240px;white-space:normal">${escHtml(x.details || '')}</td>
           <td style="${td};color:var(--txt2);max-width:200px;white-space:normal">${escHtml(x.email_subject || '')}</td>
@@ -12214,11 +12222,20 @@ function ecnRender() {
     </table></div>`;
 }
 
-/* ── Add form ── */
+/* ── Add form ──────────────────────────────────────────────────
+   One submission can cover several invoices. Reason, details and subject are
+   shared — a different reason means a separate entry, which is what the
+   "save these first" hint tells the user. Amounts are always per invoice:
+   the credit note is capped by that invoice's balance, the revenue loss is
+   not, because it is what the business gives up rather than what is owed. */
+let _ecnInvoices = [];   // invoices offered for the chosen customer
+
 function ecnOpenForm() {
-  ['ecn-cust','ecn-amount','ecn-details','ecn-subject'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  document.getElementById('ecn-invoice').innerHTML = '<option value="">— Pick a customer first —</option>';
-  document.getElementById('ecn-amt-hint').textContent = '';
+  ['ecn-cust','ecn-details','ecn-subject'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  _ecnInvoices = [];
+  document.getElementById('ecn-inv-wrap').style.display = 'none';
+  document.getElementById('ecn-inv-hint').textContent = 'Pick a customer to list their open invoices.';
+  document.getElementById('ecn-inv-tot').textContent = '';
   document.getElementById('ecn-err').textContent = '';
   const rs = document.getElementById('ecn-reason');
   const active = _cnReasons.filter(r => r.is_active !== false);
@@ -12239,63 +12256,140 @@ function ecnFilterCustomers() {
 async function ecnSelectCustomer(name) {
   document.getElementById('ecn-cust').value = name;
   document.getElementById('ecn-cust-dd').style.display = 'none';
-  const sel = document.getElementById('ecn-invoice');
-  sel.innerHTML = '<option value="">Loading…</option>';
+  document.getElementById('ecn-inv-hint').textContent = 'Loading invoices…';
   let invs = (_arAllRows || []).filter(r => r.customer_name === name);
   if (!invs.length) {
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&select=invoice_id,invoice_number,balance_inr,due_date,entity&order=due_date`, { headers: cmrrHdr() });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(name)}&select=invoice_id,invoice_number,balance_inr,balance,due_date,entity,invoice_url&order=due_date`, { headers: cmrrHdr() });
       if (r.ok) invs = await r.json();
     } catch(_) {}
   }
-  sel.innerHTML = '<option value="">— Select invoice —</option>' + invs.map(r =>
-    `<option value="${escHtml(r.invoice_id)}" data-num="${escHtml(r.invoice_number || '')}" data-bal="${Number(r.balance_inr || r.balance || 0)}" data-ent="${escHtml(r.entity || 'IN')}">${escHtml(r.invoice_number || r.invoice_id)} · ₹${f(Number(r.balance_inr || r.balance || 0))} open</option>`
-  ).join('');
-  if (!invs.length) sel.innerHTML = '<option value="">No open invoices for this customer</option>';
+  _ecnInvoices = invs;
+  ecnRenderInvoicePicker();
 }
 
-function ecnInvoiceChanged() {
-  const o = document.getElementById('ecn-invoice').selectedOptions[0];
-  const bal = Number(o?.dataset.bal || 0);
-  document.getElementById('ecn-amt-hint').textContent = bal > 0 ? `Invoice is ₹${f(bal)} open — the CN cannot exceed it.` : '';
+const ecnRowId = (id, part) => `ecn-${part}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+function ecnRenderInvoicePicker() {
+  const wrap = document.getElementById('ecn-inv-wrap');
+  const tbl  = document.getElementById('ecn-inv-tbl');
+  const hint = document.getElementById('ecn-inv-hint');
+  if (!_ecnInvoices.length) {
+    wrap.style.display = 'none';
+    hint.textContent = 'No open invoices for this customer.';
+    return;
+  }
+  hint.textContent = 'Tick each invoice this applies to, then enter its amounts.';
+  wrap.style.display = '';
+  const th = 'padding:.35rem .5rem;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:left;white-space:nowrap';
+  const td = 'padding:.3rem .5rem;font-size:12px;border-bottom:1px solid var(--line);vertical-align:middle';
+  const inp = 'font-size:12px;padding:.22rem .4rem;border:1px solid var(--brd);border-radius:4px;background:#fff;color:var(--ink);width:100%;box-sizing:border-box;font-family:var(--mono)';
+  tbl.innerHTML = `
+    <thead><tr>
+      <th style="${th};width:34px"></th>
+      <th style="${th}">Invoice #</th>
+      <th style="${th};text-align:right">Outstanding</th>
+      <th style="${th};width:140px">Expected CN (₹)</th>
+      <th style="${th};width:140px" title="What the business gives up — not capped by the invoice">Revenue loss (₹)</th>
+      <th style="${th};width:44px"></th>
+    </tr></thead>
+    <tbody>${_ecnInvoices.map(inv => {
+      const id = inv.invoice_id, bal = Number(inv.balance_inr || inv.balance || 0);
+      return `<tr data-ecn-row="${escHtml(id)}" style="opacity:.55">
+        <td style="${td}"><input type="checkbox" id="${ecnRowId(id,'on')}" data-iid="${escHtml(id)}" onchange="ecnToggleInvoice(this.dataset.iid)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--navy2)"></td>
+        <td style="${td};font-family:var(--mono);font-size:11px">${escHtml(inv.invoice_number || id)}</td>
+        <td style="${td};text-align:right;font-family:var(--mono);color:var(--txt2)">₹${f(bal)}</td>
+        <td style="${td}"><input type="number" id="${ecnRowId(id,'amt')}" min="1" max="${bal}" placeholder="${Math.round(bal)}" data-bal="${bal}" oninput="ecnPickerChanged()" disabled style="${inp}"></td>
+        <td style="${td}"><input type="number" id="${ecnRowId(id,'rev')}" min="0" placeholder="0" oninput="ecnPickerChanged()" disabled style="${inp}"></td>
+        <td style="${td};text-align:center">${inv.invoice_url
+          ? `<a href="${escHtml(inv.invoice_url)}" target="_blank" rel="noopener" title="Open this invoice in Zoho" style="color:var(--action);text-decoration:none;font-size:13px">↗</a>`
+          : '<span style="color:var(--ink-faint)">—</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
+  ecnPickerChanged();
+}
+
+function ecnToggleInvoice(id) {
+  const on = document.getElementById(ecnRowId(id, 'on'))?.checked;
+  ['amt', 'rev'].forEach(part => {
+    const el = document.getElementById(ecnRowId(id, part));
+    if (el) el.disabled = !on;
+  });
+  const tr = document.querySelector(`tr[data-ecn-row="${CSS.escape(id)}"]`);
+  if (tr) tr.style.opacity = on ? '' : '.55';
+  if (on) document.getElementById(ecnRowId(id, 'amt'))?.focus();
+  ecnPickerChanged();
+}
+
+// Which invoices are ticked, and what was typed against each
+function ecnPicked() {
+  return _ecnInvoices.filter(inv => document.getElementById(ecnRowId(inv.invoice_id, 'on'))?.checked)
+    .map(inv => {
+      const amt = parseFloat(document.getElementById(ecnRowId(inv.invoice_id, 'amt'))?.value);
+      const rev = parseFloat(document.getElementById(ecnRowId(inv.invoice_id, 'rev'))?.value);
+      return {
+        inv, balance: Number(inv.balance_inr || inv.balance || 0),
+        amount: isNaN(amt) ? null : amt,
+        revenue: isNaN(rev) ? null : rev,
+      };
+    });
+}
+
+function ecnPickerChanged() {
+  const picked = ecnPicked();
+  const cn  = picked.reduce((t, x) => t + (x.amount || 0), 0);
+  const rev = picked.reduce((t, x) => t + (x.revenue || 0), 0);
+  const el = document.getElementById('ecn-inv-tot');
+  if (el) el.innerHTML = picked.length
+    ? `<strong>${picked.length}</strong> invoice${picked.length === 1 ? '' : 's'} · CN <strong style="font-family:var(--mono)">₹${f(cn)}</strong>${rev > 0 ? ` · revenue loss <strong style="font-family:var(--mono)">₹${f(rev)}</strong>` : ''}`
+    : '';
 }
 
 async function ecnSave() {
   const err  = document.getElementById('ecn-err');
   const cust = document.getElementById('ecn-cust').value.trim();
-  const invO = document.getElementById('ecn-invoice').selectedOptions[0];
-  const invId = document.getElementById('ecn-invoice').value;
   const reason = document.getElementById('ecn-reason').value;
-  const amount = parseFloat(document.getElementById('ecn-amount').value);
   const details = document.getElementById('ecn-details').value.trim();
   const subject = document.getElementById('ecn-subject').value.trim();
-  const bal = Number(invO?.dataset.bal || 0);
+  const picked = ecnPicked();
 
-  if (!cust)   { err.textContent = 'Pick a customer.'; return; }
-  if (!invId)  { err.textContent = 'Pick the invoice this credit note is against.'; return; }
-  if (!reason) { err.textContent = 'Pick a reason.'; return; }
-  if (!amount || amount <= 0) { err.textContent = 'Enter the expected credit note amount.'; return; }
-  if (bal > 0 && amount > bal + 0.5) { err.textContent = `That is more than the ₹${f(bal)} still open on this invoice.`; return; }
+  if (!cust)          { err.textContent = 'Pick a customer.'; return; }
+  if (!picked.length) { err.textContent = 'Tick at least one invoice.'; return; }
+  if (!reason)        { err.textContent = 'Pick a reason — it applies to every invoice ticked.'; return; }
+  for (const x of picked) {
+    const num = x.inv.invoice_number || x.inv.invoice_id;
+    if (!x.amount || x.amount <= 0)          { err.textContent = `Enter the expected CN amount for ${num}.`; return; }
+    if (x.amount > x.balance + 0.5)          { err.textContent = `The CN for ${num} is more than the ₹${f(x.balance)} still open on it.`; return; }
+    if (x.revenue != null && x.revenue < 0)  { err.textContent = `Revenue loss for ${num} cannot be negative.`; return; }
+  }
   if (!details) { err.textContent = 'Add the details — this is what someone reads months later.'; return; }
   err.textContent = '';
 
   const btn = document.getElementById('ecn-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
+    // One row per invoice, sharing a batch id so they read as one decision
+    const batchId = (crypto?.randomUUID ? crypto.randomUUID() : null);
+    const rows = picked.map(x => ({
+      customer_name: cust,
+      invoice_id: x.inv.invoice_id,
+      invoice_number: x.inv.invoice_number || null,
+      entity: x.inv.entity || 'IN',
+      reason, details, email_subject: subject || null,
+      expected_amount: x.amount,
+      revenue_loss: x.revenue,
+      batch_id: batchId,
+      created_by: CURRENT_USER?.id || null,
+      created_by_name: USER_ACCESS?.display_name || CURRENT_USER?.email || null,
+    }));
     const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes`, {
       method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        customer_name: cust, invoice_id: invId,
-        invoice_number: invO?.dataset.num || null, entity: invO?.dataset.ent || 'IN',
-        reason, details, email_subject: subject || null, expected_amount: amount,
-        created_by: CURRENT_USER?.id || null,
-        created_by_name: USER_ACCESS?.display_name || CURRENT_USER?.email || null,
-      }),
+      body: JSON.stringify(rows),
     });
     if (!r.ok) throw new Error(await r.text());
     ecnCloseForm();
     await ecnLoad(true);
-    if (_arLastRows && _arLastRows.length) renderAR();   // Open AR column follows
+    if (_arLastRows && _arLastRows.length) renderAR();
   } catch(e) {
     err.textContent = 'Could not save: ' + (e.message || e);
   } finally { btn.disabled = false; btn.textContent = 'Save'; }
@@ -12395,6 +12489,7 @@ async function arOpenExpectedCnDetail(invoiceId) {
         <div style="display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap">
           <span style="font-family:var(--mono);font-weight:700;font-size:13px">₹${f(Number(x.expected_amount || 0))}</span>
           <span class="co-pill" style="background:#eef1f6;color:#475569">${escHtml(cnReasonLabel(x.reason))}</span>
+          ${Number(x.revenue_loss || 0) > 0 ? `<span style="font-size:10.5px;color:var(--red)">revenue loss ₹${f(Number(x.revenue_loss))}</span>` : ''}
           <span style="font-size:10.5px;color:var(--txt3);margin-left:auto">${escHtml(String(x.created_at).slice(0,10))}${x.created_by_name ? ' · ' + escHtml(x.created_by_name) : ''}</span>
         </div>
         ${x.details ? `<div style="font-size:12px;color:var(--txt2);margin-top:.25rem">${escHtml(x.details)}</div>` : ''}
