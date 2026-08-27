@@ -2107,6 +2107,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div id="ecn-cn-num-wrap" class="cc-field" style="display:none">
       <label class="cc-label">Credit note number <span class="cc-req">*</span></label>
       <input type="text" id="ecn-cn-number" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem;font-family:var(--mono)" placeholder="e.g. CN-00123">
+      <label class="cc-label" style="margin-top:.6rem;display:block">Credit note date <span class="cc-req">*</span></label>
+      <input type="date" id="ecn-cn-date" class="cust-input" style="width:100%;font-size:12.5px;padding:.4rem .6rem;margin-top:.25rem">
     </div>
     <div id="ecn-notreq-wrap" class="cc-field" style="display:none">
       <label class="cc-label">Why was no credit note needed? <span class="cc-req">*</span></label>
@@ -3883,6 +3885,10 @@ async function loadDisputedInvoices() {
         const arRows = await ar.json();
         _diAmounts = Object.fromEntries(arRows.map(a => [a.invoice_id, a]));
       }
+      // How the invoice behind each dispute actually settled — a dispute closed
+      // because a credit note was raised is a different outcome from one where
+      // the customer eventually paid, and the two should not read alike.
+      await loadClosureInfo(invIds);
     }
     if (statusEl) statusEl.textContent = '';
     _populateDiFilterBu();
@@ -4163,9 +4169,24 @@ function renderDisputedInvoices() {
       : `<span style="font-size:12px;font-family:monospace">${invLabel}</span>`;
     const disputeLabel = getDiDisputeLabel(r.dispute_type);
     const isOpen     = r.status !== 'closed';
+    // A closed dispute reads by how the invoice behind it settled: a credit
+    // note is a concession, cash is a resolution. Where the invoice is still
+    // open — or predates closure capture — it stays the neutral "Closed".
+    const cl         = _closureByInv[String(r.invoice_id)];
+    const pill       = (bg, fg, label, tip) =>
+      `<span title="${escHtml(tip || '')}" style="font-size:10px;font-weight:600;background:${bg};color:${fg};padding:.15rem .5rem;border-radius:20px;white-space:nowrap">${escHtml(label)}</span>`;
     const statusPill = isOpen
-      ? `<span style="font-size:10px;font-weight:600;background:#fee2e2;color:#991b1b;padding:.15rem .5rem;border-radius:20px">Open</span>`
-      : `<span style="font-size:10px;font-weight:600;background:#d1fae5;color:#065f46;padding:.15rem .5rem;border-radius:20px">Closed</span>`;
+      ? pill('#fee2e2', '#991b1b', 'Open')
+      : cl?.closure_basis === 'closed_by_cn'
+        ? pill('#ede9fe', '#6b21a8', 'Closed by CN',
+               'Invoice settled by credit note' + (cl.cn_numbers ? ' ' + cl.cn_numbers : '')
+               + (cl.cn_date ? ' on ' + cl.cn_date : '') + ' — no cash received')
+        : cl?.closure_basis === 'zoho_paid'
+          ? pill('#d1fae5', '#065f46', 'Resolved',
+                 'Invoice paid' + (cl.closed_on ? ' on ' + cl.closed_on : ''))
+          : cl?.closure_basis === 'zoho_write_off'
+            ? pill('#fee2e2', '#991b1b', 'Written off', 'Invoice written off in Zoho')
+            : pill('#e2e8f0', '#475569', 'Closed', 'Dispute closed; the invoice has not settled yet.');
     const openedDt   = new Date(r.opened_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const closedDt   = r.closed_at ? new Date(r.closed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '<span style="color:var(--txt3)">—</span>';
     const descCell   = r.dispute_description
@@ -8872,6 +8893,35 @@ async function cdLoadKeptRate() {
 }
 let _cdInvInfo = {};      // invoice_id → invoice info (open invoices + snapshot recoveries)
 
+/* ── How an invoice actually settled ────────────────────────────
+   Shared by Confirmed Dates, Disputed Invoices and Expected CNs, all of which
+   otherwise treat "gone from the open book" as "the money came in". It did not
+   always: the classify-closures job asks Zoho whether each closure was cash, a
+   credit note or a write-off, so a credit note stops reading as collection.
+   One cache for the session — closures never change once classified. */
+let _closureByInv = {};   // invoice_id → { closure_basis, cn_numbers, cn_date, ... }
+async function loadClosureInfo(invoiceIds) {
+  const want = [...new Set((invoiceIds || []).map(String).filter(Boolean))]
+    .filter(id => !(id in _closureByInv));
+  if (!want.length) return _closureByInv;
+  for (let i = 0; i < want.length; i += 100) {
+    const chunk = want.slice(i, i + 100);
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/invoice_closures?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})`
+        + `&select=invoice_id,closure_basis,closed_on,cn_numbers,cn_date,amount_paid,credits_applied`,
+        { headers: cmrrHdr() });
+      if (r.ok) for (const c of await r.json()) _closureByInv[String(c.invoice_id)] = c;
+    } catch(_) { /* leave unknown rather than claim a settlement we did not read */ }
+    // Remember the misses too, so a second caller does not re-ask for invoices
+    // that have no closure row (UK, or closed before capture-closures existed).
+    chunk.forEach(id => { if (!(id in _closureByInv)) _closureByInv[id] = null; });
+  }
+  return _closureByInv;
+}
+const closureBasisOf = id => _closureByInv[String(id)]?.closure_basis || null;
+const isClosedByCn   = id => closureBasisOf(id) === 'closed_by_cn';
+
 // Cash received in bank for a month, per invoice — from Zoho customer payments
 // via the bank-collections edge function. CN / TDS / JV closures are excluded
 // by construction. Loads lazily per month, then re-renders.
@@ -9282,9 +9332,16 @@ async function loadConfirmedDates() {
         if (sr.ok) for (const s of await sr.json()) { if (!lastSnap[s.invoice_id]) lastSnap[s.invoice_id] = s; }
       } catch(_) {}
     }
+    // Leaving the open book is not the same as being paid. Ask how each one
+    // actually settled so a credit note is not counted as collection below.
+    await loadClosureInfo(closedIds);
     for (const id of closedIds) {
       const d = invoicePtpMap[id];
       d.closed = true;
+      const cl = _closureByInv[String(id)];
+      d.closureBasis = cl?.closure_basis || null;
+      d.cnNumbers    = cl?.cn_numbers || '';
+      d.cnDate       = cl?.cn_date || '';
       const s = lastSnap[id];
       if (s) {
         if (!d.invoiceNumber || d.invoiceNumber === id) d.invoiceNumber = s.invoice_number || id;
@@ -9426,8 +9483,13 @@ function cdFilterAndRender() {
     const opening = openingFor(d);
     const outstanding = d.closed ? 0 : Number(d.balance || 0);
     const collected = bankMap ? Number(bankMap[d.invoiceId] || 0) : 0;
+    // Settled by a credit note, not by cash. The invoice is gone either way, so
+    // it is still "full" for the outstanding column — but it must never be
+    // counted as collected, and the promise behind it was not kept.
+    const byCn = !!d.closed && d.closureBasis === 'closed_by_cn';
     return {
-      opening, outstanding, collected,
+      opening, outstanding, collected, byCn,
+      cnNumbers: d.cnNumbers || '', cnDate: d.cnDate || '',
       full: d.closed || outstanding < 0.5,
       part: !d.closed && outstanding >= 0.5 && collected > 0.5,
     };
@@ -9438,7 +9500,8 @@ function cdFilterAndRender() {
   if (summary) {
     const totalCount = filtered.length;
     const overdueCount  = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp < todayStr && !d.closed; }).length;
-    const collectedCount = filtered.filter(d => moneyFor(d).full).length;
+    const collectedCount = filtered.filter(d => { const m = moneyFor(d); return m.full && !m.byCn; }).length;
+    const cnCount        = filtered.filter(d => moneyFor(d).byCn).length;
     const todayCount    = filtered.filter(d => d.ptpHistory[d.ptpHistory.length-1]?.date === todayStr).length;
     const upcomingCount = filtered.filter(d => { const lp = d.ptpHistory[d.ptpHistory.length-1]?.date||''; return lp > todayStr; }).length;
     const movedCount    = filtered.filter(d => d.ptpHistory.length > 1).length;
@@ -9447,10 +9510,11 @@ function cdFilterAndRender() {
       { label: 'Overdue PTP', val: overdueCount, color: 'var(--red)' },
       { label: 'Due Today', val: todayCount, color: 'var(--amber)' },
       { label: 'Upcoming', val: upcomingCount, color: '#16a34a' },
-      { label: 'Collected', val: collectedCount, color: '#16a34a' },
+      { label: 'Collected', val: collectedCount, color: '#16a34a', tip: 'Settled with cash. Credit-note closures are counted separately.' },
       { label: 'Part-paid', val: filtered.filter(d => moneyFor(d).part).length, color: '#1d4ed8' },
+      { label: 'Closed by CN', val: cnCount, color: '#7c3aed', tip: 'Settled by a credit note in Zoho — no cash came in against these.' },
       { label: 'Date Moved', val: movedCount, color: '#6366f1' },
-    ].map(s => `<div style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
+    ].map(s => `<div title="${escHtml(s.tip || '')}" style="display:flex;flex-direction:column;gap:.15rem;padding:.45rem .9rem;background:var(--surf);border:1px solid var(--brd);border-radius:8px;min-width:80px">
       <span style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--txt3)">${s.label}</span>
       <span style="font-size:22px;font-weight:700;color:${s.color};line-height:1">${s.val}</span>
     </div>`).join('')
@@ -9505,20 +9569,31 @@ function cdFilterAndRender() {
     const isCurrent = lastEntry.date === ds;
     const amt = entryAmt(d, isCurrent ? lastEntry : hits[hits.length - 1]);
     const who = hits.map(h => h.collectorName).filter(Boolean).join(', ');
-    return { isCurrent, amt, who, settled: moneyFor(d).full };
+    const m = moneyFor(d);
+    return { isCurrent, amt, who, settled: m.full, byCn: m.byCn, cnNumbers: m.cnNumbers, cnDate: m.cnDate };
   };
 
   const thS = 'position:sticky;top:0;background:#f6f8fb;font-size:9.5px;font-weight:700;color:#5b6472;padding:.35rem .2rem;border-bottom:1.5px solid var(--brd2);text-align:right;white-space:nowrap;z-index:2';
   const thL = thS.replace('text-align:right', 'text-align:left') + ';padding-left:.6rem';
   const tdS = 'padding:.28rem .35rem;border-bottom:1px solid var(--line);text-align:right;font-size:10.5px;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap';
   const tdL = 'padding:.28rem .6rem;border-bottom:1px solid var(--line);text-align:left;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  // A credit-note settlement reads in violet rather than green throughout: the
+  // invoice is gone, but no cash arrived, so it must not look like a collection.
+  const cnNote = c => 'Closed by credit note' + (c.cnNumbers ? ' ' + c.cnNumbers : '')
+    + (c.cnDate ? ' on ' + c.cnDate : '') + ' — no cash received';
   const badge = (c) => c.isCurrent
-    ? (c.settled
+    ? (c.byCn
+      ? `<span title="${escHtml(cnNote(c) + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#ede9fe;color:#6b21a8;font-weight:700">CN ${fmtFull(c.amt)}</span>`
+      : c.settled
       ? `<span title="${escHtml('Invoice settled — nothing outstanding' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#bbf7d0;color:#166534;font-weight:700">✓ ${fmtFull(c.amt)}</span>`
       : `<span title="${escHtml('Current PTP — ' + fmtFull(c.amt) + ' expected in bank' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#fde68a;color:#92400e;font-weight:700">${fmtFull(c.amt)}</span>`)
     : `<span title="${escHtml('Moved — promise shifted to another date' + (c.who ? ' · ' + c.who : ''))}" style="display:inline-block;padding:.1rem .3rem;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-decoration:line-through">${fmtFull(c.amt)}</span>`;
-  // Status of an expectation vs bank cash: settled ✓, part-collected, or open
-  const statusChip = (full, collected, expected) => full
+  // Status of an expectation vs bank cash: closed by CN, settled ✓,
+  // part-collected, or open. `cn` is the CN detail when the whole row settled
+  // that way — for a grouped row, only when every invoice under it did.
+  const statusChip = (full, collected, expected, cn) => cn
+    ? `<span title="${escHtml(cnNote(cn))}" style="display:inline-block;font-size:9.5px;font-weight:700;background:#ede9fe;color:#6b21a8;padding:.1rem .35rem;border-radius:4px">CN</span>`
+    : full
     ? '<span style="display:inline-block;font-size:9.5px;font-weight:700;background:#bbf7d0;color:#166534;padding:.1rem .35rem;border-radius:4px">✓ FULL</span>'
     : (collected > 0.5
       ? `<span title="${escHtml(fmtFull(collected) + ' in bank vs ' + fmtFull(expected) + ' expected')}" style="display:inline-block;font-size:9.5px;font-weight:700;background:#dbeafe;color:#1d4ed8;padding:.1rem .35rem;border-radius:4px">PART</span>`
@@ -9553,6 +9628,15 @@ function cdFilterAndRender() {
     const hi = _cdMonth < curMonth ? curMonth : _cdMonth;
     for (let m = lo; m <= hi; m = monthAdd(m, 1)) { trackMonths.push(m); if (trackMonths.length > 24) break; } }
 
+  // A grouped row only reads as a CN settlement when every invoice under it was
+  // one — a mix stays green so a single credit note cannot hide real cash.
+  const groupCn = ds => {
+    const ms = ds.map(moneyFor);
+    if (!ms.length || !ms.every(m => m.byCn)) return null;
+    const nums = [...new Set(ms.flatMap(m => (m.cnNumbers || '').split(',').map(s => s.trim()).filter(Boolean)))];
+    return { cnNumbers: nums.join(', '), cnDate: ms.map(m => m.cnDate).filter(Boolean).sort()[0] || '' };
+  };
+
   let bodyHtml = '';
   if (_cdView === 'collector') {
     const byCol = {};
@@ -9569,15 +9653,15 @@ function cdFilterAndRender() {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldSum = 0, allSettled = true;
+        let curSum = 0, oldSum = 0, allSettled = true, allCn = true, nCur = 0;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; if (!c.settled) allSettled = false; } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; nCur++; if (!c.settled) allSettled = false; if (!c.byCn) allCn = false; } else oldSum += c.amt;
         });
         if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled })}</td>`;
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled, byCn: nCur > 0 && allCn })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
@@ -9594,7 +9678,7 @@ function cdFilterAndRender() {
         <td style="${tdL};font-size:10.5px;color:var(--txt2);${frz(3)}">${ds.length} inv</td>
         <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
         <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${colCollected > 0.5 ? fmtFull(colCollected) : '—'}</td>
-        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, colCollected, rowTot)}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, colCollected, rowTot, groupCn(ds))}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -9613,15 +9697,15 @@ function cdFilterAndRender() {
       let rowTot = 0;
       const cells = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        let curSum = 0, oldSum = 0, allSettled = true;
+        let curSum = 0, oldSum = 0, allSettled = true, allCn = true, nCur = 0;
         ds.forEach(d => {
           const c = cellFor(d, day);
           if (!c) return;
-          if (c.isCurrent) { curSum += c.amt; if (!c.settled) allSettled = false; } else oldSum += c.amt;
+          if (c.isCurrent) { curSum += c.amt; nCur++; if (!c.settled) allSettled = false; if (!c.byCn) allCn = false; } else oldSum += c.amt;
         });
         if (curSum > 0) { dayTotals[day] += curSum; rowTot += curSum; }
         const wk = isWeekend(day) ? ';background:#fafbfd' : '';
-        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled })}</td>`;
+        if (curSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: true, amt: curSum, who: '', settled: allSettled, byCn: nCur > 0 && allCn })}</td>`;
         if (oldSum > 0) return `<td style="${tdS}${wk}">${badge({ isCurrent: false, amt: oldSum, who: '' })}</td>`;
         return `<td style="${tdS}${wk}"></td>`;
       }).join('');
@@ -9636,7 +9720,7 @@ function cdFilterAndRender() {
         <td style="${tdL};${frz(3)}">${pocCap(ds[0].collector)}</td>
         <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
         <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${custCollected > 0.5 ? fmtFull(custCollected) : '—'}</td>
-        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, custCollected, rowTot)}</td>
+        <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(allDone, custCollected, rowTot, groupCn(ds))}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -9666,12 +9750,12 @@ function cdFilterAndRender() {
         const gbChip = ` <span title="${escHtml(gbTip)}" style="font-size:9px;font-weight:700;color:${gb === 'self' ? '#6b21a8' : '#0a6e4c'};background:${gb === 'self' ? '#f5f0ff' : '#eefdf3'};border:1px solid ${gb === 'self' ? '#e0d0ff' : '#bbf7d0'};border-radius:4px;padding:.03rem .28rem;white-space:nowrap">${gb === 'self' ? 'SELF' : 'CUST'}</span>`;
         return `<tr>
           <td style="${tdL};font-weight:600;${frz(0)}" title="${escHtml(d.customerName)}">${escHtml(d.customerName)}</td>
-          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now'}">${money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${gbChip}${moved}</td>
+          <td style="${tdL};font-family:var(--mono);font-size:11px;${frz(1)}">${escHtml(d.invoiceNumber || '—')}<span style="color:${money.byCn ? '#6b21a8' : money.full ? '#166534' : 'var(--ink-faint)'};font-size:10px;margin-left:.3rem" title="${escHtml(money.byCn ? cnNote(money) : money.full ? 'Settled — nothing outstanding' : 'Invoice balance outstanding now')}">${money.byCn ? 'CN' + (money.cnNumbers ? ' ' + escHtml(money.cnNumbers.split(',')[0].trim()) : '') : money.full ? '✓ nil' : fmtFull(money.outstanding)}</span>${gbChip}${moved}</td>
           <td style="${tdL};${frz(2)}">${buCap(d.bu)}</td>
           <td style="${tdL};${frz(3)}">${pocCap(d.collector)}</td>
           <td style="${tdS};font-weight:700;${frz(4, '#f8fafc')}">${rowTot > 0 ? fmtFull(rowTot) : '—'}</td>
           <td style="${tdS};font-weight:600;${frz(5, '#f6fdf8')};color:#166534">${money.collected > 0.5 ? fmtFull(money.collected) : '—'}</td>
-          <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(money.full, money.collected, rowTot)}</td>
+          <td style="${tdS};text-align:center;${frz(6, '#fff')}${frzEdge}">${statusChip(money.full, money.collected, rowTot, money.byCn ? money : null)}</td>
           ${cells}
         </tr>`;
       }).join('');
@@ -11582,16 +11666,20 @@ function coAdaptAdvance(a, ctx) {
 function coAdaptClosure(c, ctx) {
   const paid = c.closure_basis === 'zoho_paid';
   const wo   = c.closure_basis === 'zoho_write_off';
+  const cn   = c.closure_basis === 'closed_by_cn';
   return {
     id: 'close:' + c.invoice_id, kind: 'payment',
     at: c.closed_on, atPrec: 'day',
-    title: paid ? 'Payment received' : wo ? 'Written off' : 'Left the open book',
+    title: paid ? 'Payment received'
+         : cn ? 'Closed by credit note' + (c.cn_numbers ? ' · ' + c.cn_numbers : '')
+         : wo ? 'Written off' : 'Left the open book',
     subtitle: c.days_to_pay != null
       ? `${c.days_to_pay} days from invoice${c.days_late != null ? `, ${c.days_late > 0 ? c.days_late + 'd past due' : Math.abs(c.days_late) + 'd before due'}` : ''}`
       : '',
-    amount: Number(c.amount_paid ?? c.last_balance_inr ?? 0),
+    amount: cn ? Number(c.credits_applied ?? c.last_balance_inr ?? 0)
+               : Number(c.amount_paid ?? c.last_balance_inr ?? 0),
     amountKind: paid ? 'received' : 'other',
-    amountNote: paid ? null : (wo ? 'written off' : 'reason not recorded'),
+    amountNote: paid ? null : cn ? 'credited, not collected' : (wo ? 'written off' : 'reason not recorded'),
     pills: c.ptp_date_at_close && paid
       ? [c.closed_on <= c.ptp_date_at_close
           ? { label: 'Promise kept', bg: '#dcfce7', fg: '#166534' }
@@ -11908,6 +11996,7 @@ function coRenderSettled(b, ps) {
   const money = v => '₹' + f(v);
   const BASIS = {
     zoho_paid:        { l: 'Paid',            bg: '#dcfce7', fg: '#166534' },
+    closed_by_cn:     { l: 'Closed by CN',    bg: '#ede9fe', fg: '#6b21a8' },
     zoho_write_off:   { l: 'Written off',     bg: '#fee2e2', fg: '#991b1b' },
     left_unpaid_book: { l: 'Left book',       bg: '#f1f5f9', fg: '#475569' },
     snapshot_gap:     { l: 'Closed (inferred)', bg: '#fef3c7', fg: '#92400e' },
@@ -11928,7 +12017,7 @@ function coRenderSettled(b, ps) {
     return `<tr>
       <td style="font-family:var(--mono);font-size:11px">${escHtml(c.invoice_number || c.invoice_id)}</td>
       <td style="font-size:10.5px">${escHtml(c.closed_on || '—')}</td>
-      <td class="r">${money(Number(c.amount_paid ?? c.last_balance_inr ?? 0))}</td>
+      <td class="r"${c.closure_basis === 'closed_by_cn' ? ' title="Credited, not collected"' : ''}>${money(c.closure_basis === 'closed_by_cn' ? Number(c.credits_applied ?? c.last_balance_inr ?? 0) : Number(c.amount_paid ?? c.last_balance_inr ?? 0))}</td>
       <td class="r">${c.days_to_pay != null ? c.days_to_pay + 'd' : '—'}</td>
       <td class="r">${c.days_late != null ? `<span style="color:${c.days_late > 0 ? 'var(--red)' : '#0a6e4c'}">${c.days_late > 0 ? '+' : ''}${c.days_late}d</span>` : '—'}</td>
       <td><span class="co-pill" style="background:${bs.bg};color:${bs.fg}">${escHtml(bs.l)}</span>${keptChip}</td>
@@ -12198,8 +12287,54 @@ async function ecnLoad(force) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?select=*&order=created_at.desc`, { headers: cmrrHdr() });
     _ecnRows = r.ok ? await r.json() : [];
   } catch(_) { _ecnRows = []; }
+  if (await ecnAutoCloseIssued()) {
+    // Rows changed underneath us — re-read rather than patch them in place, so
+    // what is on screen is what the database actually holds.
+    try {
+      const r2 = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?select=*&order=created_at.desc`, { headers: cmrrHdr() });
+      if (r2.ok) _ecnRows = await r2.json();
+    } catch(_) {}
+  }
   await loadExpectedCnMap();
   ecnRender();
+}
+
+/* Close out expectations that Zoho has already met.
+   Once a credit note is raised in Zoho the invoice leaves the open book and
+   classify-closures records it as closed_by_cn with the note's number and date.
+   Asking someone to re-key that by hand invites a mismatch with the books, so
+   it is filled in from Zoho instead. Only expectations still open are touched,
+   and only where the invoice genuinely settled by credit note — a paid or
+   written-off invoice still needs a person to say what became of the CN.
+   Returns true if anything was closed. */
+async function ecnAutoCloseIssued() {
+  if ((USER_ACCESS?.role || '') === 'admin-view') return false;   // read-only users never write
+  const open = _ecnRows.filter(x => x.status === 'open' && x.invoice_id);
+  if (!open.length) return false;
+  await loadClosureInfo(open.map(x => x.invoice_id));
+  const due = open.filter(x => {
+    const cl = _closureByInv[String(x.invoice_id)];
+    return cl?.closure_basis === 'closed_by_cn' && cl.cn_numbers;
+  });
+  if (!due.length) return false;
+  let closed = 0;
+  for (const x of due) {
+    const cl = _closureByInv[String(x.invoice_id)];
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?id=eq.${encodeURIComponent(x.id)}&status=eq.open`, {
+        method: 'PATCH', headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'closed', closure_type: 'cn_issued',
+          cn_number: cl.cn_numbers, cn_date: cl.cn_date || cl.closed_on || null,
+          closed_source: 'zoho_auto',
+          closed_by: null, closed_by_name: 'Zoho (auto)',
+          closed_at: new Date().toISOString(),
+        }),
+      });
+      if (r.ok) closed++;
+    } catch(_) { /* try again on the next load rather than block the tab */ }
+  }
+  return closed > 0;
 }
 
 function ecnSetView(v) {
@@ -12250,8 +12385,13 @@ function ecnRender() {
       </tr></thead>
       <tbody>${rows.map(x => {
         const closed = x.status === 'closed';
+        const auto = x.closed_source === 'zoho_auto';
         const statusCell = closed
-          ? `<span class="co-pill" style="background:${x.closure_type === 'cn_issued' ? '#dcfce7' : '#f1f5f9'};color:${x.closure_type === 'cn_issued' ? '#166534' : '#475569'}">${x.closure_type === 'cn_issued' ? 'CN ' + escHtml(x.cn_number || '') : 'Not required'}</span>`
+          ? `<span class="co-pill" title="${escHtml(auto ? 'Matched automatically against the credit note recorded in Zoho' : '')}" style="background:${x.closure_type === 'cn_issued' ? '#dcfce7' : '#f1f5f9'};color:${x.closure_type === 'cn_issued' ? '#166534' : '#475569'}">${x.closure_type === 'cn_issued' ? 'CN ' + escHtml(x.cn_number || '') : 'Not required'}</span>`
+            + (auto ? ` <span class="co-pill" style="background:#ede9fe;color:#6b21a8">auto</span>` : '')
+            // The date the credit note carries, which is what reconciles with
+            // Zoho — not the date somebody got round to closing the row.
+            + (x.cn_date ? `<div style="font-size:10.5px;color:var(--txt2);margin-top:.2rem">Raised ${escHtml(String(x.cn_date).slice(0,10))}</div>` : '')
             + (x.closure_reason ? `<div style="font-size:10.5px;color:var(--txt3);margin-top:.2rem;max-width:200px;white-space:normal">${escHtml(x.closure_reason)}</div>` : '')
             + (x.closed_at ? `<div style="font-size:10px;color:var(--ink-faint);margin-top:.15rem">${escHtml(String(x.closed_at).slice(0,10))}${x.closed_by_name ? ' · ' + escHtml(x.closed_by_name) : ''}</div>` : '')
           : '<span class="co-pill" style="background:#fef3c7;color:#92400e">Open</span>';
@@ -12582,6 +12722,9 @@ function ecnOpenCloseModal(id) {
     `<strong>${escHtml(x.customer_name)}</strong> · ${escHtml(x.invoice_number || '')}<br>`
     + `₹${f(Number(x.expected_amount || 0))} expected · ${escHtml(cnReasonLabel(x.reason))}`;
   document.getElementById('ecn-cn-number').value = '';
+  // Today in IST, so a late-evening close does not date the note to yesterday.
+  document.getElementById('ecn-cn-date').value =
+    new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
   document.getElementById('ecn-close-reason').value = '';
   document.getElementById('ecn-close-err').textContent = '';
   document.getElementById('ecn-cn-num-wrap').style.display = 'none';
@@ -12603,8 +12746,10 @@ async function ecnSaveClosure() {
   const err = document.getElementById('ecn-close-err');
   if (!_ecnClosureType) { err.textContent = 'Say how it was settled.'; return; }
   const cn  = document.getElementById('ecn-cn-number').value.trim();
+  const cnd = document.getElementById('ecn-cn-date').value || '';
   const rsn = document.getElementById('ecn-close-reason').value.trim();
   if (_ecnClosureType === 'cn_issued' && !cn)  { err.textContent = 'The credit note number is required.'; return; }
+  if (_ecnClosureType === 'cn_issued' && !cnd) { err.textContent = 'The credit note date is required.'; return; }
   if (_ecnClosureType === 'not_required' && !rsn) { err.textContent = 'Record why no credit note was needed.'; return; }
   err.textContent = '';
   const btn = document.getElementById('ecn-close-btn');
@@ -12615,6 +12760,8 @@ async function ecnSaveClosure() {
       body: JSON.stringify({
         status: 'closed', closure_type: _ecnClosureType,
         cn_number: _ecnClosureType === 'cn_issued' ? cn : null,
+        cn_date:   _ecnClosureType === 'cn_issued' ? cnd : null,
+        closed_source: 'manual',
         closure_reason: _ecnClosureType === 'not_required' ? rsn : null,
         closed_by: CURRENT_USER?.id || null,
         closed_by_name: USER_ACCESS?.display_name || CURRENT_USER?.email || null,
