@@ -962,6 +962,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="st-stbtn"        id="st-tab-cn-reasons" onclick="showSettingsSubTab('cn-reasons')">CN Reasons</button>
       <button class="st-stbtn"        id="st-tab-escalation" onclick="showSettingsSubTab('escalation')" style="display:none">Escalation Persons</button>
       <button class="st-stbtn"        id="st-tab-users"     onclick="showSettingsSubTab('users')"     style="display:none">Manage Users</button>
+      <button class="st-stbtn"        id="st-tab-refresh"   onclick="showSettingsSubTab('refresh')">Refresh</button>
     </div>
 
     <!-- GBP/INR Monthly Rates -->
@@ -1315,6 +1316,18 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <div id="users-list"></div>
       </div>
     </div>
+
+    <!-- Refresh -->
+    <div id="st-pane-refresh" class="st-pane" style="display:none">
+      <div style="border:1px solid var(--brd);border-radius:8px;padding:1rem 1.25rem;background:var(--surf)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.4rem;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3)">Refresh Everything</span>
+          <button class="modal-csv" id="st-refresh-btn" onclick="stRunFullRefresh()" style="margin-left:auto;padding:.3rem .85rem;font-size:12px">▶ Run Refresh</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.85rem">Pulls the latest from Zoho in one pass, in order — each step below ticks off as it finishes. UK AR is a manual upload and is not part of this (see Open AR).</div>
+        <div id="st-refresh-list" style="display:flex;flex-direction:column;gap:.4rem"></div>
+      </div>
+    </div>
   </div>
   <!-- ── Collector Console Pane ───────────────────────────── -->
   <div id="collector-console" class="pane">
@@ -1329,6 +1342,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <button class="cc-stbtn"        id="cc-st-history"    onclick="ccShowSubTab('history')">Interaction History</button>
       <button class="cc-stbtn"        id="cc-st-daysummary" onclick="ccShowSubTab('daysummary')">Day Summary</button>
       <button class="cc-stbtn"        id="cc-st-followups"  onclick="ccShowSubTab('followups')">Follow Ups</button>
+      <button class="cc-stbtn"        id="cc-st-mappings"   onclick="ccShowSubTab('mappings')">Mappings</button>
     </div>
 
     <!-- ── LOG INTERACTION ──────────────────────────────── -->
@@ -1655,6 +1669,12 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <div id="cc-followups-content">
         <div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Click to load follow-ups.</div>
       </div>
+    </div>
+
+    <!-- ── MAPPINGS ─────────────────────────────────────── -->
+    <div id="cc-pane-mappings" style="display:none">
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.65rem">Who is mapped to what, and whether the open book is spread evenly across them. "Mapped" comes from the Customer Master in Settings; the rest comes from the current Open AR.</div>
+      <div id="cc-mappings-content"><div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div></div>
     </div>
   </div><!-- end #collector-console -->
 
@@ -2745,7 +2765,7 @@ function showSettingsSubTab(tab) {
   // always hide option sub-panes first
   const dsp = document.getElementById('st-pane-dispute-types'); if (dsp) dsp.style.display = 'none';
   const ccp = document.getElementById('st-pane-contact-cats'); if (ccp) ccp.style.display = 'none';
-  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','adv-actions','options','cn-reasons','escalation','users']) {
+  for (const id of ['fx','excluded','tags','bu','collector','customers','coc','aging-brackets','adv-actions','options','cn-reasons','escalation','users','refresh']) {
     document.getElementById(`st-pane-${id}`)?.style && (document.getElementById(`st-pane-${id}`).style.display = id === tab ? '' : 'none');
     document.getElementById(`st-tab-${id}`)?.classList.toggle('active', id === tab);
   }
@@ -2769,6 +2789,156 @@ function showSettingsTab(btn) {
       const el = document.getElementById(id); if (el) el.style.display = '';
     });
     Promise.all([loadBuList(), loadCollectorList()]).then(() => loadUsersPanel());
+  }
+}
+
+async function stRunFullRefresh() {
+  const btn  = document.getElementById('st-refresh-btn');
+  const list = document.getElementById('st-refresh-list');
+  if (!btn || !list) return;
+  if (btn.disabled) return;
+
+  // Pipeline: each entry = { label, run: async fn returning { ok, detail } }
+  const STEPS = [
+    {
+      label: 'Sync India AR',
+      run: async (onProgress) => {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-ar`, {
+          method: 'POST', headers: { 'content-type': 'application/json', ...cmrrHdr() },
+        });
+        if (!resp.ok && !resp.headers.get('content-type')?.includes('event-stream')) {
+          const j = await resp.json().catch(() => ({}));
+          return { ok: false, detail: j.error || 'HTTP ' + resp.status };
+        }
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '', detail = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split('\n\n'); buf = parts.pop();
+          for (const block of parts) {
+            let evName = 'message', dataStr = '';
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event: ')) evName = line.slice(7).trim();
+              if (line.startsWith('data: '))  dataStr = line.slice(6).trim();
+            }
+            if (!dataStr) continue;
+            let ev; try { ev = JSON.parse(dataStr); } catch { continue; }
+            if (evName === 'progress') onProgress(`[${ev.step}/${ev.total}] ${ev.message}`);
+            else if (evName === 'done')  { detail = `${ev.synced} invoices synced`; }
+            else if (evName === 'error') return { ok: false, detail: ev.message };
+          }
+        }
+        return { ok: true, detail };
+      },
+    },
+    {
+      label: 'Capture closures',
+      run: async () => {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/capture-closures`, {
+          method: 'POST', headers: cmrrHdr(),
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
+        return { ok: true, detail: j.captured != null ? `${j.captured} captured` : '' };
+      },
+    },
+    {
+      label: 'Classify closures',
+      run: async () => {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/classify-closures`, {
+          method: 'POST', headers: cmrrHdr(),
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok || j.ok === false) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
+        return { ok: true, detail: j.message || (j.updated != null ? `${j.updated} classified` : '') };
+      },
+    },
+    {
+      label: 'Sync advances',
+      run: async () => {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, {
+          method: 'POST', headers: cmrrHdr(),
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok || !j.ok) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
+        return { ok: true, detail: j.synced != null ? `${j.synced} advances` : '' };
+      },
+    },
+    {
+      label: 'Sync contact balances',
+      run: async () => {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, {
+          method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok || j.ok === false) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
+        return { ok: true, detail: j.synced != null ? `${j.synced} contacts` : '' };
+      },
+    },
+  ];
+
+  // Build the step rows
+  const rowEls = STEPS.map((s, i) => {
+    const row = document.createElement('div');
+    row.id = `st-refresh-row-${i}`;
+    row.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border-radius:6px;background:var(--surf);border:1px solid var(--brd);font-size:12px';
+    row.innerHTML =
+      `<span class="st-refresh-icon" style="font-size:13px;width:1.25rem;text-align:center;color:var(--txt3)">○</span>` +
+      `<span style="flex:1;font-weight:500">${s.label}</span>` +
+      `<span class="st-refresh-sub" style="color:var(--txt3);font-size:11px"></span>` +
+      `<span class="st-refresh-time" style="color:var(--txt3);font-size:11px;min-width:3rem;text-align:right"></span>`;
+    return row;
+  });
+  list.innerHTML = '';
+  rowEls.forEach(r => list.appendChild(r));
+
+  btn.disabled = true; btn.textContent = '⏳ Running…';
+  let anyFailed = false;
+
+  for (let i = 0; i < STEPS.length; i++) {
+    const row  = rowEls[i];
+    const icon = row.querySelector('.st-refresh-icon');
+    const sub  = row.querySelector('.st-refresh-sub');
+    const timer = row.querySelector('.st-refresh-time');
+    icon.textContent = '⏳'; icon.style.color = '#b45309';
+    row.style.background = '#fffbeb';
+    const t0 = Date.now();
+    let result;
+    try {
+      result = await STEPS[i].run(msg => { sub.textContent = msg; });
+    } catch(e) {
+      result = { ok: false, detail: e.message };
+    }
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+    if (result.ok) {
+      icon.textContent = '✓'; icon.style.color = '#16a34a';
+      row.style.background = '#f0fdf4';
+      sub.textContent  = result.detail || '';
+      sub.style.color  = '#16a34a';
+      timer.textContent = elapsed;
+    } else {
+      icon.textContent = '✗'; icon.style.color = '#dc2626';
+      row.style.background = '#fef2f2';
+      sub.textContent  = result.detail || 'failed';
+      sub.style.color  = '#dc2626';
+      timer.textContent = elapsed;
+      anyFailed = true;
+      break;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = anyFailed ? '↺ Retry' : '▶ Run Refresh';
+
+  if (!anyFailed) {
+    // Reload AR data so the rest of the app reflects the new data
+    resetClosureInfo();
+    _arInited = false;
+    loadAR();
   }
 }
 
@@ -7151,10 +7321,12 @@ function ccShowSubTab(tab) {
   document.getElementById('cc-pane-history').style.display    = tab === 'history'    ? '' : 'none';
   document.getElementById('cc-pane-daysummary').style.display = tab === 'daysummary' ? '' : 'none';
   document.getElementById('cc-pane-followups').style.display  = tab === 'followups'  ? '' : 'none';
+  document.getElementById('cc-pane-mappings').style.display   = tab === 'mappings'   ? '' : 'none';
   document.getElementById('cc-st-log').classList.toggle('active',        tab === 'log');
   document.getElementById('cc-st-history').classList.toggle('active',    tab === 'history');
   document.getElementById('cc-st-daysummary').classList.toggle('active', tab === 'daysummary');
   document.getElementById('cc-st-followups').classList.toggle('active',  tab === 'followups');
+  document.getElementById('cc-st-mappings').classList.toggle('active',   tab === 'mappings');
   if (tab === 'history') {
     if (USER_ACCESS?.is_admin) {
       const colWrap = document.getElementById('cc-hist-col-wrap');
@@ -7165,6 +7337,81 @@ function ccShowSubTab(tab) {
   }
   if (tab === 'daysummary') ccLoadDaySummary();
   if (tab === 'followups')  ccLoadFollowUps();
+  if (tab === 'mappings')   ccLoadMappings();
+}
+
+/* ── Mappings sub-tab ─────────────────────────────────────────
+   A health check on collector coverage: how many customers the Customer
+   Master hands each collector, versus how many actually carry an open
+   invoice right now, and how thin or thick that open book is spread. */
+async function ccLoadMappings() {
+  const el = document.getElementById('cc-mappings-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  try {
+    if (!_collectorList.length) await loadCollectorList();
+    if (!_cmData.length) await loadArCustMaster();
+    if (!_arAllRows.length) await loadAR();
+  } catch(e) { console.warn('ccLoadMappings:', e); }
+  ccRenderMappings();
+}
+
+function ccRenderMappings() {
+  const el = document.getElementById('cc-mappings-content');
+  if (!el) return;
+  // Open AR is unscoped here on purpose — this is a coverage check across the
+  // whole book, not one collector's own queue, the same way Day Summary's
+  // "All" view compares everyone rather than filtering to the viewer.
+  const openRows = (_arAllRows || []).filter(r => !_arExcluded.includes(r.customer_name));
+  // Every collector the master knows about gets a row, even one holding zero
+  // customers right now — that gap is exactly what this view exists to show.
+  const names = [...new Set([..._collectorList, ..._cmData.map(c => c.collector_name).filter(Boolean)])].sort();
+  if (!names.length) {
+    el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">No collectors in the Collector Master yet.</div>';
+    return;
+  }
+  const rows = names.map(name => {
+    const mapped = _cmData.filter(c => c.collector_name === name).length;
+    const custs  = new Set();
+    let invCount = 0;
+    openRows.forEach(r => { if (arGetCollector(r.customer_name) === name) { custs.add(r.customer_name); invCount++; } });
+    const openCust = custs.size;
+    const avg = openCust ? invCount / openCust : null;
+    return { name, mapped, openCust, invCount, avg };
+  });
+  const totals = rows.reduce((t, r) => ({
+    mapped: t.mapped + r.mapped, openCust: t.openCust + r.openCust, invCount: t.invCount + r.invCount,
+  }), { mapped: 0, openCust: 0, invCount: 0 });
+
+  const th = 'padding:.45rem .6rem;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#5b6472;border-bottom:1.5px solid var(--brd2);background:#f6f8fb;text-align:right;white-space:nowrap';
+  const thL = th.replace('text-align:right', 'text-align:left');
+  const td = 'padding:.4rem .6rem;border-bottom:1px solid var(--line);font-size:12px;text-align:right;font-family:var(--mono)';
+  const tdL = td.replace('text-align:right;font-family:var(--mono)', 'text-align:left;font-weight:600');
+
+  el.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:8px">
+    <table style="border-collapse:separate;border-spacing:0;width:100%;min-width:640px">
+      <thead><tr>
+        <th style="${thL}">Collector</th>
+        <th style="${th}" title="Customers assigned to this collector in the Customer Master">Customers mapped</th>
+        <th style="${th}" title="Of those, how many currently carry an open invoice">Customers open</th>
+        <th style="${th}" title="Open invoices across those customers">Invoices open</th>
+        <th style="${th}" title="Open invoices ÷ customers open — how thin or thick the book is spread">Avg inv / customer</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+          <td style="${tdL}">${pocCap(r.name)}</td>
+          <td style="${td}">${r.mapped}</td>
+          <td style="${td};color:${r.openCust === 0 && r.mapped > 0 ? 'var(--ink-faint)' : 'inherit'}">${r.openCust}${r.openCust === 0 && r.mapped > 0 ? ' <span style=\'font-size:10px\' title=\'Mapped customers, none currently overdue\'>—</span>' : ''}</td>
+          <td style="${td}">${r.invCount || '—'}</td>
+          <td style="${td}">${r.avg != null ? r.avg.toFixed(1) : '—'}</td>
+        </tr>`).join('')}</tbody>
+      <tfoot><tr style="background:#f8fafc">
+        <td style="${tdL};font-weight:700">Total</td>
+        <td style="${td};font-weight:700">${totals.mapped}</td>
+        <td style="${td};font-weight:700">${totals.openCust}</td>
+        <td style="${td};font-weight:700">${totals.invCount}</td>
+        <td style="${td};font-weight:700">${totals.openCust ? (totals.invCount / totals.openCust).toFixed(1) : '—'}</td>
+      </tr></tfoot>
+    </table></div>`;
 }
 
 /* ── Day Summary sub-tab ─────────────────────────────────────── */
