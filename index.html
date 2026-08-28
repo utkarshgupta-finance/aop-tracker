@@ -1663,7 +1663,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <h2 style="font-size:15px;font-weight:700;color:var(--navy)">Disputed Invoices</h2>
       <span id="di-count" style="font-size:11.5px;color:var(--txt3)"></span>
-      <button onclick="loadDisputedInvoices()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+      <button onclick="loadDisputedInvoices(true)" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
     </div>
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
       <input type="text" id="di-search" placeholder="Search customer, invoice, description…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderDisputedInvoices()">
@@ -3860,7 +3860,10 @@ function showDisputedInvoicesTab(btn) {
   if (!_diInited) { _diInited = true; loadDisputedInvoices(); }
 }
 
-async function loadDisputedInvoices() {
+async function loadDisputedInvoices(force) {
+  // ↻ Refresh re-reads how each invoice settled, so a dispute whose invoice
+  // has since been classified as a credit-note closure re-labels itself.
+  if (force) resetClosureInfo();
   const statusEl = document.getElementById('di-status');
   const tbody    = document.getElementById('di-tbody');
   if (statusEl) statusEl.textContent = 'Loading…';
@@ -8921,6 +8924,11 @@ async function loadClosureInfo(invoiceIds) {
 }
 const closureBasisOf = id => _closureByInv[String(id)]?.closure_basis || null;
 const isClosedByCn   = id => closureBasisOf(id) === 'closed_by_cn';
+// A closure IS re-read on an explicit Refresh: classify-closures runs on its
+// own schedule behind the app, so a row captured this morning as a payment can
+// be corrected to a credit note later in the same session. Without this the
+// session cache would keep serving the stale reading until a reload.
+function resetClosureInfo() { _closureByInv = {}; }
 
 // Cash received in bank for a month, per invoice — from Zoho customer payments
 // via the bank-collections edge function. CN / TDS / JV closures are excluded
@@ -8974,7 +8982,9 @@ async function cdInit(force) {
     cdFilterAndRender();   // fresh enough — no network, no flicker
     return;
   }
-  if (force) { _cdBank = {}; _cdBankForce = true; }   // a manual refresh re-pulls bank cash from Zoho too
+  // A manual refresh re-pulls bank cash from Zoho, and re-reads how each
+  // invoice settled — the CN classification can have moved since page load.
+  if (force) { _cdBank = {}; _cdBankForce = true; resetClosureInfo(); }
   await loadConfirmedDates();
 }
 
@@ -12283,6 +12293,9 @@ async function loadExpectedCnMap() {
 async function ecnLoad(force) {
   const el = document.getElementById('ecn-content');
   if (el && (force || !_ecnRows.length)) el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:.5rem 0">Loading…</div>';
+  // Re-ask how the invoices settled, so an expectation Zoho has since met by
+  // credit note is picked up by the auto-close below rather than on next load.
+  if (force) resetClosureInfo();
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/expected_credit_notes?select=*&order=created_at.desc`, { headers: cmrrHdr() });
     _ecnRows = r.ok ? await r.json() : [];
