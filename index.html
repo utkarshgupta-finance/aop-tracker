@@ -2798,12 +2798,20 @@ async function stRunFullRefresh() {
   if (!btn || !list) return;
   if (btn.disabled) return;
 
-  // Pipeline: each entry = { label, run: async fn returning { ok, detail } }
+  // Fetch with a hard timeout so a hanging edge function never freezes the UI.
+  const stFetch = (url, opts = {}, timeoutMs = 130000) => {
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), timeoutMs);
+    return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(tid));
+  };
+
+  // Pipeline: each entry = { label, hint, run: async fn(onProgress) → { ok, detail } }
   const STEPS = [
     {
       label: 'Sync India AR',
+      hint: 'streaming from Zoho…',
       run: async (onProgress) => {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-ar`, {
+        const resp = await stFetch(`${SUPABASE_URL}/functions/v1/sync-ar`, {
           method: 'POST', headers: { 'content-type': 'application/json', ...cmrrHdr() },
         });
         if (!resp.ok && !resp.headers.get('content-type')?.includes('event-stream')) {
@@ -2836,8 +2844,10 @@ async function stRunFullRefresh() {
     },
     {
       label: 'Capture closures',
-      run: async () => {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/capture-closures`, {
+      hint: 'contacting Zoho…',
+      run: async (onProgress) => {
+        onProgress('contacting Zoho…');
+        const resp = await stFetch(`${SUPABASE_URL}/functions/v1/capture-closures`, {
           method: 'POST', headers: cmrrHdr(),
         });
         const j = await resp.json().catch(() => ({}));
@@ -2847,8 +2857,10 @@ async function stRunFullRefresh() {
     },
     {
       label: 'Classify closures',
-      run: async () => {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/classify-closures`, {
+      hint: 'asking Zoho per invoice…',
+      run: async (onProgress) => {
+        onProgress('asking Zoho per invoice…');
+        const resp = await stFetch(`${SUPABASE_URL}/functions/v1/classify-closures`, {
           method: 'POST', headers: cmrrHdr(),
         });
         const j = await resp.json().catch(() => ({}));
@@ -2858,10 +2870,17 @@ async function stRunFullRefresh() {
     },
     {
       label: 'Sync advances',
-      run: async () => {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-advances`, {
-          method: 'POST', headers: cmrrHdr(),
-        });
+      hint: 'contacting Zoho (~30 s)…',
+      run: async (onProgress) => {
+        onProgress('contacting Zoho (~30 s)…');
+        let resp;
+        try {
+          resp = await stFetch(`${SUPABASE_URL}/functions/v1/sync-advances`, {
+            method: 'POST', headers: cmrrHdr(),
+          });
+        } catch(e) {
+          return { ok: false, detail: e.name === 'AbortError' ? 'timed out after 130 s' : e.message };
+        }
         const j = await resp.json().catch(() => ({}));
         if (!resp.ok || !j.ok) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
         return { ok: true, detail: j.synced != null ? `${j.synced} advances` : '' };
@@ -2869,11 +2888,18 @@ async function stRunFullRefresh() {
     },
     {
       label: 'Sync contact balances',
-      run: async () => {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, {
-          method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
+      hint: 'contacting Zoho (~60 s)…',
+      run: async (onProgress) => {
+        onProgress('contacting Zoho (~60 s)…');
+        let resp;
+        try {
+          resp = await stFetch(`${SUPABASE_URL}/functions/v1/sync-contact-balances`, {
+            method: 'POST', headers: { ...cmrrHdr(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          }, 180000);
+        } catch(e) {
+          return { ok: false, detail: e.name === 'AbortError' ? 'timed out after 180 s' : e.message };
+        }
         const j = await resp.json().catch(() => ({}));
         if (!resp.ok || j.ok === false) return { ok: false, detail: j.error || 'HTTP ' + resp.status };
         return { ok: true, detail: j.synced != null ? `${j.synced} contacts` : '' };
@@ -2906,10 +2932,11 @@ async function stRunFullRefresh() {
     const timer = row.querySelector('.st-refresh-time');
     icon.textContent = '⏳'; icon.style.color = '#b45309';
     row.style.background = '#fffbeb';
+    if (STEPS[i].hint) { sub.textContent = STEPS[i].hint; sub.style.color = 'var(--txt3)'; }
     const t0 = Date.now();
     let result;
     try {
-      result = await STEPS[i].run(msg => { sub.textContent = msg; });
+      result = await STEPS[i].run(msg => { sub.textContent = msg; sub.style.color = 'var(--txt3)'; });
     } catch(e) {
       result = { ok: false, detail: e.message };
     }
