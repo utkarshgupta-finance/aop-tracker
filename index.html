@@ -10757,11 +10757,15 @@ function _tblSortRows(tbl, colIdx, asc, skipLastRow) {
     const clean = s.replace(/[₹,%]/g, '').replace(/\s*(Cr|Dr|L)\s*/gi, '').replace(/[,\s]/g, '').trim();
     return (clean === '—' || clean === '') ? NaN : parseFloat(clean);
   };
+  const isIsoDate = s => /^\d{4}-\d{2}-\d{2}/.test(s);
   all.sort((a, b) => {
     const acell = a.querySelectorAll('td')[colIdx];
     const bcell = b.querySelectorAll('td')[colIdx];
     const av = acell?.dataset.sort ?? acell?.textContent?.trim() ?? '';
     const bv = bcell?.dataset.sort ?? bcell?.textContent?.trim() ?? '';
+    // ISO dates (YYYY-MM-DD) sort correctly as strings — parseFloat would
+    // truncate "2025-08-15" to 2025, making all dates in a year compare equal.
+    if (isIsoDate(av) && isIsoDate(bv)) return asc ? av.localeCompare(bv) : bv.localeCompare(av);
     const an = toNum(av), bn = toNum(bv);
     if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
     return asc ? av.localeCompare(bv) : bv.localeCompare(av);
