@@ -6702,6 +6702,26 @@ const RC_HTML = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<lin
 initAuth();
 initARCapsuleListeners();
 
+// When Windows trackpad back-swipe (or any browser back/forward) restores
+// this page from the bfcache, JS state is frozen at the moment of departure
+// and onAuthStateChange does not fire again. Re-check the session so the
+// correct screen (login vs dashboard) is always shown.
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;   // normal load — initAuth already handled it
+  if (!SUPABASE_CLIENT) return;
+  SUPABASE_CLIENT.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      // Supabase may have refreshed the token while we were away
+      USER_JWT = session.access_token;
+      document.getElementById('login-screen').style.display = 'none';
+    } else {
+      // Session expired while the page sat in bfcache
+      USER_JWT = null; CURRENT_USER = null; USER_ACCESS = null;
+      showLoginScreen();
+    }
+  });
+});
+
 // ── Customer-level tags ──────────────────────────────────────
 async function loadARCustTags() {
   try {
