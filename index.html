@@ -680,6 +680,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
         <button class="ar-stbtn" id="ar-st-daily"    onclick="toggleARSubTab('daily')">Daily Snapshots</button>
         <button class="ar-stbtn" id="ar-st-summary"  onclick="toggleARSubTab('summary')">AR Summary</button>
         <button class="ar-stbtn" id="ar-st-advances" onclick="toggleARSubTab('advances')">Customer Advances</button>
+        <button class="ar-stbtn" id="ar-st-followup" onclick="toggleARSubTab('followup')">⚠ Overdue Follow-up</button>
+        <button class="ar-stbtn" id="ar-st-breakdown" onclick="toggleARSubTab('breakdown')">AR Status</button>
       </div>
       <div class="ar-view-tog" id="ar-view-tog-wrap">
         <button id="ar-vt-invoice"  class="ar-vtbtn active" onclick="arSetInvView('invoice')">Invoice View</button>
@@ -756,6 +758,79 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
           </tr></thead>
           <tbody id="ar-aging-body"></tbody>
         </table>
+      </div>
+    <!-- Overdue Follow-up pane -->
+    <div id="ar-pane-followup" style="display:none">
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+        <div style="font-size:11.5px;color:var(--txt2)">Open invoices with no active promise-to-pay and no interaction logged in the last <strong>7 days</strong>. Invoices never contacted are also included.</div>
+        <button class="rbtn" onclick="_loadFollowUpData(true)" style="margin-left:auto">↻ Refresh</button>
+      </div>
+      <div id="ar-followup-status" style="font-size:12px;color:var(--txt3);min-height:1.2rem;margin-bottom:.4rem"></div>
+      <div class="twrap"><table style="width:100%;border-collapse:collapse" id="ar-followup-tbl">
+        <thead><tr style="background:#f5f7fb">
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Customer</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Invoice</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Balance</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Due Date</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Last Contact</th>
+          <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Collector</th>
+        </tr></thead>
+        <tbody id="ar-followup-body"></tbody>
+      </table></div>
+    </div>
+    <!-- AR Status Breakdown pane -->
+    <div id="ar-pane-breakdown" style="display:none">
+      <div style="font-size:11.5px;color:var(--txt2);margin-bottom:.75rem">Applies current BU / collector filters. Priority order: Dispute → Expected CN → Tags → No Issue.</div>
+      <div class="twrap" style="max-width:660px">
+        <table style="width:100%;min-width:420px;border-collapse:collapse">
+          <thead><tr style="background:#f5f7fb">
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:left;font-weight:600;border-bottom:1px solid var(--brd2)">Status</th>
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)"># Invoices</th>
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Outstanding Balance</th>
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">% of Total</th>
+            <th style="padding:.45rem .75rem;font-size:11px;text-align:right;font-weight:600;border-bottom:1px solid var(--brd2)">Cumulative %</th>
+          </tr></thead>
+          <tbody id="ar-breakdown-body"></tbody>
+        </table>
+      </div>
+    </div>
+    </div>
+  </div>
+  <!-- ── Quick Add Dispute Modal ──────────────────────────────── -->
+  <div id="qdispute-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)closeQuickDisputeModal()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,.18);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span style="font-size:14px;font-weight:700;color:var(--navy)">Add Dispute</span>
+        <button onclick="closeQuickDisputeModal()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <div>
+          <label class="cc-label">Customer <span class="cc-req">*</span></label>
+          <input type="text" id="qd-customer" class="cust-input" style="width:100%;margin-top:.25rem"
+            placeholder="Start typing customer name…" list="qd-cust-list" oninput="qdCustomerChange()">
+          <datalist id="qd-cust-list"></datalist>
+        </div>
+        <div>
+          <label class="cc-label">Invoice <span class="cc-req">*</span></label>
+          <select id="qd-invoice" class="nret-sel" style="width:100%;margin-top:.25rem">
+            <option value="">— select customer first —</option>
+          </select>
+        </div>
+        <div>
+          <label class="cc-label">Dispute Type <span class="cc-req">*</span></label>
+          <div id="qd-dispute-btns" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.35rem"></div>
+          <input type="hidden" id="qd-dispute-type">
+        </div>
+        <div>
+          <label class="cc-label">Description</label>
+          <textarea id="qd-desc" class="cust-input" rows="2" style="width:100%;margin-top:.25rem;resize:vertical" placeholder="Optional — describe the dispute"></textarea>
+        </div>
+        <div>
+          <label class="cc-label">Disputed Amount (₹)</label>
+          <input type="number" id="qd-amount" class="cust-input" style="width:100%;margin-top:.25rem" placeholder="Leave blank to use full invoice balance" min="0" step="0.01">
+        </div>
+        <div id="qd-err" style="font-size:11.5px;color:var(--red);min-height:1rem"></div>
+        <button class="modal-csv" id="qd-save-btn" onclick="saveQuickDispute()" style="align-self:flex-end;padding:.4rem 1.1rem">Save Dispute</button>
       </div>
     </div>
   </div>
@@ -1683,7 +1758,8 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
       <h2 style="font-size:15px;font-weight:700;color:var(--navy)">Disputed Invoices</h2>
       <span id="di-count" style="font-size:11.5px;color:var(--txt3)"></span>
-      <button onclick="loadDisputedInvoices(true)" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+      <button onclick="openQuickDisputeModal()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:none;border-radius:5px;background:var(--navy);color:#fff;cursor:pointer;font-weight:600">+ Add Dispute</button>
+      <button onclick="loadDisputedInvoices(true)" style="font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
     </div>
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
       <input type="text" id="di-search" placeholder="Search customer, invoice, description…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderDisputedInvoices()">
@@ -4761,17 +4837,21 @@ let _arActivePanes = new Set(['invoices']);
 function toggleARSubTab(tab) {
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily')    { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
-  if (tab === 'advances') { loadAdvances(); }
+  if (tab === 'daily')     { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
+  if (tab === 'advances')  { loadAdvances(); }
+  if (tab === 'followup')  { _loadFollowUpData(false); }
+  if (tab === 'breakdown') { renderARBreakdown(); }
 }
 function showARSubTab(tab) { // legacy compat
   _arActivePanes = new Set([tab]);
   _applyARSubTabs();
-  if (tab === 'daily')    { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
-  if (tab === 'advances') { loadAdvances(); }
+  if (tab === 'daily')     { _loadARDisputeMap(); loadAgingBrackets(); loadARSnapshots(); }
+  if (tab === 'advances')  { loadAdvances(); }
+  if (tab === 'followup')  { _loadFollowUpData(false); }
+  if (tab === 'breakdown') { renderARBreakdown(); }
 }
 function _applyARSubTabs() {
-  for (const id of ['invoices','aging','daily','summary','advances']) {
+  for (const id of ['invoices','aging','daily','summary','advances','followup','breakdown']) {
     document.getElementById(`ar-pane-${id}`)?.style && (document.getElementById(`ar-pane-${id}`).style.display = _arActivePanes.has(id) ? '' : 'none');
     document.getElementById(`ar-st-${id}`)?.classList.toggle('active', _arActivePanes.has(id));
   }
@@ -5783,6 +5863,319 @@ function renderARAgingTable(rows) {
   document.getElementById('ar-aging-body').innerHTML = trs;
   const agingTbl = document.getElementById('ar-aging-body')?.closest('table');
   if (agingTbl) makeSortable(agingTbl, { skipLastRow: true });
+}
+
+/* ─── FEATURE 1: QUICK ADD DISPUTE ──────────────────────────── */
+
+let _qdSelType = '';
+
+function openQuickDisputeModal() {
+  // Ensure dispute types are loaded
+  if (!_disputeTypes.length) loadDisputeTypes();
+  // Populate customer datalist from customer master
+  const dl = document.getElementById('qd-cust-list');
+  if (dl) {
+    const names = (_cmData || []).map(c => c.customer_name).filter(Boolean).sort();
+    dl.innerHTML = [...new Set(names)].map(n => `<option value="${escHtml(n)}">`).join('');
+  }
+  // Render dispute type buttons
+  _qdSelType = '';
+  _qdRenderTypeButtons();
+  // Reset fields
+  ['qd-customer','qd-desc','qd-amount'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('qd-invoice').innerHTML = '<option value="">— select customer first —</option>';
+  document.getElementById('qd-err').textContent = '';
+  const ov = document.getElementById('qdispute-modal-ov');
+  ov.style.display = 'flex';
+  document.getElementById('qd-customer').focus();
+}
+
+function closeQuickDisputeModal() {
+  document.getElementById('qdispute-modal-ov').style.display = 'none';
+}
+
+function _qdRenderTypeButtons() {
+  const wrap = document.getElementById('qd-dispute-btns');
+  if (!wrap) return;
+  const active = (_disputeTypes || []).filter(d => d.is_active !== false);
+  wrap.innerHTML = active.map(d =>
+    `<button type="button" class="cc-opt-btn${_qdSelType === d.value ? ' selected' : ''}"
+      onclick="qdSetType('${escHtml(d.value)}')">${escHtml(d.label)}</button>`
+  ).join('');
+}
+
+function qdSetType(val) {
+  _qdSelType = val;
+  _qdRenderTypeButtons();
+}
+
+async function qdCustomerChange() {
+  const custName = (document.getElementById('qd-customer')?.value || '').trim();
+  const sel = document.getElementById('qd-invoice');
+  if (!custName) { sel.innerHTML = '<option value="">— select customer first —</option>'; return; }
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    // Find open invoices for this customer from loaded AR data
+    const rows = (_arAllRows || []).filter(r =>
+      (r.customer_name || '').toLowerCase() === custName.toLowerCase()
+    );
+    if (rows.length) {
+      sel.innerHTML = '<option value="">— pick invoice —</option>'
+        + rows.map(r => `<option value="${escHtml(r.invoice_id)}" data-number="${escHtml(r.invoice_number||r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${(arInr(r)/1e7).toFixed(2)} Cr</option>`).join('');
+    } else {
+      // Fallback: fetch from DB
+      const resp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=eq.${encodeURIComponent(custName)}&status=eq.open&select=invoice_id,invoice_number,balance_inr,balance,currency_code,exchange_rate&order=due_date.asc&limit=100`,
+        { headers: cmrrHdr() }
+      );
+      const invs = resp.ok ? await resp.json() : [];
+      sel.innerHTML = '<option value="">— pick invoice —</option>'
+        + invs.map(r => `<option value="${escHtml(r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${((r.balance_inr||r.balance||0)/1e7).toFixed(2)} Cr</option>`).join('');
+      if (!invs.length) sel.innerHTML = '<option value="">No open invoices found</option>';
+    }
+  } catch(e) { sel.innerHTML = '<option value="">Error loading invoices</option>'; }
+}
+
+async function saveQuickDispute() {
+  const custName  = (document.getElementById('qd-customer')?.value || '').trim();
+  const invSel    = document.getElementById('qd-invoice');
+  const invoiceId = invSel?.value || '';
+  const invNumber = invSel?.selectedOptions[0]?.dataset.number || invSel?.selectedOptions[0]?.text?.split(' —')[0] || invoiceId;
+  const dispType  = _qdSelType;
+  const desc      = (document.getElementById('qd-desc')?.value || '').trim();
+  const amtRaw    = document.getElementById('qd-amount')?.value;
+  const amount    = amtRaw && !isNaN(parseFloat(amtRaw)) ? parseFloat(amtRaw) : null;
+  const errEl     = document.getElementById('qd-err');
+  const btn       = document.getElementById('qd-save-btn');
+
+  errEl.textContent = '';
+  if (!custName)  { errEl.textContent = 'Customer is required.'; return; }
+  if (!invoiceId) { errEl.textContent = 'Select an invoice.'; return; }
+  if (!dispType)  { errEl.textContent = 'Select a dispute type.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/invoice_disputes`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        invoice_id:             invoiceId,
+        invoice_number:         invNumber,
+        customer_name:          custName,
+        opening_interaction_id: null,
+        dispute_type:           dispType,
+        dispute_description:    desc || null,
+        disputed_amount:        amount,
+        status:                 'open',
+        opened_at:              new Date().toISOString(),
+        open_count:             1,
+      }),
+    });
+    if (!r.ok) { const t = await r.text(); errEl.textContent = 'Error: ' + t.slice(0, 120); return; }
+    closeQuickDisputeModal();
+    // Refresh disputes if the pane is active
+    if (_diInited) loadDisputedInvoices(true);
+    // Refresh AR dispute map
+    _loadARDisputeMap().then(() => renderARInvoiceList(_arLastRows));
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Dispute';
+  }
+}
+
+/* ─── FEATURE 2: OVERDUE FOLLOW-UP TAB ──────────────────────── */
+
+let _arInvLastContact = {}; // invoice_id → ISO datetime of most recent linked interaction
+let _arInvActivePtp   = new Set(); // invoice_ids that have a future PTP (new_date >= today)
+let _arFollowUpLoaded = false;
+
+async function _loadFollowUpData(force = false) {
+  if (_arFollowUpLoaded && !force) { renderOverdueFollowUp(); return; }
+  const statusEl = document.getElementById('ar-followup-status');
+  if (statusEl) statusEl.textContent = 'Loading follow-up data…';
+
+  const invIds = (_arAllRows || []).map(r => r.invoice_id).filter(Boolean);
+  _arInvLastContact = {};
+  _arInvActivePtp   = new Set();
+
+  if (!invIds.length) { _arFollowUpLoaded = true; renderOverdueFollowUp(); return; }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Process in chunks to stay within URL length limits
+  const chunks = [];
+  for (let i = 0; i < invIds.length; i += 150) chunks.push(invIds.slice(i, i + 150));
+
+  try {
+    for (const chunk of chunks) {
+      const enc = chunk.map(encodeURIComponent).join(',');
+
+      // Step A: get interaction_ids linked to these invoices
+      const iiResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/interaction_invoices?invoice_id=in.(${enc})&select=invoice_id,interaction_id`,
+        { headers: cmrrHdr() }
+      );
+      if (iiResp.ok) {
+        const iiRows = await iiResp.json();
+        // Step B: get created_at for those interactions
+        const intIds = [...new Set(iiRows.map(r => r.interaction_id))];
+        if (intIds.length) {
+          for (let j = 0; j < intIds.length; j += 200) {
+            const ic = intIds.slice(j, j + 200);
+            const ir = await fetch(
+              `${SUPABASE_URL}/rest/v1/interactions?id=in.(${ic.map(encodeURIComponent).join(',')})&select=id,created_at`,
+              { headers: cmrrHdr() }
+            );
+            if (ir.ok) {
+              const intMap = Object.fromEntries((await ir.json()).map(r => [r.id, r.created_at]));
+              for (const ii of iiRows) {
+                const at = intMap[ii.interaction_id];
+                if (!at) continue;
+                if (!_arInvLastContact[ii.invoice_id] || at > _arInvLastContact[ii.invoice_id])
+                  _arInvLastContact[ii.invoice_id] = at;
+              }
+            }
+          }
+        }
+      }
+
+      // Step C: active PTPs (new_date >= today)
+      const ptpR = await fetch(
+        `${SUPABASE_URL}/rest/v1/ptp_events?invoice_id=in.(${enc})&new_date=gte.${todayStr}&new_date=not.is.null&select=invoice_id`,
+        { headers: cmrrHdr() }
+      );
+      if (ptpR.ok) for (const r of await ptpR.json()) _arInvActivePtp.add(r.invoice_id);
+    }
+  } catch(e) { console.warn('_loadFollowUpData:', e); }
+
+  _arFollowUpLoaded = true;
+  if (statusEl) statusEl.textContent = '';
+  renderOverdueFollowUp();
+}
+
+function renderOverdueFollowUp() {
+  const tbody  = document.getElementById('ar-followup-body');
+  if (!tbody) return;
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString(); // 7 days ago
+  const cr     = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const fmtD   = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '—';
+  const daysSince = iso => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null;
+
+  const overdue = (_arAllRows || []).filter(r => {
+    if (_arInvActivePtp.has(r.invoice_id)) return false; // has active PTP → skip
+    const last = _arInvLastContact[r.invoice_id];
+    return !last || last < cutoff; // never contacted OR last contact > 7 days ago
+  });
+
+  if (!overdue.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--txt3);font-size:12px">
+      No overdue follow-ups — all open invoices have been contacted within 7 days or have an active PTP.</td></tr>`;
+    return;
+  }
+
+  // Sort: never contacted first, then by oldest contact
+  overdue.sort((a, b) => {
+    const la = _arInvLastContact[a.invoice_id] || '';
+    const lb = _arInvLastContact[b.invoice_id] || '';
+    if (!la && lb) return -1;
+    if (la && !lb) return  1;
+    return la.localeCompare(lb);
+  });
+
+  const tdS = 'padding:.38rem .75rem;border-bottom:1px solid var(--line);font-size:12px';
+  tbody.innerHTML = overdue.map(r => {
+    const last    = _arInvLastContact[r.invoice_id];
+    const days    = daysSince(last);
+    const lastTxt = last ? `${fmtD(last)} (${days}d ago)` : 'Never';
+    const lastClr = !last ? '#dc2626' : days >= 14 ? '#b45309' : 'var(--txt2)';
+    return `<tr>
+      <td style="${tdS}">${escHtml(r.customer_name || '')}</td>
+      <td style="${tdS}"><a href="${escHtml(r.invoice_url||'#')}" target="_blank" style="color:var(--navy2);text-decoration:none">${escHtml(r.invoice_number||r.invoice_id)}</a></td>
+      <td style="${tdS};text-align:right;font-family:var(--mono)">${cr(arInr(r))}</td>
+      <td style="${tdS};text-align:right;color:var(--txt2)">${fmtD(r.due_date)}</td>
+      <td style="${tdS};text-align:right;color:${lastClr};font-weight:${!last?'700':'400'}">${escHtml(lastTxt)}</td>
+      <td style="${tdS};color:var(--txt3)">${escHtml(arGetCollector(r.customer_name)||'—')}</td>
+    </tr>`;
+  }).join('');
+
+  // Summary line
+  const totalBal = overdue.reduce((s, r) => s + arInr(r), 0);
+  document.getElementById('ar-followup-status').textContent =
+    `${overdue.length} invoice${overdue.length !== 1 ? 's' : ''} — ${cr(totalBal)} outstanding`;
+}
+
+/* ─── FEATURE 3: AR STATUS BREAKDOWN ────────────────────────── */
+
+function renderARBreakdown() {
+  const tbody = document.getElementById('ar-breakdown-body');
+  if (!tbody) return;
+
+  const rows  = _arLastRows || [];
+  const total = rows.reduce((s, r) => s + arInr(r), 0);
+  const cr    = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const pct   = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
+
+  // Build open ECN invoice_id set for fast lookup
+  const ecnInvIds = new Set((_ecnRows || [])
+    .filter(e => e.status === 'open' && e.invoice_id)
+    .map(e => String(e.invoice_id)));
+
+  // Collect all unique tag names across filtered rows
+  const allTagNames = new Set();
+  rows.forEach(r => {
+    const custTags  = _arCustTags[r.customer_name] || [];
+    const invKey    = (r.invoice_number || '') + '||' + (r.entity || '');
+    const invTags   = _arInvTags[invKey] || [];
+    [...custTags, ...invTags].forEach(t => allTagNames.add(t));
+  });
+  const tagNames = [...allTagNames].sort();
+
+  // Classify each invoice into exactly one bucket (priority: Dispute > ECN > first tag > No Issue)
+  const buckets = {
+    dispute:  { label: 'Dispute',      color: '#b91c1c', count: 0, balance: 0 },
+    ecn:      { label: 'Expected CN',  color: '#7c3aed', count: 0, balance: 0 },
+    no_issue: { label: 'No Issue',     color: '#15803d', count: 0, balance: 0 },
+  };
+  tagNames.forEach(t => { buckets[`tag_${t}`] = { label: t, color: '#b45309', count: 0, balance: 0 }; });
+
+  rows.forEach(r => {
+    const bal = arInr(r);
+    const id  = String(r.invoice_id || '');
+    if (_arInvDisputeMap[id]) { buckets.dispute.count++; buckets.dispute.balance += bal; return; }
+    if (ecnInvIds.has(id))    { buckets.ecn.count++;     buckets.ecn.balance    += bal; return; }
+    const custTags = _arCustTags[r.customer_name] || [];
+    const invKey   = (r.invoice_number || '') + '||' + (r.entity || '');
+    const invTags  = _arInvTags[invKey] || [];
+    const firstTag = [...custTags, ...invTags].sort().find(Boolean);
+    if (firstTag) { buckets[`tag_${firstTag}`].count++; buckets[`tag_${firstTag}`].balance += bal; return; }
+    buckets.no_issue.count++; buckets.no_issue.balance += bal;
+  });
+
+  // Render in order: Dispute, ECN, tags (alpha), No Issue — skip empty rows
+  const order = ['dispute', 'ecn', ...tagNames.map(t => `tag_${t}`), 'no_issue'];
+  let cumBal = 0;
+  const thS = 'padding:.45rem .75rem;font-size:12.5px;border-bottom:1px solid var(--line)';
+  const trs = order.filter(k => buckets[k].count > 0).map(k => {
+    const b = buckets[k];
+    cumBal += b.balance;
+    return `<tr>
+      <td style="${thS}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin-right:.4rem;vertical-align:middle"></span>${escHtml(b.label)}</td>
+      <td style="${thS};text-align:right;font-family:var(--mono)">${b.count}</td>
+      <td style="${thS};text-align:right;font-family:var(--mono)">${cr(b.balance)}</td>
+      <td style="${thS};text-align:right;color:var(--txt2)">${pct(b.balance)}</td>
+      <td style="${thS};text-align:right;color:var(--txt2)">${pct(cumBal)}</td>
+    </tr>`;
+  });
+  trs.push(`<tr style="font-weight:700;border-top:1.5px solid var(--line-strong)">
+    <td style="${thS}">Total</td>
+    <td style="${thS};text-align:right;font-family:var(--mono)">${rows.length}</td>
+    <td style="${thS};text-align:right;font-family:var(--mono)">${cr(total)}</td>
+    <td style="${thS};text-align:right">100%</td>
+    <td style="${thS};text-align:right">100%</td>
+  </tr>`);
+
+  tbody.innerHTML = trs.join('');
 }
 
 /* ─── AGING BUCKET DRILL-DOWN ────────────────────────────────────
