@@ -1793,6 +1793,131 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div>
 
+  <!-- ── BU Attention Pane ─────────────────────────────────────── -->
+  <div id="bu-attention" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <h2 style="font-size:15px;font-weight:700;color:var(--navy)">🚩 BU Attention</h2>
+      <span id="bua-count" style="font-size:11.5px;color:var(--txt3)"></span>
+      <button onclick="openBUANoteModal()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:none;border-radius:5px;background:var(--navy);color:#fff;cursor:pointer;font-weight:600">+ Add Note</button>
+      <button onclick="loadBUAttentionNotes(true)" style="font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+    </div>
+    <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
+      <input type="text" id="bua-search" placeholder="Search customer, invoice, note…" class="cust-input" style="flex:1;min-width:200px;font-size:12px;padding:.3rem .65rem" oninput="renderBUAttentionNotes()">
+      <select id="bua-filter-bu" class="nret-sel" style="font-size:12px;min-width:120px" onchange="renderBUAttentionNotes()"><option value="">All BUs</option></select>
+      <select id="bua-filter-collector" class="nret-sel" style="font-size:12px;min-width:140px" onchange="renderBUAttentionNotes()"><option value="">All Collectors</option></select>
+      <select id="bua-filter-status" class="nret-sel" style="font-size:12px;min-width:110px" onchange="renderBUAttentionNotes()">
+        <option value="open">Open only</option>
+        <option value="closed">Closed only</option>
+        <option value="">All</option>
+      </select>
+    </div>
+    <div id="bua-status" style="font-size:12px;color:var(--txt3);min-height:1rem;margin-bottom:.4rem"></div>
+    <div style="overflow-x:auto">
+      <table class="ar-tbl" style="width:100%">
+        <thead><tr>
+          <th style="text-align:left;min-width:120px;max-width:160px">Customer</th>
+          <th style="text-align:left">BU</th>
+          <th style="text-align:left">Collector</th>
+          <th style="text-align:left">Invoice(s)</th>
+          <th style="text-align:left;min-width:200px">Note</th>
+          <th style="text-align:center">💬</th>
+          <th style="text-align:center">Dispute</th>
+          <th style="text-align:center">Status</th>
+          <th style="text-align:left;white-space:nowrap">Raised by</th>
+          <th style="text-align:left;white-space:nowrap">Opened</th>
+          <th style="text-align:left;white-space:nowrap">Closed</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="bua-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BU Attention: Add Note modal -->
+  <div id="bua-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)closeBUANoteModal()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,.18);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span style="font-size:14px;font-weight:700;color:var(--navy)">🚩 Add BU Note</span>
+        <button onclick="closeBUANoteModal()" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <div>
+          <label class="cc-label">Customer <span class="cc-req">*</span></label>
+          <input type="text" id="bua-customer" class="cust-input" style="width:100%;margin-top:.25rem"
+            placeholder="Start typing customer name…" list="bua-cust-list" oninput="buaCustomerChange()">
+          <datalist id="bua-cust-list"></datalist>
+        </div>
+        <div>
+          <label class="cc-label">Invoice(s) <span class="cc-req">*</span> <span style="font-size:11px;color:var(--txt3)">(select one or more)</span></label>
+          <select id="bua-invoices" class="nret-sel" style="width:100%;margin-top:.25rem;min-height:80px" multiple>
+            <option value="" disabled>— select customer first —</option>
+          </select>
+        </div>
+        <div>
+          <label class="cc-label">Note <span class="cc-req">*</span></label>
+          <textarea id="bua-note" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;resize:vertical" placeholder="Describe the issue or action required…"></textarea>
+        </div>
+        <div id="bua-err" style="font-size:11.5px;color:var(--red);min-height:1rem"></div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button onclick="closeBUANoteModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+          <button id="bua-save-btn" onclick="saveBUANote()" style="padding:.35rem .9rem;font-size:12.5px" class="modal-csv">Save Note</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BU Attention: Close/Reopen modal -->
+  <div id="bua-close-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeBUACloseModal()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span id="bua-close-title" style="font-size:14px;font-weight:600;color:var(--navy)">Close Note</span>
+        <button onclick="closeBUACloseModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div id="bua-close-info" style="font-size:12.5px;color:var(--txt2);margin-bottom:.85rem;padding:.6rem .75rem;background:#f9fafb;border-radius:6px;border:1px solid var(--brd)"></div>
+      <div>
+        <label class="cc-label" id="bua-close-note-label">Closing note (optional)</label>
+        <textarea id="bua-close-note" class="cust-input" rows="2" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;resize:vertical" placeholder="Resolution or reason…"></textarea>
+      </div>
+      <div id="bua-close-err" style="font-size:11.5px;color:var(--red);margin-top:.5rem;min-height:1rem"></div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button onclick="closeBUACloseModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+        <button id="bua-close-confirm-btn" style="padding:.35rem .9rem;font-size:12.5px" class="modal-csv">Close Note</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BU Attention: Add Reply modal -->
+  <div id="bua-reply-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeBUAReplyModal()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span style="font-size:14px;font-weight:600;color:var(--navy)">Add Reply</span>
+        <button onclick="closeBUAReplyModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div id="bua-reply-context" style="font-size:12px;color:var(--txt2);margin-bottom:.75rem;padding:.5rem .65rem;background:#f9fafb;border-radius:6px;border:1px solid var(--brd)"></div>
+      <div id="bua-reply-thread" style="max-height:180px;overflow-y:auto;margin-bottom:.85rem;display:flex;flex-direction:column;gap:.4rem"></div>
+      <div>
+        <label class="cc-label">Reply <span class="cc-req">*</span></label>
+        <textarea id="bua-reply-text" class="cust-input" rows="3" style="width:100%;font-size:12.5px;padding:.35rem .6rem;margin-top:.25rem;resize:vertical" placeholder="Add your note or update…"></textarea>
+      </div>
+      <div id="bua-reply-err" style="font-size:11.5px;color:var(--red);margin-top:.5rem;min-height:1rem"></div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button onclick="closeBUAReplyModal()" style="padding:.35rem .9rem;font-size:12.5px;border:1px solid var(--brd2);border-radius:6px;background:#fff;cursor:pointer">Cancel</button>
+        <button id="bua-reply-save-btn" onclick="saveBUAReply()" style="padding:.35rem .9rem;font-size:12.5px" class="modal-csv">Post Reply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BU Attention: Dispute detail popup -->
+  <div id="bua-dispute-popup-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3100;align-items:center;justify-content:center" onclick="if(event.target===this)closeBUADisputePopup()">
+    <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:440px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <span style="font-size:14px;font-weight:600;color:var(--navy)">Dispute Details</span>
+        <button onclick="closeBUADisputePopup()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--txt3);line-height:1">×</button>
+      </div>
+      <div id="bua-dispute-popup-body"></div>
+    </div>
+  </div>
+
   <!-- Close / Reopen Dispute modal -->
   <div id="di-close-modal-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeDiCloseModal()">
     <div style="background:#fff;border-radius:14px;padding:1.5rem;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
@@ -2361,6 +2486,8 @@ const ALL_TABS_CFG = [
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'disputed-invoices',   label: 'Disputed Invoices',   abbr: 'DI',  fn: 'showDisputedInvoicesTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
+  { id: 'bu-attention',        label: '🚩 BU Attention',      abbr: 'BA',  fn: 'showBUAttentionTab(this)',
+    roles: ['admin-edit','admin-view','admin','collector','bu'] },
   { id: 'contacts',            label: 'Contacts',            abbr: 'CT',  fn: 'showContactsTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'confirmed-dates',     label: 'Confirmed Dates',     abbr: 'CD',  fn: 'showConfirmedDatesTab(this)',
@@ -2613,7 +2740,7 @@ function renderNav() {
   // Roles capped to a fixed tab set, whatever else is ticked for them. A BU
   // user gets Open AR and nothing else — not Rate Calculator, not Settings.
   // (Tabs with no `roles` of their own are otherwise open to every role.)
-  const HARD_CAPPED_TABS = { bu: ['ar'] };
+  const HARD_CAPPED_TABS = { bu: ['ar', 'bu-attention'] };
   const hardCap = HARD_CAPPED_TABS[role] || null;
   const roleCan = t => hardCap
     ? hardCap.includes(t.id)
@@ -2660,6 +2787,7 @@ function renderNav() {
     if (activeId === 'customer-overview') coInit();
     if (activeId === 'expected-cn') ecnInit();
     if (activeId === 'disputed-invoices' && !_diInited) { _diInited = true; loadDisputedInvoices(); }
+    if (activeId === 'bu-attention'      && !_buaInited) { _buaInited = true; loadBUAttentionNotes(); }
     if (activeId === 'settings') loadSettingsPane();
   }
 }
@@ -4131,6 +4259,475 @@ let _diInited  = false;
 function showDisputedInvoicesTab(btn) {
   showTab('disputed-invoices', btn);
   if (!_diInited) { _diInited = true; loadDisputedInvoices(); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BU ATTENTION TAB
+   ═══════════════════════════════════════════════════════════════ */
+
+let _buaInited = false;
+let _buaRows   = []; // [{note, invoices:[], replies:[]}]
+let _buaInvDisputeMap = {}; // invoice_id → dispute row (open only)
+let _buaInvCountMap   = {}; // invoice_id → interaction count
+let _buaCloseId = null;
+let _buaCloseIsOpen = true;
+let _buaReplyId = null;
+
+function showBUAttentionTab(btn) {
+  showTab('bu-attention', btn);
+  if (!_buaInited) { _buaInited = true; loadBUAttentionNotes(); }
+}
+
+async function loadBUAttentionNotes(force) {
+  if (force) _buaInited = true;
+  const statusEl = document.getElementById('bua-status');
+  const tbody    = document.getElementById('bua-tbody');
+  if (statusEl) statusEl.textContent = 'Loading…';
+  if (tbody)    tbody.innerHTML = '';
+  try {
+    if (!_cmData.length) await loadArCustMaster();
+    // Load notes
+    const nr = await fetch(`${SUPABASE_URL}/rest/v1/bu_attention_notes?order=created_at.desc&select=*`, { headers: cmrrHdr() });
+    if (!nr.ok) throw new Error('HTTP ' + nr.status);
+    const notes = await nr.json();
+
+    // Load linked invoices for all notes
+    const noteIds = notes.map(n => n.id);
+    let invRows = [];
+    if (noteIds.length) {
+      const ir = await fetch(
+        `${SUPABASE_URL}/rest/v1/bu_attention_note_invoices?note_id=in.(${noteIds.map(encodeURIComponent).join(',')})&select=note_id,invoice_id,invoice_number`,
+        { headers: cmrrHdr() }
+      );
+      if (ir.ok) invRows = await ir.json();
+    }
+
+    // Load replies for all notes
+    let replyRows = [];
+    if (noteIds.length) {
+      const rr = await fetch(
+        `${SUPABASE_URL}/rest/v1/bu_attention_replies?note_id=in.(${noteIds.map(encodeURIComponent).join(',')})&order=created_at.asc&select=*`,
+        { headers: cmrrHdr() }
+      );
+      if (rr.ok) replyRows = await rr.json();
+    }
+
+    // Build lookup maps
+    const invByNote    = {};
+    const repliesByNote = {};
+    for (const iv of invRows) (invByNote[iv.note_id] = invByNote[iv.note_id] || []).push(iv);
+    for (const rv of replyRows) (repliesByNote[rv.note_id] = repliesByNote[rv.note_id] || []).push(rv);
+
+    _buaRows = notes.map(n => ({
+      ...n,
+      invoices: invByNote[n.id] || [],
+      replies:  repliesByNote[n.id] || [],
+    }));
+
+    // Fetch open disputes for linked invoice_ids
+    const allInvIds = [...new Set(invRows.map(r => r.invoice_id).filter(Boolean))];
+    _buaInvDisputeMap = {};
+    _buaInvCountMap   = {};
+    if (allInvIds.length) {
+      const dr = await fetch(
+        `${SUPABASE_URL}/rest/v1/invoice_disputes?status=eq.open&invoice_id=in.(${allInvIds.map(encodeURIComponent).join(',')})&select=invoice_id,dispute_type,dispute_description,status,opened_at`,
+        { headers: cmrrHdr() }
+      );
+      if (dr.ok) for (const d of await dr.json()) _buaInvDisputeMap[d.invoice_id] = d;
+
+      // Fetch interaction counts per invoice
+      const chunks = [];
+      for (let i = 0; i < allInvIds.length; i += 150) chunks.push(allInvIds.slice(i, i + 150));
+      for (const chunk of chunks) {
+        const cr = await fetch(
+          `${SUPABASE_URL}/rest/v1/interaction_invoices?invoice_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=invoice_id`,
+          { headers: cmrrHdr() }
+        );
+        if (cr.ok) for (const ci of await cr.json()) _buaInvCountMap[ci.invoice_id] = (_buaInvCountMap[ci.invoice_id] || 0) + 1;
+      }
+    }
+
+    if (statusEl) statusEl.textContent = '';
+    _populateBUAFilters();
+    renderBUAttentionNotes();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+function _populateBUAFilters() {
+  const buSel = document.getElementById('bua-filter-bu');
+  if (buSel) {
+    const bus = [...new Set(_buaRows.map(r => arGetBu(r.customer_name)).filter(Boolean))].sort();
+    buSel.innerHTML = '<option value="">All BUs</option>' + bus.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+  }
+  const collSel = document.getElementById('bua-filter-collector');
+  if (collSel) {
+    const cols = [...new Set(_buaRows.map(r => arGetCollector(r.customer_name)).filter(Boolean))].sort();
+    collSel.innerHTML = '<option value="">All Collectors</option>' + cols.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  }
+}
+
+function renderBUAttentionNotes() {
+  const tbody    = document.getElementById('bua-tbody');
+  const statusEl = document.getElementById('bua-status');
+  if (!tbody) return;
+
+  const q       = (document.getElementById('bua-search')?.value || '').toLowerCase();
+  const buF     = document.getElementById('bua-filter-bu')?.value || '';
+  const collF   = document.getElementById('bua-filter-collector')?.value || '';
+  const statusF = document.getElementById('bua-filter-status')?.value;
+
+  const role = USER_ACCESS?.role || 'admin-edit';
+  const canClose = (role === 'collector' || role === 'admin-edit' || role === 'admin');
+
+  const filtered = _buaRows.filter(r => {
+    if (statusF !== undefined && statusF !== '' && r.status !== statusF) return false;
+    if (buF   && arGetBu(r.customer_name) !== buF) return false;
+    if (collF && arGetCollector(r.customer_name) !== collF) return false;
+    if (q) {
+      const invNums = r.invoices.map(i => i.invoice_number || i.invoice_id).join(' ');
+      const hay = [r.customer_name, r.note, invNums, arGetBu(r.customer_name), arGetCollector(r.customer_name)].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const openCount   = filtered.filter(r => r.status !== 'closed').length;
+  const closedCount = filtered.filter(r => r.status === 'closed').length;
+  document.getElementById('bua-count').textContent =
+    `${filtered.length} note${filtered.length !== 1 ? 's' : ''} · ${openCount} open · ${closedCount} closed`;
+  if (statusEl) statusEl.textContent = '';
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="12" style="color:var(--txt3);padding:.75rem;font-size:12px;text-align:center">No notes found.</td></tr>`;
+    return;
+  }
+
+  const tdS  = 'padding:.38rem .65rem;border-bottom:1px solid var(--line);vertical-align:top';
+  const pill = (bg, fg, label) =>
+    `<span style="font-size:10px;font-weight:600;background:${bg};color:${fg};padding:.15rem .5rem;border-radius:20px;white-space:nowrap">${escHtml(label)}</span>`;
+
+  tbody.innerHTML = filtered.map(r => {
+    const bu        = arGetBu(r.customer_name);
+    const collector = arGetCollector(r.customer_name);
+    const buBadge   = buCap(bu);
+    const isOpen    = r.status !== 'closed';
+
+    // Invoice(s) cell — list all linked invoices
+    const invCell = r.invoices.length
+      ? r.invoices.map(iv => `<span style="font-family:monospace;font-size:11.5px">${escHtml(iv.invoice_number || iv.invoice_id)}</span>`).join('<br>')
+      : '<span style="color:var(--txt3)">—</span>';
+
+    // Interaction count button (cloud icon)
+    const totalInt = r.invoices.reduce((s, iv) => s + (_buaInvCountMap[iv.invoice_id] || 0), 0);
+    const intBtn = r.invoices.length
+      ? `<button onclick="event.stopPropagation();buaShowInteractions(${JSON.stringify(r.invoices.map(i=>i.invoice_id))},${JSON.stringify(r.invoices.map(i=>i.invoice_number||i.invoice_id))})"
+           title="View interactions" style="background:none;border:1px solid #bfdbfe;border-radius:4px;cursor:pointer;padding:.15rem .45rem;color:#2563eb;font-size:11.5px;white-space:nowrap">
+           💬 ${totalInt}</button>`
+      : '<span style="color:var(--txt3)">—</span>';
+
+    // Dispute column
+    const hasDispute = r.invoices.some(iv => _buaInvDisputeMap[iv.invoice_id]);
+    const disputeCell = hasDispute
+      ? `<button onclick="event.stopPropagation();buaShowDisputePopup(${JSON.stringify(r.invoices.map(i=>i.invoice_id))})"
+           style="font-size:11px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;padding:.15rem .5rem;font-weight:600">Yes ↗</button>`
+      : '<span style="color:var(--txt3)">—</span>';
+
+    // Status pill
+    const statusPill = isOpen
+      ? pill('#fee2e2', '#991b1b', 'Open')
+      : pill('#d1fae5', '#065f46', 'Closed');
+
+    // Reply badge
+    const replyBadge = r.replies.length
+      ? `<span style="font-size:10px;background:#ede9fe;color:#6d28d9;padding:.1rem .4rem;border-radius:10px;margin-left:.3rem">${r.replies.length} repl${r.replies.length === 1 ? 'y' : 'ies'}</span>`
+      : '';
+
+    // Dates
+    const openedDt = new Date(r.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    const closedDt = r.closed_at
+      ? new Date(r.closed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+      : '<span style="color:var(--txt3)">—</span>';
+
+    // Action buttons
+    let actionBtns = `<div style="display:flex;gap:.3rem;justify-content:flex-end;align-items:center;flex-wrap:wrap">`;
+    actionBtns += `<button data-bua-id="${escHtml(r.id)}" onclick="openBUAReplyModal(this.dataset.buaId)"
+        style="font-size:11px;padding:.2rem .55rem;background:#fff;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;color:#7c3aed">
+        💬 Reply${replyBadge}</button>`;
+    if (canClose) {
+      actionBtns += isOpen
+        ? `<button data-bua-id="${escHtml(r.id)}" onclick="openBUACloseModal(this.dataset.buaId,true)"
+            style="font-size:11px;padding:.2rem .55rem;background:#fff;border:1px solid var(--brd2);border-radius:4px;cursor:pointer;color:var(--txt2)">Close</button>`
+        : `<button data-bua-id="${escHtml(r.id)}" onclick="openBUACloseModal(this.dataset.buaId,false)"
+            style="font-size:11px;padding:.2rem .55rem;background:#fff;border:1px solid #c4b5fd;border-radius:4px;cursor:pointer;color:#7c3aed">Reopen</button>`;
+    }
+    actionBtns += `</div>`;
+
+    return `<tr>
+      <td style="${tdS};font-size:12.5px;font-weight:500;max-width:160px" title="${escHtml(r.customer_name||'')}">
+        <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;word-break:break-word;white-space:normal">${escHtml(r.customer_name||'')}</div>
+      </td>
+      <td style="${tdS}">${buBadge}</td>
+      <td style="${tdS};white-space:nowrap">${pocCap(collector)}</td>
+      <td style="${tdS}">${invCell}</td>
+      <td style="${tdS};min-width:200px"><span style="font-size:12px;color:var(--txt2);white-space:normal;word-break:break-word">${escHtml(r.note||'')}</span></td>
+      <td style="${tdS};text-align:center">${intBtn}</td>
+      <td style="${tdS};text-align:center">${disputeCell}</td>
+      <td style="${tdS};text-align:center">${statusPill}</td>
+      <td style="${tdS};font-size:11px;color:var(--txt3);white-space:nowrap">${escHtml(r.created_by_name||'—')}</td>
+      <td style="${tdS};font-size:11px;color:var(--txt3);white-space:nowrap">${openedDt}</td>
+      <td style="${tdS};font-size:11px;color:var(--txt3);white-space:nowrap">${closedDt}</td>
+      <td style="${tdS}">${actionBtns}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Add Note modal ── */
+function openBUANoteModal() {
+  const dl = document.getElementById('bua-cust-list');
+  if (dl) {
+    const names = (_cmData||[]).map(c=>c.customer_name).filter(Boolean).sort();
+    dl.innerHTML = [...new Set(names)].map(n=>`<option value="${escHtml(n)}">`).join('');
+  }
+  document.getElementById('bua-customer').value = '';
+  document.getElementById('bua-invoices').innerHTML = '<option value="" disabled>— select customer first —</option>';
+  document.getElementById('bua-note').value = '';
+  document.getElementById('bua-err').textContent = '';
+  document.getElementById('bua-save-btn').disabled = false;
+  document.getElementById('bua-modal-ov').style.display = 'flex';
+  document.getElementById('bua-customer').focus();
+}
+
+function closeBUANoteModal() {
+  document.getElementById('bua-modal-ov').style.display = 'none';
+}
+
+async function buaCustomerChange() {
+  const cust = document.getElementById('bua-customer').value.trim();
+  const sel  = document.getElementById('bua-invoices');
+  sel.innerHTML = '<option value="" disabled>Loading…</option>';
+  if (!cust) { sel.innerHTML = '<option value="" disabled>— select customer first —</option>'; return; }
+
+  // Try local AR rows first, then DB
+  const localInvs = (_arAllRows||[]).filter(r=>(r.customer_name||'').toLowerCase()===cust.toLowerCase());
+  if (localInvs.length) {
+    sel.innerHTML = localInvs.map(r=>
+      `<option value="${escHtml(r.invoice_id)}" data-num="${escHtml(r.invoice_number||r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)}</option>`
+    ).join('');
+  } else {
+    try {
+      const enc = encodeURIComponent(cust);
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/ar_invoices?customer_name=ilike.${enc}&select=invoice_id,invoice_number&limit=200`,
+        { headers: cmrrHdr() }
+      );
+      if (r.ok) {
+        const rows = await r.json();
+        sel.innerHTML = rows.length
+          ? rows.map(rv=>`<option value="${escHtml(rv.invoice_id)}">${escHtml(rv.invoice_number||rv.invoice_id)}</option>`).join('')
+          : '<option value="" disabled>No invoices found</option>';
+      }
+    } catch(_) { sel.innerHTML = '<option value="" disabled>Error loading invoices</option>'; }
+  }
+}
+
+async function saveBUANote() {
+  const btn    = document.getElementById('bua-save-btn');
+  const errEl  = document.getElementById('bua-err');
+  const cust   = document.getElementById('bua-customer').value.trim();
+  const note   = document.getElementById('bua-note').value.trim();
+  const sel    = document.getElementById('bua-invoices');
+  const selOpts = [...sel.selectedOptions].filter(o=>o.value);
+
+  errEl.textContent = '';
+  if (!cust)            { errEl.textContent = 'Customer is required.'; return; }
+  if (!selOpts.length)  { errEl.textContent = 'Select at least one invoice.'; return; }
+  if (!note)            { errEl.textContent = 'Note is required.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const byName = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
+    const noteRes = await fetch(`${SUPABASE_URL}/rest/v1/bu_attention_notes`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ customer_name: cust, note, created_by_id: CURRENT_USER?.id || null, created_by_name: byName }),
+    });
+    if (!noteRes.ok) throw new Error('HTTP ' + noteRes.status);
+    const [saved] = await noteRes.json();
+    const noteId = saved.id;
+
+    // Link invoices
+    const invPayload = selOpts.map(o=>({
+      note_id: noteId, invoice_id: o.value,
+      invoice_number: o.dataset.num || o.text || o.value,
+    }));
+    await fetch(`${SUPABASE_URL}/rest/v1/bu_attention_note_invoices`, {
+      method: 'POST',
+      headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(invPayload),
+    });
+
+    closeBUANoteModal();
+    await loadBUAttentionNotes(true);
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Save Note';
+  }
+}
+
+/* ── Close / Reopen modal ── */
+function openBUACloseModal(id, isOpen) {
+  _buaCloseId     = id;
+  _buaCloseIsOpen = isOpen;
+  const note = _buaRows.find(r => r.id === id);
+  if (!note) return;
+  document.getElementById('bua-close-title').textContent        = isOpen ? 'Close Note' : 'Reopen Note';
+  document.getElementById('bua-close-note-label').textContent   = isOpen ? 'Closing note (optional)' : 'Reason for reopening (optional)';
+  document.getElementById('bua-close-confirm-btn').textContent  = isOpen ? 'Close Note' : 'Reopen Note';
+  document.getElementById('bua-close-confirm-btn').style.background = isOpen ? '#166534' : '#7c3aed';
+  document.getElementById('bua-close-confirm-btn').onclick      = isOpen ? confirmBUAClose : confirmBUAReopen;
+  document.getElementById('bua-close-info').innerHTML =
+    `<strong>${escHtml(note.customer_name)}</strong><br><span style="color:var(--txt2);font-size:12px">${escHtml(note.note.slice(0,120))}${note.note.length>120?'…':''}</span>`;
+  document.getElementById('bua-close-note').value   = '';
+  document.getElementById('bua-close-err').textContent = '';
+  document.getElementById('bua-close-confirm-btn').disabled = false;
+  document.getElementById('bua-close-modal-ov').style.display = 'flex';
+}
+function closeBUACloseModal() {
+  document.getElementById('bua-close-modal-ov').style.display = 'none';
+  _buaCloseId = null;
+}
+
+async function confirmBUAClose() {
+  const btn    = document.getElementById('bua-close-confirm-btn');
+  const note   = document.getElementById('bua-close-note').value.trim() || null;
+  const byName = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
+  btn.disabled = true;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/bu_attention_notes?id=eq.${encodeURIComponent(_buaCloseId)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'closed', closed_at: new Date().toISOString(), closed_by_name: byName }),
+  });
+  if (r.ok) {
+    if (note) await _postBUAReply(_buaCloseId, `[Closed] ${note}`, byName);
+    closeBUACloseModal();
+    await loadBUAttentionNotes(true);
+  } else {
+    document.getElementById('bua-close-err').textContent = 'Error: HTTP ' + r.status;
+    btn.disabled = false;
+  }
+}
+
+async function confirmBUAReopen() {
+  const btn    = document.getElementById('bua-close-confirm-btn');
+  const note   = document.getElementById('bua-close-note').value.trim() || null;
+  const byName = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
+  btn.disabled = true;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/bu_attention_notes?id=eq.${encodeURIComponent(_buaCloseId)}`, {
+    method: 'PATCH',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'open', closed_at: null, closed_by_name: null }),
+  });
+  if (r.ok) {
+    if (note) await _postBUAReply(_buaCloseId, `[Reopened] ${note}`, byName);
+    closeBUACloseModal();
+    await loadBUAttentionNotes(true);
+  } else {
+    document.getElementById('bua-close-err').textContent = 'Error: HTTP ' + r.status;
+    btn.disabled = false;
+  }
+}
+
+/* ── Reply modal ── */
+async function openBUAReplyModal(id) {
+  _buaReplyId = id;
+  const note  = _buaRows.find(r => r.id === id);
+  if (!note) return;
+  document.getElementById('bua-reply-context').innerHTML =
+    `<strong>${escHtml(note.customer_name)}</strong> · ${note.invoices.map(i=>escHtml(i.invoice_number||i.invoice_id)).join(', ')}`
+    + `<br><span style="color:var(--txt2)">${escHtml(note.note.slice(0,120))}${note.note.length>120?'…':''}</span>`;
+  const threadEl = document.getElementById('bua-reply-thread');
+  if (note.replies.length) {
+    threadEl.innerHTML = note.replies.map(rv => {
+      const dt = new Date(rv.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      return `<div style="padding:.4rem .6rem;background:#f9fafb;border-radius:6px;border:1px solid var(--brd)">
+        <div style="font-size:10.5px;color:var(--txt3);margin-bottom:.2rem">${escHtml(rv.created_by_name||'—')} · ${dt}</div>
+        <div style="font-size:12px;color:var(--txt2);white-space:pre-wrap">${escHtml(rv.reply_text)}</div>
+      </div>`;
+    }).join('');
+  } else {
+    threadEl.innerHTML = '<div style="font-size:12px;color:var(--txt3);text-align:center;padding:.5rem">No replies yet.</div>';
+  }
+  document.getElementById('bua-reply-text').value  = '';
+  document.getElementById('bua-reply-err').textContent  = '';
+  document.getElementById('bua-reply-save-btn').disabled = false;
+  document.getElementById('bua-reply-modal-ov').style.display = 'flex';
+  document.getElementById('bua-reply-text').focus();
+}
+function closeBUAReplyModal() {
+  document.getElementById('bua-reply-modal-ov').style.display = 'none';
+  _buaReplyId = null;
+}
+
+async function _postBUAReply(noteId, text, byName) {
+  return fetch(`${SUPABASE_URL}/rest/v1/bu_attention_replies`, {
+    method: 'POST',
+    headers: { ...cmrrHdr(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ note_id: noteId, reply_text: text, created_by_id: CURRENT_USER?.id||null, created_by_name: byName }),
+  });
+}
+
+async function saveBUAReply() {
+  const btn    = document.getElementById('bua-reply-save-btn');
+  const errEl  = document.getElementById('bua-reply-err');
+  const text   = document.getElementById('bua-reply-text').value.trim();
+  if (!text) { errEl.textContent = 'Reply cannot be empty.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  const byName = USER_ACCESS?.display_name || USER_ACCESS?.collector_name || CURRENT_USER?.email || 'unknown';
+  const r = await _postBUAReply(_buaReplyId, text, byName);
+  if (r.ok) {
+    closeBUAReplyModal();
+    await loadBUAttentionNotes(true);
+  } else {
+    errEl.textContent = 'Error: HTTP ' + r.status;
+    btn.disabled = false;
+    btn.textContent = 'Post Reply';
+  }
+}
+
+/* ── Dispute popup ── */
+function buaShowDisputePopup(invoiceIds) {
+  const disputes = invoiceIds.map(id => _buaInvDisputeMap[id]).filter(Boolean);
+  if (!disputes.length) return;
+  const body = document.getElementById('bua-dispute-popup-body');
+  body.innerHTML = disputes.map(d => {
+    const typeLabel = getDiDisputeLabel(d.dispute_type);
+    const openedDt  = new Date(d.opened_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    return `<div style="padding:.65rem .75rem;border:1px solid var(--brd);border-radius:8px;margin-bottom:.6rem">
+      <div style="font-size:12.5px;font-weight:600;color:var(--navy);margin-bottom:.35rem">${escHtml(d.invoice_id)}</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.35rem">
+        <span style="font-size:11px;background:var(--red-bg);color:var(--red);padding:.1rem .45rem;border-radius:4px;font-weight:600">${escHtml(typeLabel)}</span>
+        <span style="font-size:11px;background:#fee2e2;color:#991b1b;padding:.1rem .45rem;border-radius:10px;font-weight:600">Open</span>
+        <span style="font-size:11px;color:var(--txt3)">Opened ${openedDt}</span>
+      </div>
+      ${d.dispute_description ? `<div style="font-size:12px;color:var(--txt2)">${escHtml(d.dispute_description)}</div>` : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('bua-dispute-popup-ov').style.display = 'flex';
+}
+function closeBUADisputePopup() {
+  document.getElementById('bua-dispute-popup-ov').style.display = 'none';
+}
+
+/* ── Interactions helper ── */
+function buaShowInteractions(invoiceIds, invoiceNumbers) {
+  // Show interactions for the first invoice (reuses existing viewer); for multi-invoice, pick the first
+  if (!invoiceIds.length) return;
+  arShowInvInteractions(invoiceIds[0], invoiceNumbers[0] || invoiceIds[0]);
 }
 
 async function loadDisputedInvoices(force) {
