@@ -5599,6 +5599,8 @@ function renderAR() {
   renderARInvoiceList(rows);
   renderARBuSummary(rows);
   arRefreshDrill(rows);
+  if (_arActivePanes.has('breakdown')) renderARBreakdown();
+  if (_arActivePanes.has('followup'))  renderOverdueFollowUp();
 }
 
 // The aging drill is a window onto the same filtered set, so anything that
@@ -6062,7 +6064,7 @@ function renderOverdueFollowUp() {
   const fmtD   = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '—';
   const daysSince = iso => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null;
 
-  const overdue = (_arAllRows || []).filter(r => {
+  const overdue = (_arLastRows || []).filter(r => {
     if (_arInvActivePtp.has(r.invoice_id)) return false; // has active PTP → skip
     const last = _arInvLastContact[r.invoice_id];
     return !last || last < cutoff; // never contacted OR last contact > 7 days ago
