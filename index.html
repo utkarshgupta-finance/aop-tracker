@@ -1759,6 +1759,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <h2 style="font-size:15px;font-weight:700;color:var(--navy)">Disputed Invoices</h2>
       <span id="di-count" style="font-size:11.5px;color:var(--txt3)"></span>
       <button onclick="openQuickDisputeModal()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:none;border-radius:5px;background:var(--navy);color:#fff;cursor:pointer;font-weight:600">+ Add Dispute</button>
+      <button class="rbtn" onclick="diExportXlsx()" title="Export filtered disputes to Excel">⬇ Export</button>
       <button onclick="loadDisputedInvoices(true)" style="font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
     </div>
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
@@ -1799,6 +1800,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       <h2 style="font-size:15px;font-weight:700;color:var(--navy)">🚩 BU Attention</h2>
       <span id="bua-count" style="font-size:11.5px;color:var(--txt3)"></span>
       <button onclick="openBUANoteModal()" style="margin-left:auto;font-size:11.5px;padding:.28rem .75rem;border:none;border-radius:5px;background:var(--navy);color:#fff;cursor:pointer;font-weight:600">+ Add Note</button>
+      <button class="rbtn" onclick="buaExportXlsx()" title="Export filtered notes to Excel">⬇ Export</button>
       <button onclick="loadBUAttentionNotes(true)" style="font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
     </div>
     <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">
@@ -2090,6 +2092,7 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
       </div>
       <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-left:auto">
         <button class="modal-csv" onclick="ecnOpenForm()" style="padding:.32rem .85rem;font-size:12px">+ Add expected CN</button>
+        <button class="rbtn" onclick="ecnExportXlsx()" title="Export visible rows to Excel">⬇ Export</button>
         <button onclick="ecnLoad(true)" style="font-size:12px;padding:.32rem .85rem;background:var(--navy2);color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600">↻ Refresh</button>
       </div>
     </div>
@@ -6427,6 +6430,116 @@ function arExportAging() {
   }
   const wb = xlsxBook([{ name: 'AR Aging', ws }]);
   XLSX.writeFile(wb, `ar_aging_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/* ── Disputed Invoices export ─────────────────────────────── */
+function diExportXlsx() {
+  const q       = (document.getElementById('di-search')?.value || '').toLowerCase();
+  const buF     = document.getElementById('di-filter-bu')?.value || '';
+  const collF   = document.getElementById('di-filter-collector')?.value || '';
+  const statusF = document.getElementById('di-filter-status')?.value;
+  const filtered = _diRows.filter(r => {
+    if (statusF !== undefined && statusF !== '' && r.status !== statusF) return false;
+    if (buF   && arGetBu(r.customer_name) !== buF) return false;
+    if (collF && arGetCollector(r.customer_name) !== collF) return false;
+    if (q) {
+      const hay = [r.customer_name, r.invoice_number, r.invoice_id, r.dispute_type, r.dispute_description||'',
+                   arGetBu(r.customer_name), arGetCollector(r.customer_name)].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if (!filtered.length) { xlsxNoDataAlert(); return; }
+  const fmt = dt => dt ? new Date(dt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '';
+  const out = filtered.map(r => {
+    const amtData = _diAmounts[r.invoice_id];
+    const bal = amtData ? (amtData.balance_inr ?? amtData.balance ?? '') : '';
+    return {
+      'Customer':        r.customer_name || '',
+      'BU':              arGetBu(r.customer_name) || '',
+      'Collector':       arGetCollector(r.customer_name) || '',
+      'Invoice #':       r.invoice_number || r.invoice_id || '',
+      'Balance (₹)':     bal !== '' ? Math.round(Number(bal)) : '',
+      'Disputed Amt (₹)':r.disputed_amount != null ? Math.round(Number(r.disputed_amount)) : '',
+      'Dispute Type':    getDiDisputeLabel(r.dispute_type),
+      'Description':     r.dispute_description || '',
+      'Status':          r.status || '',
+      'Opened':          fmt(r.opened_at),
+      'Closed':          fmt(r.closed_at),
+    };
+  });
+  const ws = xlsxSheetFromRows(out, [26,18,16,16,14,16,20,30,10,14,14]);
+  const wb = xlsxBook([{ name: 'Disputes', ws }]);
+  XLSX.writeFile(wb, `disputes_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/* ── Expected CNs export ──────────────────────────────────── */
+function ecnExportXlsx() {
+  const q = (document.getElementById('ecn-search')?.value || '').toLowerCase().trim();
+  let rows = ecnVisible();
+  if (_ecnView !== 'all') rows = rows.filter(x => x.status === _ecnView);
+  if (q) rows = rows.filter(x => [x.customer_name, x.invoice_number, cnReasonLabel(x.reason), x.email_subject, x.details, x.cn_number]
+    .join(' ').toLowerCase().includes(q));
+  if (!rows.length) { xlsxNoDataAlert(); return; }
+  const out = rows.map(x => ({
+    'Customer':         x.customer_name || '',
+    'Invoice #':        x.invoice_number || '',
+    'Expected CN (₹)':  x.expected_amount != null ? Math.round(Number(x.expected_amount)) : '',
+    'Revenue Loss (₹)': x.revenue_loss   != null ? Math.round(Number(x.revenue_loss))   : '',
+    'Reason':           cnReasonLabel(x.reason),
+    'Details':          x.details || '',
+    'Email Subject':    x.email_subject || '',
+    'Status':           x.status || '',
+    'CN Number':        x.cn_number || '',
+    'CN Date':          x.cn_date ? String(x.cn_date).slice(0, 10) : '',
+    'Raised':           x.created_at ? String(x.created_at).slice(0, 10) : '',
+    'Raised By':        x.created_by_name || '',
+    'Closure Reason':   x.closure_reason || '',
+    'Closed':           x.closed_at ? String(x.closed_at).slice(0, 10) : '',
+    'Closed By':        x.closed_by_name || '',
+  }));
+  const ws = xlsxSheetFromRows(out, [26,14,16,16,20,30,28,10,14,12,12,16,24,12,16]);
+  const wb = xlsxBook([{ name: 'Expected CNs', ws }]);
+  XLSX.writeFile(wb, `expected_cns_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/* ── BU Attention export ──────────────────────────────────── */
+function buaExportXlsx() {
+  const q       = (document.getElementById('bua-search')?.value || '').toLowerCase();
+  const buF     = document.getElementById('bua-filter-bu')?.value || '';
+  const collF   = document.getElementById('bua-filter-collector')?.value || '';
+  const statusF = document.getElementById('bua-filter-status')?.value;
+  const filtered = _buaRows.filter(r => {
+    if (statusF !== undefined && statusF !== '' && r.status !== statusF) return false;
+    if (buF   && arGetBu(r.customer_name) !== buF) return false;
+    if (collF && arGetCollector(r.customer_name) !== collF) return false;
+    if (q) {
+      const invNums = r.invoices.map(i => i.invoice_number || i.invoice_id).join(' ');
+      const hay = [r.customer_name, r.note, invNums, arGetBu(r.customer_name), arGetCollector(r.customer_name)].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if (!filtered.length) { xlsxNoDataAlert(); return; }
+  const fmt = dt => dt ? new Date(dt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '';
+  const out = filtered.map(r => ({
+    'Customer':      r.customer_name || '',
+    'BU':            arGetBu(r.customer_name) || '',
+    'Collector':     arGetCollector(r.customer_name) || '',
+    'Invoice(s)':    r.invoices.map(i => i.invoice_number || i.invoice_id).join(', '),
+    'Note':          r.note || '',
+    'Has Dispute':   r.invoices.some(iv => _buaInvDisputeMap[iv.invoice_id]) ? 'Yes' : '',
+    'Interactions':  r.invoices.reduce((s,iv) => s + (_buaInvCountMap[iv.invoice_id]||0), 0) || '',
+    'Replies':       r.replies.length || '',
+    'Status':        r.status || '',
+    'Raised By':     r.created_by_name || '',
+    'Opened':        fmt(r.created_at),
+    'Closed By':     r.closed_by_name || '',
+    'Closed':        fmt(r.closed_at),
+  }));
+  const ws = xlsxSheetFromRows(out, [26,18,16,24,40,12,12,8,10,16,14,16,14]);
+  const wb = xlsxBook([{ name: 'BU Attention', ws }]);
+  XLSX.writeFile(wb, `bu_attention_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function renderARAgingTable(rows) {
