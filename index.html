@@ -1612,6 +1612,10 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
               <input type="number" id="cc-dispute-amount" class="cc-input" min="0" step="any" placeholder="Amount in dispute" style="width:100%;box-sizing:border-box">
             </div>
           </div>
+          <div class="cc-field" id="cc-dispute-inv-wrap" style="display:none">
+            <label class="cc-label">Invoice(s) in dispute <span class="cc-req">*</span></label>
+            <div id="cc-dispute-inv-list" style="display:flex;flex-direction:column;gap:.35rem;max-height:120px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:.5rem;background:#fafafa;margin-top:.25rem"></div>
+          </div>
           <div class="cc-field">
             <label class="cc-label">Description / Details</label>
             <textarea id="cc-dispute-desc" class="cc-input" rows="3" placeholder="Describe the issue or dispute…" style="resize:vertical;min-height:64px"></textarea>
@@ -6223,7 +6227,7 @@ const AR_BUCKETS = [
 ];
 
 function renderARSummary(rows) {
-  const cr    = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr    = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const crFull = v => '₹' + v.toLocaleString('en-IN');
   const inr   = r => arInr(r);
   const totalBal   = rows.reduce((s, r) => s + inr(r), 0);
@@ -6321,7 +6325,7 @@ function renderARUpcoming(rows) {
   if (!wrap) return;
   const inr = r => arInr(r);
   const crFull = v => '₹' + Math.round(v).toLocaleString('en-IN');
-  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr = v => '₹' + Math.round(v).toLocaleString('en-IN');
 
   const overdueRows = rows.filter(r => arOverdueDays(r.due_date) > 0);
   const overdueBal  = overdueRows.reduce((s, r) => s + inr(r), 0);
@@ -6378,7 +6382,7 @@ function renderARAgingBar(rows) {
   const inr   = r => arInr(r);
   const total = rows.reduce((s, r) => s + inr(r), 0);
   if (total === 0) { wrap.innerHTML = ''; return; }
-  const cr = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const activeBuckets = arGetActiveBuckets();
   const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, 0]));
   // Guarded: a row whose days fall outside every configured bracket returns a
@@ -6548,7 +6552,7 @@ function renderARAgingTable(rows) {
   const buckets = Object.fromEntries(activeBuckets.map(b => [b.key, { count: 0, balance: 0 }]));
   rows.forEach(r => { const bk = arAgeBucket(r.due_date); if (buckets[bk]) { buckets[bk].count++; buckets[bk].balance += inr(r); } });
   const total = rows.reduce((s, r) => s + inr(r), 0);
-  const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr  = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const pct = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
   let cumBal = 0;
   const trs = activeBuckets.map(b => {
@@ -6633,7 +6637,7 @@ async function qdCustomerChange() {
     );
     if (rows.length) {
       sel.innerHTML = '<option value="">— pick invoice —</option>'
-        + rows.map(r => `<option value="${escHtml(r.invoice_id)}" data-number="${escHtml(r.invoice_number||r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${(arInr(r)/1e7).toFixed(2)} Cr</option>`).join('');
+        + rows.map(r => `<option value="${escHtml(r.invoice_id)}" data-number="${escHtml(r.invoice_number||r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${Math.round(arInr(r)).toLocaleString('en-IN')}</option>`).join('');
     } else {
       // Fallback: fetch from DB
       const resp = await fetch(
@@ -6642,7 +6646,7 @@ async function qdCustomerChange() {
       );
       const invs = resp.ok ? await resp.json() : [];
       sel.innerHTML = '<option value="">— pick invoice —</option>'
-        + invs.map(r => `<option value="${escHtml(r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${((r.balance_inr||r.balance||0)/1e7).toFixed(2)} Cr</option>`).join('');
+        + invs.map(r => `<option value="${escHtml(r.invoice_id)}">${escHtml(r.invoice_number||r.invoice_id)} — ₹${Math.round(r.balance_inr||r.balance||0).toLocaleString('en-IN')}</option>`).join('');
       if (!invs.length) sel.innerHTML = '<option value="">No open invoices found</option>';
     }
   } catch(e) { sel.innerHTML = '<option value="">Error loading invoices</option>'; }
@@ -6770,7 +6774,7 @@ function renderOverdueFollowUp() {
   const tbody  = document.getElementById('ar-followup-body');
   if (!tbody) return;
   const cutoff = new Date(Date.now() - 7 * 86400000).toISOString(); // 7 days ago
-  const cr     = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr     = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const fmtD   = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '—';
   const daysSince = iso => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null;
 
@@ -6825,7 +6829,7 @@ function renderARBreakdown() {
 
   const rows  = _arLastRows || [];
   const total = rows.reduce((s, r) => s + arInr(r), 0);
-  const cr    = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr    = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const pct   = v => total > 0 ? (v / total * 100).toFixed(1) + '%' : '—';
 
   // Build open ECN invoice_id set for fast lookup
@@ -7153,8 +7157,8 @@ function renderARSnapshots(rows) {
     ${dates.map(d => {
       const v = dateTotals[d] || 0;
       const o = dateOvds[d]   || 0;
-      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
-      return `<td style="${tdS};font-weight:700;color:var(--navy)">₹${(v/1e7).toFixed(2)} Cr${ovd}</td>`;
+      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">₹${Math.round(o).toLocaleString('en-IN')} ovd</span>` : '';
+      return `<td style="${tdS};font-weight:700;color:var(--navy)">₹${Math.round(v).toLocaleString('en-IN')}${ovd}</td>`;
     }).join('')}
   </tr>`;
 
@@ -7162,8 +7166,8 @@ function renderARSnapshots(rows) {
     const dateCells = dates.map(date => {
       const v = dateMap[date]?.[key]?.total   || 0;
       const o = dateMap[date]?.[key]?.overdue || 0;
-      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">${'₹'+(o/1e7).toFixed(2)+' Cr'} ovd</span>` : '';
-      return `<td style="${tdS}">${v > 0 ? '₹'+(v/1e7).toFixed(2)+' Cr' : '<span style="color:#e2e8f0">—</span>'}${ovd}</td>`;
+      const ovd = o > 0 ? `<span style="display:block;font-size:9.5px;color:#b91c1c">₹${Math.round(o).toLocaleString('en-IN')} ovd</span>` : '';
+      return `<td style="${tdS}">${v > 0 ? '₹'+Math.round(v).toLocaleString('en-IN') : '<span style="color:#e2e8f0">—</span>'}${ovd}</td>`;
     }).join('');
     return `<tr>
       <td style="${tdS};text-align:left;font-family:var(--sans);font-weight:600;color:#0f172a;white-space:normal;max-width:180px">${escHtml(key)}</td>
@@ -7214,7 +7218,7 @@ function renderARDailyTable(rows) {
     grandByBucket[bk.key] = allBus.reduce((s, b) => s + (buMap[b][bk.key] || 0), 0);
   });
 
-  const cr  = v => v > 0 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : '<span style="color:#cbd5e1">—</span>';
+  const cr  = v => v > 0 ? '₹' + Math.round(v).toLocaleString('en-IN') : '<span style="color:#cbd5e1">—</span>';
   const pct = (v, tot) => tot > 0 ? (v / tot * 100).toFixed(0) + '%' : '—';
   const thS = 'padding:.5rem .85rem;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;white-space:nowrap;text-align:right';
   const tdS = (extra='') => `padding:.45rem .85rem;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid #f1f5f9;${extra}`;
@@ -7294,7 +7298,7 @@ function renderARBuSummary(rows) {
     return a.localeCompare(b);
   });
 
-  const cr  = v => '₹' + (v / 1e7).toFixed(2) + ' Cr';
+  const cr  = v => '₹' + Math.round(v).toLocaleString('en-IN');
   const totBal = rows.reduce((s, r) => s + arInr(r), 0);
   const pct = v => totBal > 0 ? (v / totBal * 100).toFixed(1) + '%' : '—';
 
@@ -8123,12 +8127,12 @@ function renderCollectionsTable(data) {
   wrap.innerHTML = `<table class="ca-tbl">
     <thead><tr><th style="min-width:230px">Metric</th>${thCols}</tr></thead>
     <tbody>
-      ${sectionHdr('AR (₹ Cr)')}
+      ${sectionHdr('AR (₹)')}
       ${row('Total AR',   'ar_total',  fN)}
       ${row('AR – Others','ar_other',  fN)}
       ${row('AR – BAT',   'ar_bat',    fN)}
       ${row('AR – SME BU','ar_sme_bu', fN)}
-      ${sectionHdr('Collections (₹ Cr)')}
+      ${sectionHdr('Collections (₹)')}
       ${row('Total Collections',       'collections_total',  fN)}
       ${row('Collections – Others',    'collections_other',  fN)}
       ${row('Collections – BAT',       'collections_bat',    fN)}
@@ -8869,6 +8873,7 @@ function ccResetForm() {
   document.getElementById('cc-branch-payment').style.display  = 'none';
   document.getElementById('cc-branch-ack').style.display      = 'none';
   document.getElementById('cc-branch-dispute').style.display  = 'none';
+  const _diw = document.getElementById('cc-dispute-inv-wrap'); if (_diw) { _diw.style.display = 'none'; document.getElementById('cc-dispute-inv-list').innerHTML = ''; }
   document.getElementById('cc-sec5').style.display            = 'none';
   document.getElementById('cc-sec6').style.display            = 'none';
   document.getElementById('cc-full-confirm').style.display    = 'none';
@@ -9234,7 +9239,28 @@ function ccSetOutcome(val) {
   ccHideBranches();
   if (val === 'payment_committed')                  document.getElementById('cc-branch-payment').style.display  = '';
   else if (val === 'payment_acknowledged_no_commitment') document.getElementById('cc-branch-ack').style.display = '';
-  else if (val === 'dispute_raised')                document.getElementById('cc-branch-dispute').style.display  = '';
+  else if (val === 'dispute_raised') {
+    document.getElementById('cc-branch-dispute').style.display  = '';
+    // Populate per-invoice checkboxes so the user can pick which specific
+    // invoice(s) the dispute covers — avoids disputing all discussed invoices
+    const invWrap = document.getElementById('cc-dispute-inv-wrap');
+    const invList = document.getElementById('cc-dispute-inv-list');
+    if (invWrap && invList) {
+      const invs = (_ccState.invoices || []).filter(i => (_ccState.selectedInvIds || new Set()).has(i.invoice_id));
+      if (invs.length > 1) {
+        invList.innerHTML = invs.map(i =>
+          `<label style="display:flex;align-items:center;gap:.4rem;font-size:12px;cursor:pointer">
+            <input type="checkbox" class="cc-dispute-inv-cb" value="${escHtml(String(i.invoice_id))}">
+            <span style="font-family:monospace">${escHtml(i.invoice_number || String(i.invoice_id))}</span>
+            <span style="color:var(--txt3);margin-left:auto;font-family:monospace">₹${Math.round(arInr(i)).toLocaleString('en-IN')}</span>
+          </label>`
+        ).join('');
+        invWrap.style.display = '';
+      } else {
+        invWrap.style.display = 'none';
+      }
+    }
+  }
 
   if (val !== 'dispute_raised') {
     _ccState.escalationNeeded = false;
@@ -9609,10 +9635,21 @@ async function ccSubmit() {
         }
       }
       if (payload.outcome === 'dispute_raised') {
-        const disputeRows = [...s.selectedInvIds].map(invId => {
-          const inv = s.invoices.find(i => i.invoice_id === invId);
-          const amtRaw = document.getElementById('cc-dispute-amount')?.value;
-          const disputedAmt = amtRaw && !isNaN(parseFloat(amtRaw)) ? parseFloat(amtRaw) : null;
+        // If the dispute invoice picker was shown, use only checked invoices;
+        // otherwise fall back to all selected invoices (single-invoice case)
+        const invWrap = document.getElementById('cc-dispute-inv-wrap');
+        const pickerVisible = invWrap && invWrap.style.display !== 'none';
+        let disputeInvIds;
+        if (pickerVisible) {
+          const checked = [...document.querySelectorAll('.cc-dispute-inv-cb:checked')].map(cb => cb.value);
+          disputeInvIds = checked.length ? checked : [...s.selectedInvIds];
+        } else {
+          disputeInvIds = [...s.selectedInvIds];
+        }
+        const amtRaw = document.getElementById('cc-dispute-amount')?.value;
+        const disputedAmt = amtRaw && !isNaN(parseFloat(amtRaw)) ? parseFloat(amtRaw) : null;
+        const disputeRows = disputeInvIds.map(invId => {
+          const inv = s.invoices.find(i => String(i.invoice_id) === String(invId));
           return {
             invoice_id:             invId,
             invoice_number:         inv?.invoice_number || invId,
