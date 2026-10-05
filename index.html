@@ -10686,9 +10686,18 @@ async function loadConfirmedDates() {
     // Invoice-level histories from ptp_events (all sources, oldest first).
     // A removal (new_date null) clears the invoice's history.
     try {
-      const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?order=created_at.asc&limit=5000&select=*`, { headers: cmrrHdr() });
-      if (mr.ok) {
-        for (const ev of await mr.json()) {
+      const PTP_PAGE = 1000;
+      let ptpOff = 0, allPtpEvents = [];
+      while (true) {
+        const mr = await fetch(`${SUPABASE_URL}/rest/v1/ptp_events?order=created_at.asc&limit=${PTP_PAGE}&offset=${ptpOff}&select=*`, { headers: cmrrHdr() });
+        if (!mr.ok) break;
+        const page = await mr.json();
+        allPtpEvents.push(...page);
+        if (page.length < PTP_PAGE) break;
+        ptpOff += PTP_PAGE;
+      }
+      if (allPtpEvents.length) {
+        for (const ev of allPtpEvents) {
           if (!ev.new_date) {
             if (invoicePtpMap[ev.invoice_id]) invoicePtpMap[ev.invoice_id].ptpHistory = [];
             continue;
