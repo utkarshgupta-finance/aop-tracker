@@ -9250,7 +9250,7 @@ function ccSetOutcome(val) {
       if (invs.length > 1) {
         invList.innerHTML = invs.map(i =>
           `<label style="display:flex;align-items:center;gap:.4rem;font-size:12px;cursor:pointer">
-            <input type="checkbox" class="cc-dispute-inv-cb" value="${escHtml(String(i.invoice_id))}">
+            <input type="checkbox" class="cc-dispute-inv-cb" value="${escHtml(String(i.invoice_id))}" checked>
             <span style="font-family:monospace">${escHtml(i.invoice_number || String(i.invoice_id))}</span>
             <span style="color:var(--txt3);margin-left:auto;font-family:monospace">₹${Math.round(arInr(i)).toLocaleString('en-IN')}</span>
           </label>`
@@ -9642,7 +9642,8 @@ async function ccSubmit() {
         let disputeInvIds;
         if (pickerVisible) {
           const checked = [...document.querySelectorAll('.cc-dispute-inv-cb:checked')].map(cb => cb.value);
-          disputeInvIds = checked.length ? checked : [...s.selectedInvIds];
+          if (!checked.length) { errEl.textContent = 'Select at least one invoice to dispute.'; return; }
+          disputeInvIds = checked;
         } else {
           disputeInvIds = [...s.selectedInvIds];
         }
