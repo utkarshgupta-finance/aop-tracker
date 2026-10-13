@@ -1757,6 +1757,49 @@ tr.tot td.aopvt{background:#d8d8d8;font-weight:700;border-left:2px solid #aaa}
     </div>
   </div><!-- end #collector-console -->
 
+  <!-- ── Team Activity Pane ── -->
+  <div id="team-activity" class="pane">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+      <h2 style="font-size:15px;font-weight:700;color:var(--navy);margin:0">Team Activity</h2>
+      <span id="ta-count" style="font-size:11.5px;color:var(--txt3)"></span>
+      <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <select id="ta-period" onchange="renderTeamActivity()" style="font-size:11.5px;padding:.25rem .5rem;border:1px solid var(--brd);border-radius:5px;background:#fff">
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="0">All time</option>
+        </select>
+        <button onclick="loadTeamActivity(true)" style="font-size:11.5px;padding:.28rem .75rem;border:1px solid var(--brd2);border-radius:5px;background:#fff;cursor:pointer;color:var(--txt2)">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="ta-status" style="font-size:12px;color:var(--txt3);margin-bottom:.5rem"></div>
+
+    <!-- Summary cards -->
+    <div id="ta-cards" style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem"></div>
+
+    <!-- Per-collector table -->
+    <div style="overflow-x:auto">
+      <table class="ar-tbl" id="ta-table" style="min-width:680px">
+        <thead>
+          <tr>
+            <th style="text-align:left">Collector</th>
+            <th style="text-align:center">Conversations</th>
+            <th style="text-align:center">Connected</th>
+            <th style="text-align:center">Not Connected</th>
+            <th style="text-align:center">Avg Words / Note</th>
+            <th style="text-align:center">Longest Note</th>
+            <th style="text-align:center">Notes with No Text</th>
+            <th style="text-align:left">Detail Level</th>
+          </tr>
+        </thead>
+        <tbody id="ta-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Word-count distribution per collector (expanded on click) -->
+    <div id="ta-drill" style="margin-top:1.25rem"></div>
+  </div>
+
   <!-- ── Disputed Invoices Pane ── -->
   <div id="disputed-invoices" class="pane">
     <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -2490,6 +2533,8 @@ const ALL_TABS_CFG = [
   { id: 'collector-console',   label: 'Collector Console',   abbr: 'CC',  fn: 'showCollectorConsoleTab(this)',
     roles: ['admin-edit','admin-view','admin','collector'] },
   { id: 'collections-analysis',label: 'Collections Analysis', abbr: 'CA', fn: 'showCollectionsTab(this)',
+    roles: ['admin-edit','admin-view','admin'] },
+  { id: 'team-activity',       label: 'Team Activity',       abbr: 'TA',  fn: 'showTeamActivityTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
   { id: 'disputed-invoices',   label: 'Disputed Invoices',   abbr: 'DI',  fn: 'showDisputedInvoicesTab(this)',
     roles: ['admin-edit','admin-view','admin'] },
@@ -4279,6 +4324,155 @@ let _buaInvCountMap   = {}; // invoice_id → interaction count
 let _buaCloseId = null;
 let _buaCloseIsOpen = true;
 let _buaReplyId = null;
+
+/* ─── TEAM ACTIVITY TAB ─────────────────────────────────────────── */
+let _taInited  = false;
+let _taRows    = [];   // raw interaction rows
+let _taCollMap = {};   // user_id → display name
+
+function showTeamActivityTab(btn) {
+  showTab('team-activity', btn);
+  if (!_taInited) { _taInited = true; loadTeamActivity(); }
+}
+
+async function loadTeamActivity(force) {
+  if (!force && _taRows.length) { renderTeamActivity(); return; }
+  const statusEl = document.getElementById('ta-status');
+  if (statusEl) statusEl.textContent = 'Loading…';
+  try {
+    // Fetch all collectors
+    const cr = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_access?role=in.(collector,admin-edit,admin-view,admin)&select=user_id,collector_name,display_name&order=display_name`,
+      { headers: cmrrHdr() }
+    );
+    if (cr.ok) {
+      _taCollMap = {};
+      (await cr.json()).forEach(u => { _taCollMap[u.user_id] = u.collector_name || u.display_name || u.user_id; });
+    }
+
+    // Paginate interactions — fetch all
+    const PAGE = 1000;
+    let off = 0; _taRows = [];
+    while (true) {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/interactions?order=created_at.desc&limit=${PAGE}&offset=${off}&select=id,created_at,collector_id,note,outcome,connected`,
+        { headers: cmrrHdr() }
+      );
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const page = await r.json();
+      _taRows.push(...page);
+      if (page.length < PAGE) break;
+      off += PAGE;
+    }
+    if (statusEl) statusEl.textContent = '';
+    renderTeamActivity();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+function _taWordCount(note) {
+  if (!note || !note.trim()) return 0;
+  return note.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function renderTeamActivity() {
+  const tbody   = document.getElementById('ta-tbody');
+  const cardsEl = document.getElementById('ta-cards');
+  const countEl = document.getElementById('ta-count');
+  if (!tbody) return;
+
+  const days = parseInt(document.getElementById('ta-period')?.value || '30', 10);
+  const cutoff = days > 0
+    ? new Date(Date.now() - days * 86400000).toISOString()
+    : null;
+
+  const rows = cutoff ? _taRows.filter(r => r.created_at >= cutoff) : _taRows;
+
+  // Group by collector
+  const byCollector = {};
+  rows.forEach(r => {
+    const name = _taCollMap[r.collector_id] || r.collector_id || 'Unknown';
+    if (!byCollector[name]) byCollector[name] = { name, total: 0, connected: 0, notConnected: 0, words: [], emptyNotes: 0 };
+    const d = byCollector[name];
+    d.total++;
+    if (r.connected === true || r.connected === 'true') d.connected++;
+    else d.notConnected++;
+    const wc = _taWordCount(r.note);
+    if (wc === 0) d.emptyNotes++;
+    else d.words.push(wc);
+  });
+
+  const stats = Object.values(byCollector).map(d => ({
+    ...d,
+    avgWords:  d.words.length ? Math.round(d.words.reduce((s,w) => s+w, 0) / d.words.length) : 0,
+    maxWords:  d.words.length ? Math.max(...d.words) : 0,
+    notedConvs: d.words.length,
+  })).sort((a, b) => b.total - a.total);
+
+  if (countEl) countEl.textContent = `${rows.length} interactions · ${stats.length} collectors`;
+
+  // Summary cards
+  if (cardsEl && stats.length) {
+    const mostActive  = [...stats].sort((a,b) => b.total - a.total)[0];
+    const mostDetailed= [...stats].filter(s => s.avgWords > 0).sort((a,b) => b.avgWords - a.avgWords)[0];
+    const leastDetail = [...stats].filter(s => s.avgWords > 0).sort((a,b) => a.avgWords - b.avgWords)[0];
+    const cardStyle = 'flex:1;min-width:160px;background:#fff;border:1px solid var(--brd);border-radius:10px;padding:.75rem 1rem';
+    const label = (t, v, sub, col) =>
+      `<div style="${cardStyle}">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--txt3);margin-bottom:.2rem">${t}</div>
+        <div style="font-size:15px;font-weight:700;color:${col||'var(--navy)'}">${v}</div>
+        ${sub ? `<div style="font-size:11px;color:var(--txt3);margin-top:.15rem">${sub}</div>` : ''}
+      </div>`;
+    cardsEl.innerHTML =
+      label('Most Active', mostActive?.name || '—', mostActive ? `${mostActive.total} conversations` : '', '#0f172a') +
+      label('Most Detailed', mostDetailed?.name || '—', mostDetailed ? `avg ${mostDetailed.avgWords} words` : '', '#166534') +
+      label('Least Detailed', leastDetail?.name || '—', leastDetail ? `avg ${leastDetail.avgWords} words` : '', '#b45309') +
+      label('Total Conversations', rows.length, `across ${stats.length} collectors`, 'var(--navy)');
+  }
+
+  // Max avgWords for bar scaling
+  const maxAvg = Math.max(...stats.map(s => s.avgWords), 1);
+
+  tbody.innerHTML = stats.map((s, idx) => {
+    const rank = idx + 1;
+    const pct  = s.avgWords > 0 ? Math.round(s.avgWords / maxAvg * 100) : 0;
+    const barColor = pct >= 70 ? '#166534' : pct >= 40 ? '#92400e' : '#991b1b';
+    const pill = (bg, fg, label) =>
+      `<span style="font-size:10px;font-weight:600;background:${bg};color:${fg};padding:.15rem .55rem;border-radius:20px;white-space:nowrap">${label}</span>`;
+    const levelPill = s.avgWords === 0
+      ? pill('#fee2e2','#991b1b','No notes')
+      : s.avgWords >= 30
+        ? pill('#d1fae5','#065f46','Very detailed')
+        : s.avgWords >= 15
+          ? pill('#d1fae5','#166534','Detailed')
+          : s.avgWords >= 7
+            ? pill('#fef9c3','#854d0e','Brief')
+            : pill('#fee2e2','#991b1b','Very brief');
+    return `<tr style="${idx % 2 === 0 ? '' : 'background:#f8fafc'}">
+      <td style="font-size:13px;font-weight:600;padding:.5rem .6rem">
+        <span style="font-size:10px;color:var(--txt3);font-weight:400;margin-right:.3rem">#${rank}</span>
+        ${escHtml(s.name)}
+      </td>
+      <td style="text-align:center;font-weight:700;font-size:13px">${s.total}</td>
+      <td style="text-align:center;font-size:12px;color:#166534;font-weight:500">${s.connected}</td>
+      <td style="text-align:center;font-size:12px;color:#991b1b;font-weight:500">${s.notConnected}</td>
+      <td style="text-align:center;padding:.5rem .6rem">
+        <div style="display:flex;align-items:center;gap:.4rem;justify-content:center">
+          <div style="width:70px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:${barColor};min-width:28px">${s.avgWords > 0 ? s.avgWords : '—'}</span>
+        </div>
+      </td>
+      <td style="text-align:center;font-size:12px;color:var(--txt2)">${s.maxWords > 0 ? s.maxWords : '—'}</td>
+      <td style="text-align:center;font-size:12px;color:${s.emptyNotes > 0 ? '#991b1b' : 'var(--txt3)'};font-weight:${s.emptyNotes > 0 ? 600 : 400}">${s.emptyNotes > 0 ? s.emptyNotes : '—'}</td>
+      <td style="padding:.5rem .6rem">${levelPill}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--txt3);padding:1rem;font-size:12px">No data for this period.</td></tr>`;
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
 
 function showBUAttentionTab(btn) {
   showTab('bu-attention', btn);
